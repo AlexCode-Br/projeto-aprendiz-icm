@@ -41,4 +41,3 @@ A caixa local de mensagens fica em `http://127.0.0.1:4180/dev-mail`.
 ## Situação dos módulos
 
 Autenticação, configurações, convites, dashboards, alunos, cursos, professores, matrículas, frequência, informativos, suporte e relatórios já usam o banco real. Em ambiente local, os e-mails de recuperação e convite aparecem na caixa de mensagens de desenvolvimento.
-
