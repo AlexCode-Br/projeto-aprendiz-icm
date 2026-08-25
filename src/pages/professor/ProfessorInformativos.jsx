@@ -37,15 +37,15 @@ const ProfessorInformativos = () => {
         }
     };
 
-    if (loading) return <div className="text-center p-10 text-text-muted">Carregando informativos...</div>;
-    if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
+    if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando informativos...</div>;
+    if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchInformativos} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
         <div className="fade-in-up">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+            <div className="page-header">
                 <div>
-                    <h2 className="text-2xl font-bold text-text-default">Informativos e Avisos</h2>
-                    <p className="text-text-muted mt-1">Fique por dentro das últimas novidades e comunicados.</p>
+                    <h1 className="page-title">Informativos e avisos</h1>
+                    <p className="page-description">Fique por dentro das últimas novidades e comunicados.</p>
                 </div>
             </div>
 
@@ -53,7 +53,7 @@ const ProfessorInformativos = () => {
                 {informativos.length > 0 ? informativos.map((info, index) => (
                     <div
                         key={info.id}
-                        className={`info-card bg-surface rounded-lg shadow-sm border border-border p-6 transition-opacity duration-500 ease-out ${getCardClassByType(info.tipo)}`}
+                        className={`info-card panel p-5 transition-opacity duration-500 ease-out sm:p-6 ${getCardClassByType(info.tipo)}`}
                         style={{ animation: 'fadeInUp 0.5s ease-out forwards', animationDelay: `${index * 100}ms`, opacity: 0 }}
                     >
                         <div className="flex items-center mb-2">

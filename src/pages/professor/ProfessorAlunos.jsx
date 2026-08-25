@@ -53,21 +53,23 @@ const ProfessorAlunos = () => {
     
     return (
         <div>
-            <h1 className="text-3xl font-bold text-text-default mb-6">Meus Alunos</h1>
+            <div className="page-header"><div><h1 className="page-title">Meus alunos</h1><p className="page-description">Consulte os alunos vinculados às suas turmas.</p></div></div>
 
              {/* Barra de Busca */}
-            <div className="flex justify-start mb-4">
+            <div className="panel mb-6 p-4">
+                <label htmlFor="professor-student-search" className="sr-only">Buscar aluno</label>
                 <input
+                    id="professor-student-search"
                     type="text"
                     placeholder="Buscar aluno por nome ou email..."
                     value={searchTerm}
                     onChange={handleSearchChange}
-                    className="w-full sm:max-w-md px-4 py-2 border rounded-md bg-surface border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="form-control sm:max-w-md"
                 />
             </div>
             
             {/* Tabela de Alunos */}
-            <div className="bg-surface rounded-lg shadow overflow-x-auto">
+            <div className="panel overflow-x-auto">
                 <table className="min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>

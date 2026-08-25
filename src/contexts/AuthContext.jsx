@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => { loadUser(); }, [loadUser]);
 
-    const login = async (email, password, remember = false) => {
+    const login = useCallback(async (email, password, remember = false) => {
         if (usesSupabaseAuth) {
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw new Error(friendlyAuthError(error));
@@ -57,9 +57,9 @@ export const AuthProvider = ({ children }) => {
         api.setCsrfToken(response.data.csrfToken);
         setUser(response.data.user);
         return response.data.user;
-    };
+    }, []);
 
-    const logout = async () => {
+    const logout = useCallback(async () => {
         try { await api.post('/api/auth/logout', {}); } finally {
             if (usesSupabaseAuth) await supabase.auth.signOut().catch(() => {});
             api.setCsrfToken('');
@@ -67,11 +67,11 @@ export const AuthProvider = ({ children }) => {
             setUser(null);
             navigate('/login', { replace: true });
         }
-    };
+    }, [navigate]);
 
     const value = useMemo(() => ({
         isAuthenticated: Boolean(user), user, loading, login, logout, refreshUser: loadUser, usesSupabaseAuth,
-    }), [user, loading, loadUser]);
+    }), [user, loading, login, logout, loadUser]);
 
     return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
 };

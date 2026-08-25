@@ -96,10 +96,10 @@ const ProfessorFrequencia = () => {
 
     return (
         <div>
-            <h1 className="text-3xl font-bold text-text-default mb-6">Lançamento de Frequência</h1>
+            <div className="page-header"><div><h1 className="page-title">Lançamento de frequência</h1><p className="page-description">Selecione a turma e a data da aula para registrar a presença dos alunos.</p></div></div>
 
             {/* Filtros */}
-            <div className="p-6 bg-surface rounded-lg shadow mb-6">
+            <section className="panel mb-6 p-4 sm:p-6" aria-label="Seleção da aula">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <CustomSelect
                         options={cursos}
@@ -107,17 +107,17 @@ const ProfessorFrequencia = () => {
                         onChange={setSelectedCurso}
                         placeholder="Selecione um curso..."
                     />
-                    <input
+                    <label><span className="form-label">Data da aula</span><input
                         type="date"
                         value={dataAula}
                         onChange={(e) => setDataAula(e.target.value)}
-                        className="w-full px-3 py-2 border rounded-md bg-surface border-border focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
+                        className="form-control"
+                    /></label>
                 </div>
-            </div>
+            </section>
 
             {/* Tabela de Frequência */}
-            <div className="bg-surface rounded-lg shadow overflow-x-auto">
+            <div className="panel overflow-x-auto">
                  <table className="min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
@@ -135,7 +135,7 @@ const ProfessorFrequencia = () => {
                                 <tr key={aluno.id} className="hover:bg-border/50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-default">{aluno.nome}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center space-x-4">
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                                             {['presente', 'ausente', 'justificado'].map((status) => (
                                                 <label key={status} className="flex items-center space-x-2 cursor-pointer">
                                                     <input
@@ -166,7 +166,7 @@ const ProfessorFrequencia = () => {
                     <button
                         onClick={handleSalvarFrequencia}
                         disabled={loading}
-                        className="px-8 py-3 text-white bg-primary rounded-md hover:bg-primary-dark disabled:opacity-50"
+                        className="btn btn-primary px-6"
                     >
                         {loading ? 'Salvando...' : 'Salvar Frequência'}
                     </button>

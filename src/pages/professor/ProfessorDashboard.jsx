@@ -13,13 +13,13 @@ const ChevronRightIcon = () => <svg className="w-5 h-5" fill="none" stroke="curr
 
 // --- Componente StatCard ---
 const StatCard = ({ icon, title, value, color, to }) => (
-    <Link to={to} className={`stat-card flex items-center p-5 rounded-xl shadow-lg text-white transition-transform transform hover:-translate-y-1 ${color}`}>
-        <div className="mr-5 p-4 bg-white/20 rounded-full">
-            {icon}
+    <Link to={to} className={`stat-card grid min-h-32 grid-cols-[1fr,auto] items-center gap-3 rounded-xl p-5 text-white shadow-md transition-transform hover:-translate-y-0.5 ${color}`}>
+        <div className="min-w-0">
+            <div className="break-words text-2xl font-bold leading-tight">{value}</div>
+            <div className="mt-1 break-words text-xs font-semibold leading-5">{title}</div>
         </div>
-        <div>
-            <div className="text-3xl font-bold">{value}</div>
-            <div className="text-sm uppercase font-semibold tracking-wider">{title}</div>
+        <div className="rounded-full bg-white/20 p-3">
+            {icon}
         </div>
     </Link>
 );
@@ -73,18 +73,18 @@ const ProfessorDashboard = () => {
         fetchData();
     }, [fetchData]);
     
-    if (loading) return <div className="text-center p-10 text-text-muted">Carregando dashboard...</div>;
-    if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
+    if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando painel...</div>;
+    if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchData} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
         <div className="fade-in-up">
-            <h2 className="text-2xl md:text-3xl font-bold text-text-default mb-2">
-                Olá, Professor(a) {user?.nome.split(' ')[0]}!
-            </h2>
-            <p className="text-text-muted mb-8">Aqui está um resumo das suas atividades.</p>
+            <h1 className="page-title mb-2">
+                Olá, Professor(a) {user?.nome?.split(' ')[0] || ''}!
+            </h1>
+            <p className="page-description mb-8">Aqui está um resumo das suas turmas e atividades.</p>
 
             {/* Grid de Estatísticas */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-6">
                 <StatCard icon={<StudentsIcon />} title="Meus Alunos" value={stats.totalAlunos} color="bg-gradient-to-br from-blue-500 to-blue-600" to="/professor/alunos" />
                 <StatCard icon={<BellIcon />} title="Avisos/Informativos" value={stats.totalInformativos} color="bg-gradient-to-br from-yellow-500 to-yellow-600" to="/professor/informativos" />
                 <StatCard icon={<CalendarIcon />} title="Próxima Aula" value={stats.proximaAula} color="bg-gradient-to-br from-red-500 to-red-600" to="/professor/frequencia" />
@@ -94,7 +94,7 @@ const ProfessorDashboard = () => {
             {/* Grid de Alunos Recentes e Informativos */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Últimos Alunos Adicionados */}
-                <div className="bg-surface rounded-lg shadow-sm border border-border">
+                <div className="panel overflow-hidden">
                     <div className="p-5 flex justify-between items-center border-b border-border">
                         <h3 className="text-lg font-semibold text-text-default">Últimos Alunos Adicionados</h3>
                         <Link to="/professor/alunos" className="text-sm font-semibold text-primary hover:underline flex items-center">
@@ -117,7 +117,7 @@ const ProfessorDashboard = () => {
                 </div>
                 
                 {/* Avisos e Informativos */}
-                <div className="bg-surface rounded-lg shadow-sm border border-border">
+                <div className="panel overflow-hidden">
                     <div className="p-5 flex justify-between items-center border-b border-border">
                         <h3 className="text-lg font-semibold text-text-default">Avisos e Informativos</h3>
                         <Link to="/professor/informativos" className="text-sm font-semibold text-primary hover:underline flex items-center">

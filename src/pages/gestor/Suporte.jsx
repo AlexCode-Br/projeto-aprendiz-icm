@@ -3,14 +3,6 @@ import TicketDetailsModal from '../../components/TicketDetailsModal';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 
-// Mock Data
-const initialTicketsData = [
-    { id: '001', nome: 'Ana Beatriz', contato: 'ana.beatriz@email.com', assunto: 'Dúvida sobre o material da aula 5', data: '28/08/2025', status: 'Aberto', mensagem: 'Olá, gostaria de saber se o material da aula 5 de Teclado já está disponível na plataforma. Não consegui encontrar. Obrigada!' },
-    { id: '002', nome: 'Carlos Souza', contato: 'carlos.souza@email.com', assunto: 'Problema ao acessar a aula ao vivo', data: '28/08/2025', status: 'Aberto', mensagem: 'Não estou conseguindo acessar a transmissão da aula de Bateria. A página fica carregando infinitamente.' },
-    { id: '003', nome: 'Juliana Costa', contato: 'juliana.costa@email.com', assunto: 'Sugestão de música para o repertório', data: '27/08/2025', status: 'Pendente', mensagem: 'Gostaria de sugerir a música "Como é grande o meu amor por você" para o repertório do curso de Teclado. Seria ótimo aprender a tocá-la!' },
-    { id: '004', nome: 'Ricardo Alves', contato: 'ricardo.alves@email.com', assunto: 'Cancelamento de Matrícula', data: '26/08/2025', status: 'Resolvido', mensagem: 'Preciso cancelar minha matrícula no curso de Violão I por motivos pessoais. Como devo proceder?' },
-];
-
 const StatusDropdown = ({ ticket, onStatusChange }) => {
     const [isOpen, setIsOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -37,16 +29,16 @@ const StatusDropdown = ({ ticket, onStatusChange }) => {
 
     return (
         <div className="relative" ref={dropdownRef}>
-            <button onClick={() => setIsOpen(!isOpen)} className={getStatusClass(ticket.status, true)}>
+            <button type="button" aria-haspopup="menu" aria-expanded={isOpen} onClick={() => setIsOpen(!isOpen)} className={`${getStatusClass(ticket.status, true)} min-h-9`}>
                 {ticket.status}
                 <svg className="w-2.5 h-2.5 ml-1.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m1 1 4 4 4-4"/></svg>
             </button>
             {isOpen && (
-                <div className="absolute z-10 mt-1 w-32 bg-white dark:bg-surface rounded-md shadow-lg">
-                    <ul className="py-1 text-sm text-gray-700 dark:text-gray-200">
+                <div className="absolute z-10 mt-1 w-32 rounded-lg border border-border bg-surface shadow-lg" role="menu">
+                    <ul className="py-1 text-sm text-text-default">
                         {statusOptions.map(status => (
                             <li key={status}>
-                                <a href="#" onClick={(e) => { e.preventDefault(); onStatusChange(ticket.id, status); setIsOpen(false); }} className="block px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600">{status}</a>
+                                <button type="button" role="menuitem" onClick={() => { onStatusChange(ticket.id, status); setIsOpen(false); }} className="block min-h-11 w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600">{status}</button>
                             </li>
                         ))}
                     </ul>
@@ -107,30 +99,30 @@ const Suporte = () => {
 
     return (
         <>
-            <h2 className="text-2xl font-bold text-text-default mb-6">Central de Suporte</h2>
+            <div className="page-header"><div><h1 className="page-title">Central de suporte</h1><p className="page-description">Acompanhe solicitações, responda usuários e atualize o andamento de cada ticket.</p></div></div>
 
-            <div className="p-4 bg-surface rounded-lg shadow-sm border border-border mb-6">
+            <section className="panel mb-6 p-4" aria-label="Filtros de suporte">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input 
+                    <label><span className="sr-only">Pesquisar tickets</span><input
                         type="text" 
                         placeholder="Pesquisar por assunto ou nome..." 
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-lg bg-surface" />
-                    <select
+                        className="form-control" /></label>
+                    <label><span className="sr-only">Filtrar tickets por status</span><select
                         value={selectedStatus}
                         onChange={e => setSelectedStatus(e.target.value)}
-                        className="w-full px-3 py-2 border border-border rounded-lg bg-surface"
+                        className="form-control"
                     >
                         <option value="">Todos os Status</option>
                         <option>Aberto</option>
                         <option>Pendente</option>
                         <option>Resolvido</option>
-                    </select>
+                    </select></label>
                 </div>
-            </div>
+            </section>
 
-            <div className="bg-surface rounded-lg shadow-sm overflow-hidden border border-border">
+            <div className="panel overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 dark:bg-surface/30 text-xs uppercase text-text-muted">
@@ -154,12 +146,13 @@ const Suporte = () => {
                                         <StatusDropdown ticket={ticket} onStatusChange={handleStatusChange} />
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <button onClick={() => handleOpenModal(ticket)} className="px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 rounded-full hover:bg-primary/20">
+                                        <button type="button" onClick={() => handleOpenModal(ticket)} className="btn min-h-9 rounded-full bg-primary/10 px-3 py-1.5 text-xs text-primary hover:bg-primary/20">
                                             Detalhes
                                         </button>
                                     </td>
                                 </tr>
                             ))}
+                            {!filteredTickets.length && <tr><td colSpan="6" className="px-6 py-10 text-center text-sm text-text-muted">Nenhum ticket encontrado com estes filtros.</td></tr>}
                         </tbody>
                     </table>
                 </div>

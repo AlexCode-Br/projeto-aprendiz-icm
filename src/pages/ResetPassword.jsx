@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import Logo from '../assets/logo_projeto_aprendiz.png';
+import AuthLayout from '../layouts/AuthLayout';
 import api from '../services/api';
 import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
 
@@ -38,7 +38,8 @@ const ResetPassword = () => {
     }, []);
 
     const submit = async event => {
-        event.preventDefault(); setError('');
+        event.preventDefault();
+        setError('');
         if (!usesSupabaseAuth && !token) return setError('O link de recuperação está incompleto.');
         if (usesSupabaseAuth && !recoveryReady) return setError('O link de recuperação é inválido ou expirou. Solicite um novo.');
         if (Object.values(rules).some(value => !value)) return setError('A senha não atende aos requisitos.');
@@ -54,36 +55,38 @@ const ResetPassword = () => {
             }
             setSuccess(true);
             setTimeout(() => navigate('/login', { replace: true }), 1800);
-        } catch (requestError) { setError(requestError.message); }
-        finally { setLoading(false); }
+        } catch (requestError) {
+            setError(requestError.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const labels = { length: '10 ou mais caracteres', upper: 'Uma letra maiúscula', lower: 'Uma letra minúscula', number: 'Um número', symbol: 'Um símbolo especial' };
 
     return (
-        <div className="bg-gray-100 min-h-screen flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                <img src={Logo} alt="Logo Projeto Aprendiz" className="h-20 mx-auto mb-8 bg-[#b71c1c] p-4 rounded-2xl shadow-lg" />
-                <div className="bg-white p-8 sm:p-10 rounded-2xl shadow-2xl">
-                    <h1 className="text-3xl font-bold text-center text-gray-800">Criar nova senha</h1>
-                    <p className="text-center text-gray-500 mt-2 mb-8">O link é temporário e só poderá ser utilizado uma vez.</p>
-                    {success ? (
-                        <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg text-center" role="status">Senha alterada com sucesso. Redirecionando para o login...</div>
-                    ) : (
-                        <form onSubmit={submit} className="space-y-5">
-                            {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg" role="alert">{error}</div>}
-                            <input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="Nova senha" className="w-full px-4 py-3 border border-gray-300 rounded-lg" />
-                            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                                {Object.entries(rules).map(([key, valid]) => <li key={key} className={valid ? 'text-green-700' : 'text-gray-500'}>{valid ? '✓' : '○'} {labels[key]}</li>)}
-                            </ul>
-                            <input type="password" value={confirmation} onChange={event => setConfirmation(event.target.value)} placeholder="Confirme a nova senha" className="w-full px-4 py-3 border border-gray-300 rounded-lg" />
-                            <button disabled={loading} className="w-full submit-btn disabled:opacity-60">{loading ? 'Alterando...' : 'Redefinir senha'}</button>
-                            <Link to="/login" className="block text-center text-gray-600">Voltar ao login</Link>
-                        </form>
-                    )}
-                </div>
-            </div>
-        </div>
+        <AuthLayout title="Criar nova senha" description="Escolha uma senha forte. O link é temporário e só pode ser usado uma vez.">
+            {success ? (
+                <div className="alert-success text-center" role="status">Senha alterada com sucesso. Redirecionando para o login...</div>
+            ) : (
+                <form onSubmit={submit} className="space-y-5">
+                    {error && <div className="alert-error" role="alert">{error}</div>}
+                    <label className="block" htmlFor="new-password">
+                        <span className="form-label">Nova senha</span>
+                        <input id="new-password" type="password" autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} className="form-control" />
+                    </label>
+                    <ul className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2" aria-label="Requisitos da senha">
+                        {Object.entries(rules).map(([key, valid]) => <li key={key} className={valid ? 'text-green-700 dark:text-green-400' : 'text-text-muted'}><span aria-hidden="true">{valid ? '✓' : '○'}</span> {labels[key]}</li>)}
+                    </ul>
+                    <label className="block" htmlFor="confirm-password">
+                        <span className="form-label">Confirmar nova senha</span>
+                        <input id="confirm-password" type="password" autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} className="form-control" />
+                    </label>
+                    <button type="submit" disabled={loading} className="submit-btn w-full">{loading ? 'Alterando...' : 'Redefinir senha'}</button>
+                    <Link to="/login" className="block text-center font-medium text-text-muted hover:text-text-default hover:underline">Voltar ao login</Link>
+                </form>
+            )}
+        </AuthLayout>
     );
 };
 

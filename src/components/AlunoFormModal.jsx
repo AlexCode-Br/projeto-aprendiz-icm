@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Modal from './Modal';
 
 // Dados mockados para os selects
 const cursosPorLocal = {
@@ -15,18 +16,18 @@ const cursosPorLocal = {
 };
 const allCourses = Object.keys(cursosPorLocal);
 
-const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
-    const initialFormState = {
-        nome: '',
-        contato: '',
-        telefone: '',
-        igreja: '',
-        classe: '',
-        curso: '',
-        local: '',
-        instrumento: 'Não',
-    };
+const initialFormState = {
+    nome: '',
+    contato: '',
+    telefone: '',
+    igreja: '',
+    classe: '',
+    curso: '',
+    local: '',
+    instrumento: 'Não',
+};
 
+const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
     const [availableLocais, setAvailableLocais] = useState([]);
@@ -96,27 +97,21 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="modal fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4 opacity-100">
-            <div className="modal-content bg-white dark:bg-surface rounded-lg shadow-xl w-full max-w-2xl transform scale-100">
-                <div className="flex justify-between items-center p-4 md:p-6 border-b border-border">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-text-default">{aluno ? 'Editar Aluno' : 'Adicionar Novo Aluno'}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-text-default">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
+        <Modal isOpen={isOpen} onClose={onClose} title={aluno ? 'Editar aluno' : 'Adicionar aluno'} maxWidth="max-w-2xl">
                 <form onSubmit={handleSubmit} noValidate>
-                    <div className="p-4 md:p-6 max-h-[70vh] overflow-y-auto space-y-4">
+                    <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {Object.entries({ nome: 'Nome Completo', contato: 'E-mail', telefone: 'Telefone (WhatsApp)', igreja: 'Igreja-Bairro' }).map(([key, label]) => (
                                 <div key={key}>
-                                    <label htmlFor={key} className="block text-sm font-medium text-text-default mb-1">{label}</label>
+                                    <label htmlFor={key} className="form-label">{label}</label>
                                     <input
                                         type={key === 'contato' ? 'email' : 'text'}
                                         name={key}
                                         id={key}
                                         value={formData[key]}
                                         onChange={handleChange}
-                                        className={`w-full px-3 py-2 border rounded-lg bg-surface ${errors[key] ? 'border-danger' : 'border-border'}`}
+                                        aria-invalid={Boolean(errors[key])}
+                                        className={`form-control ${errors[key] ? 'border-danger' : ''}`}
                                     />
                                     {errors[key] && <p className="text-danger text-xs mt-1">{errors[key]}</p>}
                                 </div>
@@ -124,8 +119,8 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                              <div>
-                                <label htmlFor="classe" className="block text-sm font-medium text-text-default mb-1">Classe</label>
-                                <select name="classe" id="classe" value={formData.classe} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg bg-surface ${errors.classe ? 'border-danger' : 'border-border'}`}>
+                                <label htmlFor="classe" className="form-label">Classe</label>
+                                <select name="classe" id="classe" value={formData.classe} onChange={handleChange} aria-invalid={Boolean(errors.classe)} className={`form-control ${errors.classe ? 'border-danger' : ''}`}>
                                     <option value="">Selecione...</option>
                                     <option>Adolescente</option>
                                     <option>Jovem</option>
@@ -135,16 +130,16 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
                                  {errors.classe && <p className="text-danger text-xs mt-1">{errors.classe}</p>}
                             </div>
                             <div>
-                                <label htmlFor="curso" className="block text-sm font-medium text-text-default mb-1">Curso de Interesse</label>
-                                <select name="curso" id="curso" value={formData.curso} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg bg-surface ${errors.curso ? 'border-danger' : 'border-border'}`}>
+                                <label htmlFor="curso" className="form-label">Curso de interesse</label>
+                                <select name="curso" id="curso" value={formData.curso} onChange={handleChange} aria-invalid={Boolean(errors.curso)} className={`form-control ${errors.curso ? 'border-danger' : ''}`}>
                                     <option value="">Selecione...</option>
                                     {allCourses.map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                                 {errors.curso && <p className="text-danger text-xs mt-1">{errors.curso}</p>}
                             </div>
                             <div>
-                                <label htmlFor="local" className="block text-sm font-medium text-text-default mb-1">Local</label>
-                                <select name="local" id="local" value={formData.local} onChange={handleChange} disabled={!formData.curso} className={`w-full px-3 py-2 border rounded-lg bg-surface disabled:bg-gray-100 dark:disabled:bg-gray-600 ${errors.local ? 'border-danger' : 'border-border'}`}>
+                                <label htmlFor="local" className="form-label">Local</label>
+                                <select name="local" id="local" value={formData.local} onChange={handleChange} disabled={!formData.curso} aria-invalid={Boolean(errors.local)} className={`form-control disabled:bg-gray-100 dark:disabled:bg-gray-600 ${errors.local ? 'border-danger' : ''}`}>
                                     <option value="">Selecione...</option>
                                     {availableLocais.map(loc => <option key={loc} value={loc}>{loc}</option>)}
                                 </select>
@@ -159,12 +154,12 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
                             </div>
                         </div>
                     </div>
-                    <div className="flex justify-end p-4 md:p-6 border-t border-border bg-gray-50 dark:bg-surface/30">
-                        <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark">Salvar Alterações</button>
+                    <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" className="btn btn-primary">Salvar alterações</button>
                     </div>
                 </form>
-            </div>
-        </div>
+        </Modal>
     );
 };
 

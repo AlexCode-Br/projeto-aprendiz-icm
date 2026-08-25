@@ -24,26 +24,27 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
     const totalPages = Math.ceil(filteredData.length / itemsPerPage);
 
     return (
-        <div className="mt-6 bg-surface rounded-lg shadow-sm overflow-hidden fade-in-up delay-700 border border-border">
+        <div className="panel mt-6 overflow-hidden fade-in-up delay-700">
             <div className="p-4 md:p-6"><h3 className="text-lg font-semibold text-text-default">Alunos com Baixa Frequência (&lt;75%)</h3></div>
             
             <div className="p-4 md:px-6 border-y border-border bg-gray-50 dark:bg-surface/30">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label htmlFor="search-low-frequency" className="text-sm font-medium text-text-muted">Pesquisar por Aluno</label>
+                        <label htmlFor="search-low-frequency" className="form-label">Pesquisar por aluno</label>
                         <input 
                             type="text" 
                             id="search-low-frequency" 
                             placeholder="Nome do aluno..." 
-                            className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-surface"
+                            className="form-control"
                             value={searchTerm}
                             onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         />
                     </div>
                     <div>
-                        <label className="text-sm font-medium text-text-muted">Filtrar por Curso</label>
+                        <label htmlFor="low-frequency-course" className="form-label">Filtrar por curso</label>
                          <select 
-                            className="relative mt-1 w-full px-3 py-2 bg-surface border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition"
+                            id="low-frequency-course"
+                            className="form-control"
                             value={selectedCourse}
                             onChange={(e) => { setSelectedCourse(e.target.value); setCurrentPage(1); }}
                          >
@@ -73,7 +74,9 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
                                 <td className="px-6 py-4">
                                     <div className="flex items-center justify-center space-x-2">
                                         <button 
-                                            className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-full transition-colors" 
+                                            type="button"
+                                            aria-label={`Visualizar ${student.nome}`}
+                                            className="icon-button text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-500/20"
                                             title="Visualizar Aluno"
                                             onClick={() => onSelectStudent(student)}
                                         >
@@ -88,7 +91,7 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
                     </tbody>
                 </table>
             </div>
-             <div className="p-4 flex justify-between items-center border-t border-border">
+             <div className="flex flex-col gap-4 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
                 {totalPages > 1 && (
                     <>
                         <div className="flex-1 text-sm text-text-muted">
@@ -96,7 +99,9 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
                         </div>
                         <div className="flex items-center space-x-1">
                             <button 
-                                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-50/10 disabled:text-gray-400 disabled:cursor-not-allowed" 
+                                type="button"
+                                aria-label="Página anterior"
+                                className="icon-button min-h-10 min-w-10 disabled:text-gray-400 disabled:cursor-not-allowed"
                                 onClick={() => setCurrentPage(p => p - 1)}
                                 disabled={currentPage === 1}
                             >
@@ -104,15 +109,20 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
                             </button>
                             {[...Array(totalPages).keys()].map(i => (
                                <button 
+                                    type="button"
+                                    aria-label={`Página ${i + 1}`}
+                                    aria-current={currentPage === i + 1 ? 'page' : undefined}
                                     key={i + 1}
-                                    className={`px-3 py-1 rounded-md ${currentPage === i + 1 ? 'bg-primary text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-50/10'}`} 
+                                    className={`min-h-10 min-w-10 rounded-md px-3 py-1 ${currentPage === i + 1 ? 'bg-primary text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-50/10'}`}
                                     onClick={() => setCurrentPage(i + 1)}
                                 >
                                     {i + 1}
                                 </button>
                             ))}
                             <button 
-                                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-50/10 disabled:text-gray-400 disabled:cursor-not-allowed" 
+                                type="button"
+                                aria-label="Próxima página"
+                                className="icon-button min-h-10 min-w-10 disabled:text-gray-400 disabled:cursor-not-allowed"
                                 onClick={() => setCurrentPage(p => p + 1)}
                                 disabled={currentPage === totalPages}
                             >

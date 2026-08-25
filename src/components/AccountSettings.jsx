@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { friendlyAuthError, supabase } from '../services/supabase';
 
-const fieldClass = 'mt-1 w-full px-3 py-2.5 border border-border rounded-lg bg-surface text-text-default focus:ring-2 focus:ring-primary/40 focus:border-primary';
+const fieldClass = 'form-control mt-1';
 
 export default function AccountSettings() {
     const { user, refreshUser, usesSupabaseAuth } = useAuth();
@@ -64,19 +64,19 @@ export default function AccountSettings() {
     ];
 
     return <div className="max-w-5xl mx-auto space-y-6 fade-in-up">
-        <div><h2 className="text-2xl font-bold text-text-default">Configurações da conta</h2><p className="text-text-muted mt-1">Seus dados são salvos com segurança e usados no acesso ao sistema.</p></div>
-        <form onSubmit={saveProfile} className="bg-surface border border-border rounded-xl shadow-sm p-5 md:p-7">
+        <div><h1 className="page-title">Configurações da conta</h1><p className="page-description">Seus dados são salvos com segurança e usados no acesso ao sistema.</p></div>
+        <form onSubmit={saveProfile} className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Dados pessoais</h3>
             <div className="grid md:grid-cols-2 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Nome completo<input required value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">E-mail de acesso<input required readOnly={usesSupabaseAuth} type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} className={`${fieldClass} ${usesSupabaseAuth ? 'opacity-70 cursor-not-allowed' : ''}`} />{usesSupabaseAuth && <span className="block mt-1 text-xs text-text-muted">Para trocar o e-mail de acesso, fale com o Gestor.</span>}</label></div>
             <div className="mt-5 flex justify-end"><button disabled={saving === 'profile'} className="submit-btn disabled:opacity-60">{saving === 'profile' ? 'Salvando...' : 'Salvar dados'}</button></div>
         </form>
-        <form onSubmit={changePassword} className="bg-surface border border-border rounded-xl shadow-sm p-5 md:p-7">
+        <form onSubmit={changePassword} className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Alterar senha</h3><p className="text-sm text-text-muted mt-1">A alteração encerra suas outras sessões abertas.</p>
             <div className="grid md:grid-cols-3 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Senha atual<input required type="password" value={password.currentPassword} onChange={event => setPassword({ ...password, currentPassword: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">Nova senha<input required type="password" value={password.newPassword} onChange={event => setPassword({ ...password, newPassword: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">Confirmar nova senha<input required type="password" value={password.confirmation} onChange={event => setPassword({ ...password, confirmation: event.target.value })} className={fieldClass} /></label></div>
             <p className={`text-xs mt-3 ${password.newPassword && passwordValid ? 'text-green-700' : 'text-text-muted'}`}>Use ao menos 10 caracteres, com maiúscula, minúscula, número e símbolo.</p>
             <div className="mt-5 flex justify-end"><button disabled={saving === 'password'} className="submit-btn disabled:opacity-60">{saving === 'password' ? 'Alterando...' : 'Alterar senha'}</button></div>
         </form>
-        <section className="bg-surface border border-border rounded-xl shadow-sm p-5 md:p-7">
+        <section className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Notificações</h3>
             <div className="mt-4 divide-y divide-border">{options.map(([key, title, description]) => <label key={key} className="flex items-center justify-between gap-5 py-4 cursor-pointer"><span><span className="block font-medium text-text-default">{title}</span><span className="block text-sm text-text-muted">{description}</span></span><input type="checkbox" checked={Boolean(preferences[key])} onChange={event => setPreferences({ ...preferences, [key]: event.target.checked })} className="h-5 w-5 accent-primary" /></label>)}</div>
             <div className="mt-4 flex justify-end"><button type="button" onClick={savePreferences} disabled={saving === 'preferences'} className="submit-btn disabled:opacity-60">{saving === 'preferences' ? 'Salvando...' : 'Salvar preferências'}</button></div>

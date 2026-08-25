@@ -56,26 +56,26 @@ const ProfessorRelatorios = () => {
 
     return (
         <div className="fade-in-up">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+            <div className="page-header">
                 <div>
-                    <h2 className="text-2xl font-bold text-text-default">Meus Relatórios</h2>
-                    <p className="text-text-muted mt-1">Gere relatórios de frequência das suas turmas com dados registrados no sistema.</p>
+                    <h1 className="page-title">Meus relatórios</h1>
+                    <p className="page-description">Gere relatórios de frequência das suas turmas com dados registrados no sistema.</p>
                 </div>
             </div>
 
-            <div className="bg-surface rounded-lg shadow-sm border border-border">
+            <section className="panel overflow-hidden">
                 <div className="px-6 py-4 border-b border-border">
                     <h3 className="text-lg font-semibold text-text-default">Gerar Novo Relatório</h3>
                 </div>
                 <div className="p-6 space-y-6">
                     {/* Tipo de Relatório */}
                     <div>
-                        <label htmlFor="report-type" className="block text-sm font-medium text-text-muted mb-1">Tipo de Relatório</label>
+                        <label htmlFor="report-type" className="form-label">Tipo de relatório</label>
                         <select 
                             id="report-type" 
                             value={reportType} 
                             onChange={e => setReportType(e.target.value)} 
-                            className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-transparent"
+                            className="form-control"
                         >
                             <option value="frequencia_turma">Frequência da Turma</option>
                         </select>
@@ -84,23 +84,23 @@ const ProfessorRelatorios = () => {
                     {/* Período */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label htmlFor="start-date" className="block text-sm font-medium text-text-muted mb-1">Data de Início</label>
+                            <label htmlFor="start-date" className="form-label">Data de início</label>
                             <input 
                                 type="date" 
                                 id="start-date" 
                                 value={startDate} 
                                 onChange={e => setStartDate(e.target.value)} 
-                                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-transparent" 
+                                className="form-control"
                             />
                         </div>
                         <div>
-                            <label htmlFor="end-date" className="block text-sm font-medium text-text-muted mb-1">Data de Fim</label>
+                            <label htmlFor="end-date" className="form-label">Data de fim</label>
                             <input 
                                 type="date" 
                                 id="end-date" 
                                 value={endDate} 
                                 onChange={e => setEndDate(e.target.value)} 
-                                className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-transparent" 
+                                className="form-control"
                             />
                         </div>
                     </div>
@@ -121,19 +121,19 @@ const ProfessorRelatorios = () => {
                     </div>
                 </div>
 
-                {error && <div className="mx-6 mb-6 p-4 text-sm text-red-700 bg-red-100 rounded-lg dark:bg-red-800/30 dark:text-red-300">{error}</div>}
+                {error && <div className="alert-error mx-6 mb-6" role="alert">{error}</div>}
 
                 <div className="px-6 py-4 border-t border-border bg-gray-50 dark:bg-surface/30 flex items-center justify-end">
                     <button 
                         onClick={handleGenerateReport} 
                         disabled={isGenerating} 
-                        className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark transition-colors flex items-center disabled:opacity-70 disabled:cursor-not-allowed"
+                        className="btn btn-primary"
                     >
                         <DownloadIcon />
                         <span>{isGenerating ? 'Gerando...' : 'Gerar e Baixar'}</span>
                     </button>
                 </div>
-            </div>
+            </section>
         </div>
     );
 };

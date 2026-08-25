@@ -4,8 +4,6 @@ import ConfirmationModal from '../../components/ConfirmationModal';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 
-const allLocais = ['Pituba', 'Brotas', 'Lauro de Freitas', 'Boca do Rio', 'Alto de Coutos', 'Remoto'];
-
 const Cursos = () => {
     const { showToast } = useToast();
     const [cursos, setCursos] = useState([]);
@@ -87,41 +85,43 @@ const Cursos = () => {
 
     return (
         <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-                <h2 className="text-2xl font-bold text-text-default mb-4 sm:mb-0">Gerenciamento de Cursos</h2>
-                <button onClick={() => handleOpenCursoModal()} className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark transition-colors flex items-center">
+            <div className="page-header">
+                <div><h1 className="page-title">Cursos</h1><p className="page-description">Cadastre turmas e acompanhe professores, locais, alunos e status.</p></div>
+                <button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary w-full sm:w-auto">
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                     Novo Curso
                 </button>
             </div>
 
-            <div className="p-4 md:p-6 bg-surface rounded-lg shadow-sm border border-border mb-6">
+            <section className="panel mb-6 p-4 md:p-6" aria-label="Filtros de cursos">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <label className="text-sm font-medium text-text-muted">Pesquisar por Nome</label>
+                        <label htmlFor="course-search" className="form-label">Pesquisar por nome</label>
                         <input
+                            id="course-search"
                             type="text"
                             placeholder="Nome do curso..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-surface"
+                            className="form-control"
                         />
                     </div>
                     <div>
-                        <label className="text-sm font-medium text-text-muted">Filtrar por Local</label>
+                        <label htmlFor="course-location" className="form-label">Filtrar por local</label>
                         <select
+                            id="course-location"
                             value={selectedLocal}
                             onChange={(e) => setSelectedLocal(e.target.value)}
-                            className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-surface"
+                            className="form-control"
                         >
                             <option value="">Todos os Locais</option>
                             {locaisDisponiveis.map(loc => <option key={loc} value={loc}>{loc}</option>)}
                         </select>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div className="bg-surface rounded-lg shadow-sm overflow-hidden border border-border">
+            <div className="panel overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-text-default">
                         <thead className="bg-gray-50 dark:bg-surface/30 text-xs uppercase text-text-muted">
@@ -148,16 +148,17 @@ const Cursos = () => {
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center space-x-2">
-                                            <button onClick={() => handleOpenCursoModal(curso)} className="p-2 text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-500/20 rounded-full" title="Editar">
+                                            <button type="button" aria-label={`Editar ${curso.nome}`} onClick={() => handleOpenCursoModal(curso)} className="icon-button text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-500/20" title="Editar">
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                                             </button>
-                                            <button onClick={() => handleOpenConfirmModal(curso)} className="p-2 text-danger hover:bg-red-100 dark:hover:bg-red-500/20 rounded-full" title="Excluir">
+                                            <button type="button" aria-label={`Excluir ${curso.nome}`} onClick={() => handleOpenConfirmModal(curso)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Excluir">
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
                             ))}
+                            {!filteredCursos.length && <tr><td colSpan="6" className="px-6 py-10 text-center text-sm text-text-muted">Nenhum curso encontrado com estes filtros.</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -176,8 +177,9 @@ const Cursos = () => {
                 isOpen={isConfirmModalOpen}
                 onClose={handleCloseConfirmModal}
                 onConfirm={handleDeleteCurso}
-                title="Confirmar exclusão?"
-                message="Esta ação não poderá ser desfeita."
+                title="Desativar curso?"
+                message="O curso deixará de aparecer como ativo. Você poderá manter o histórico já registrado."
+                confirmLabel="Desativar"
             />
         </>
     );

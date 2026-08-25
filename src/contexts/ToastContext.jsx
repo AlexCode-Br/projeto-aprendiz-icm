@@ -34,47 +34,33 @@ export const ToastProvider = ({ children }) => {
     return (
         <ToastContext.Provider value={{ showToast }}>
             {children}
-            <div className="fixed top-5 right-5 z-[9999] space-y-2">
+            <div className="fixed left-4 right-4 top-4 z-[9999] space-y-2 sm:left-auto sm:right-5 sm:top-5" aria-live="polite" aria-atomic="false">
                 {toasts.map(toast => (
                     <div
                         key={toast.id}
-                        className="flex items-center max-w-xs p-4 text-gray-500 bg-white rounded-lg shadow-lg dark:text-gray-400 dark:bg-gray-800"
-                        role="alert"
-                        style={{ animation: 'slideInRight 0.3s ease-out forwards' }}
+                        className="flex w-full max-w-sm items-center rounded-xl border border-border bg-surface p-4 text-text-muted shadow-lg sm:w-auto toast-enter"
+                        role={toast.type === 'error' ? 'alert' : 'status'}
                     >
                         {icons[toast.type]}
                         <div className="ml-3 text-sm font-normal">{toast.message}</div>
                         <button 
                             type="button" 
-                            className="ml-auto -mx-1.5 -my-1.5 bg-white text-gray-400 hover:text-gray-900 rounded-lg focus:ring-2 focus:ring-gray-300 p-1.5 hover:bg-gray-100 inline-flex h-8 w-8 dark:text-gray-500 dark:hover:text-white dark:bg-gray-800 dark:hover:bg-gray-700" 
+                        className="icon-button ml-auto shrink-0"
+                        aria-label="Fechar notificação"
                             onClick={() => removeToast(toast.id)}
                         >
-                            <span className="sr-only">Fechar</span>
                             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"></path></svg>
                         </button>
                     </div>
                 ))}
             </div>
-             {/* CORREÇÃO: Removido 'jsx' e 'global' da tag <style> */}
-            <style>{`
-                @keyframes slideInRight {
-                    from {
-                        transform: translateX(100%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateX(0);
-                        opacity: 1;
-                    }
-                }
-            `}</style>
         </ToastContext.Provider>
     );
 };
 
 export const useToast = () => {
     const context = useContext(ToastContext);
-    if (context === undefined) {
+    if (!context) {
         throw new Error('useToast must be used within a ToastProvider');
     }
     return context;
