@@ -18,6 +18,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor }) => {
     const [courseInput, setCourseInput] = useState('');
     const [suggestions, setSuggestions] = useState([]);
     const [isSuggestionsVisible, setIsSuggestionsVisible] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const inputRef = useRef(null);
 
@@ -34,6 +35,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor }) => {
             setFormData(initialFormState);
         }
         setErrors({});
+        setIsSubmitting(false);
     }, [professor, isOpen]);
 
     const handleChange = (e) => {
@@ -84,14 +86,20 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor }) => {
         return newErrors;
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isSubmitting) return;
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
             setErrors(validationErrors);
             return;
         }
-        onSave(formData);
+        setIsSubmitting(true);
+        try {
+            await onSave(formData);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -156,8 +164,8 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor }) => {
                         </div>
                     </div>
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
-                        <button type="submit" className="btn btn-primary">Salvar</button>
+                        <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" disabled={isSubmitting} className="btn btn-primary">{isSubmitting ? 'Salvando...' : 'Salvar'}</button>
                     </div>
                 </form>
         </Modal>
