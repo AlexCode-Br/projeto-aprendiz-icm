@@ -3,13 +3,19 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.12 <25"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
-    ,"start": "node backend/server.mjs"
-    ,"dev:backend": "node --watch backend/server.mjs"
+    "preview": "vite preview",
+    "start": "node backend/server.mjs",
+    "dev:backend": "node --watch backend/server.mjs",
+    "db:migrate": "node backend/migrate.mjs",
+    "check": "node --check backend/server.mjs && node --check backend/database.mjs && node --test backend/*.test.mjs && vite build"
   },
   "dependencies": {
     "axios": "^1.11.0",
@@ -18,6 +24,7 @@
     "jspdf-autotable": "^5.0.2",
     "jwt-decode": "^4.0.0",
     "papaparse": "^5.5.3",
+    "pg": "8.16.3",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^18.3.1",

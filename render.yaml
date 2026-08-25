@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: projeto-aprendiz
+    runtime: node
+    plan: starter
+    region: virginia
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    preDeployCommand: pnpm db:migrate
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: projeto-aprendiz-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "false"
+      - key: SEED_DEMO_DATA
+        value: "false"
+      - key: BOOTSTRAP_ADMIN_NAME
+        value: Gestor
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+databases:
+  - name: projeto-aprendiz-db
+    plan: basic-256mb
+    region: virginia
+    postgresMajorVersion: "18"
+    databaseName: projeto_aprendiz
+    user: projeto_aprendiz
+    ipAllowList: []

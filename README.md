@@ -1,43 +1,66 @@
 # Projeto Aprendiz Aprimorado
 
-Nova versão independente do Projeto Aprendiz, com frontend React e backend local.
+Aplicação web com frontend React e backend Node.js para a gestão do Projeto Aprendiz. Gestores e professores usam o mesmo sistema, com rotas, menus e permissões próprias para cada perfil.
 
-## Recursos implementados
+## Recursos
 
-- Banco SQLite persistente no ambiente local.
-- Senhas protegidas com `scrypt` e salt aleatório.
-- Sessões armazenadas no banco e cookie `HttpOnly`/`SameSite=Strict`.
-- Perfis separados de Gestor e Professor.
-- Proteção CSRF, verificação de origem e limitação de tentativas.
-- Recuperação de senha com token aleatório, temporário, de uso único e armazenado como hash.
-- Invalidação das sessões após redefinir a senha.
-- Caixa de e-mail local para testar o fluxo sem enviar mensagens reais.
-- Registros de auditoria de login, logout e alteração de senha.
-- Modelo acadêmico relacional para alunos, professores, cursos, turmas e matrículas.
-- Lançamento de frequência persistente por turma e data.
-- Permissões reais: Gestor administra cadastros; Professor acessa somente suas turmas e alunos.
-- Perfil, preferências de notificação e alteração autenticada de senha persistentes.
-- Convite de novos professores por link temporário, de uso único, com criação da própria senha.
-- Dashboards de Gestor e Professor calculados diretamente a partir do banco.
+- Login com sessões persistentes em cookie `HttpOnly`, `Secure` em produção e proteção CSRF.
+- Senhas protegidas com `scrypt`, limitação de tentativas e auditoria de ações sensíveis.
+- Recuperação de senha e convites com tokens temporários, de uso único e armazenados somente como hash.
+- E-mails reais via Resend em produção e caixa local em `/dev-mail` durante o desenvolvimento.
+- Gestão de alunos, professores, cursos, turmas, matrículas, frequência, informativos, suporte e relatórios.
+- SQLite com dados de demonstração no computador e PostgreSQL persistente na hospedagem.
+- Migrações automáticas, endpoint de saúde e encerramento seguro do servidor.
 
-## Contas locais iniciais
+## Desenvolvimento local
+
+Requisitos: Node.js 22.12–24 e pnpm 11.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm build
+pnpm start
+```
+
+Acesse `http://127.0.0.1:4180`. O banco SQLite é criado em `backend/data/` e não é versionado.
+
+Contas de demonstração locais:
 
 | Perfil | E-mail | Senha |
 |---|---|---|
 | Gestor | `gestor@projetoaprendiz.local` | `Gestor@2026!` |
 | Professor | `professor@projetoaprendiz.local` | `Professor@2026!` |
 
-As credenciais são somente para desenvolvimento e devem ser substituídas antes da publicação.
+Essas contas não são criadas em produção. Use `.env.example` como referência, sem versionar o arquivo `.env`.
 
-## Executar
+## Hospedagem no Render
 
-1. Instale as dependências do frontend: `npm install`
-2. Compile: `npm run build`
-3. Inicie frontend e backend: `npm start`
-4. Acesse `http://127.0.0.1:4180`
+O arquivo `render.yaml` descreve um serviço web `starter` e um banco PostgreSQL `basic-256mb`, ambos pagos e na região da Virgínia. O painel do Render mostra os valores antes da confirmação:
 
-A caixa local de mensagens fica em `http://127.0.0.1:4180/dev-mail`.
+1. Crie um **Blueprint** e conecte este repositório.
+2. Informe `BOOTSTRAP_ADMIN_EMAIL` e uma `BOOTSTRAP_ADMIN_PASSWORD` forte para criar o primeiro Gestor.
+3. Informe `RESEND_API_KEY` e `EMAIL_FROM` depois de validar o domínio remetente no Resend.
+4. Aplique o Blueprint. O build, as migrações e o endpoint `/api/health` já estão configurados.
+5. Depois do primeiro acesso, altere a senha inicial em Configurações e remova `BOOTSTRAP_ADMIN_PASSWORD` do ambiente.
 
-## Situação dos módulos
+O PostgreSQL do Blueprint não aceita conexões públicas (`ipAllowList: []`). A aplicação acessa o banco pela rede privada do Render. Para manutenção, use as ferramentas do provedor ou altere conscientemente a lista de IPs no painel.
 
-Autenticação, configurações, convites, dashboards, alunos, cursos, professores, matrículas, frequência, informativos, suporte e relatórios já usam o banco real. Em ambiente local, os e-mails de recuperação e convite aparecem na caixa de mensagens de desenvolvimento.
+## Variáveis de produção
+
+| Variável | Finalidade |
+|---|---|
+| `DATABASE_URL` | Conexão PostgreSQL preenchida automaticamente pelo Blueprint. |
+| `BOOTSTRAP_ADMIN_EMAIL` | E-mail da primeira conta Gestor em banco vazio. |
+| `BOOTSTRAP_ADMIN_PASSWORD` | Senha inicial forte; remova-a após o primeiro acesso. |
+| `RESEND_API_KEY` | Credencial para recuperação de senha e convites. |
+| `EMAIL_FROM` | Remetente validado, como `Projeto Aprendiz <acesso@dominio.com>`. |
+| `APP_URL` | Opcional; URL pública usada nos links. No Render ela é detectada automaticamente. |
+| `DATABASE_SSL` | `false` para a conexão privada do Render; ajuste em outro provedor. |
+
+## Validação
+
+```bash
+pnpm check
+```
+
+O comando valida o backend, executa os testes do banco e compila o frontend. O mesmo processo roda em cada pull request pelo GitHub Actions.
