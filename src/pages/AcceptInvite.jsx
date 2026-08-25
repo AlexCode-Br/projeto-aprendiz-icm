@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthLayout from '../layouts/AuthLayout';
 import api from '../services/api';
-import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
 
 export default function AcceptInvite() {
     const [params] = useSearchParams();
@@ -29,10 +28,6 @@ export default function AcceptInvite() {
         if (password !== confirmation) return setStatus(previous => ({ ...previous, error: 'As senhas não coincidem.' }));
         setStatus(previous => ({ ...previous, loading: true, error: '' }));
         try {
-            if (usesSupabaseAuth) {
-                const { error: authError } = await supabase.auth.signUp({ email: invitation.email, password, options: { emailRedirectTo: `${window.location.origin}/login` } });
-                if (authError) throw new Error(friendlyAuthError(authError));
-            }
             await api.post('/api/invitations/accept', { token, password });
             setStatus({ loading: false, error: '', success: true });
             setTimeout(() => navigate('/login', { replace: true }), 1800);

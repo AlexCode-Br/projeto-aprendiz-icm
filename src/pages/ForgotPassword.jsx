@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import AuthLayout from '../layouts/AuthLayout';
 import api from '../services/api';
-import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
 
 const ForgotPassword = () => {
     const [email, setEmail] = useState('');
@@ -16,16 +15,9 @@ const ForgotPassword = () => {
         setLoading(true);
         setError('');
         try {
-            if (usesSupabaseAuth) {
-                const { error: authError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` });
-                if (authError) throw new Error(friendlyAuthError(authError));
-                setMessage('Se o e-mail estiver cadastrado, enviaremos as instruções.');
-                setMailbox('');
-            } else {
-                const response = await api.post('/api/auth/forgot-password', { email });
-                setMessage(response.data.message);
-                setMailbox(response.data.devMailbox || '');
-            }
+            const response = await api.post('/api/auth/forgot-password', { email });
+            setMessage(response.data.message);
+            setMailbox(response.data.devMailbox || '');
         } catch (requestError) {
             setError(requestError.message);
         } finally {

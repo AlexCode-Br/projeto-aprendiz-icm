@@ -19,6 +19,7 @@ const appOrigin = new URL(baseUrl).origin;
 const isProduction = process.env.NODE_ENV === 'production';
 const authProvider = process.env.AUTH_PROVIDER || (process.env.SUPABASE_URL ? 'supabase' : 'local');
 const usesSupabaseAuth = authProvider === 'supabase';
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 if (usesSupabaseAuth && (!process.env.SUPABASE_URL || !process.env.SUPABASE_PUBLISHABLE_KEY)) {
   throw new Error('SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY são obrigatórias com AUTH_PROVIDER=supabase.');
@@ -26,6 +27,12 @@ if (usesSupabaseAuth && (!process.env.SUPABASE_URL || !process.env.SUPABASE_PUBL
 
 const supabaseAuth = usesSupabaseAuth
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+      auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+    })
+  : null;
+
+const supabaseAdmin = usesSupabaseAuth && supabaseSecretKey
+  ? createClient(process.env.SUPABASE_URL, supabaseSecretKey, {
       auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
     })
   : null;
@@ -253,8 +260,43 @@ async function sendEmail(recipient, subject, body, idempotencyKey) {
       to: [recipient], subject, text: body,
     }),
   });
-  if (!response.ok) throw new Error(`Falha no envio de e-mail (${response.status}).`);
+  if (!response.ok) {
+    const providerResponse = await response.json().catch(() => ({}));
+    const error = new Error(`Falha no envio de e-mail (${response.status}).`);
+    error.code = 'EMAIL_DELIVERY_FAILED';
+    error.providerMessage = String(providerResponse?.message || '').slice(0, 300);
+    throw error;
+  }
   return response.json();
+}
+
+function requireSupabaseAdmin(response) {
+  if (!usesSupabaseAuth || supabaseAdmin) return true;
+  json(response, 503, { message: 'A administração de contas ainda não está configurada no servidor.' });
+  return false;
+}
+
+async function issueProfessorInvite({ professorId, name, email, createdBy, ip, auditAction = 'professor_invite_created' }) {
+  const token = randomBytes(32).toString('base64url');
+  const tokenHash = sha256(token);
+  const expires = new Date(Date.now() + 48 * 60 * 60_000).toISOString();
+  const inviteUrl = `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+  const emailBody = `Olá, ${name}. Você foi convidado para acessar o Projeto Aprendiz como Professor. Crie sua senha em até 48 horas:\n\n${inviteUrl}\n\nSe você não reconhece este convite, ignore esta mensagem.`;
+
+  await db.transaction(async () => {
+    await db.prepare('UPDATE professor_invites SET expires_at=CURRENT_TIMESTAMP WHERE professor_profile_id=? AND accepted_at IS NULL').run(professorId);
+    await db.prepare('INSERT INTO professor_invites (professor_profile_id,email,token_hash,expires_at,created_by) VALUES (?,?,?,?,?)').run(professorId, email, tokenHash, expires, createdBy);
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy, auditAction, ip);
+  });
+
+  try {
+    await sendEmail(email, 'Convite de acesso — Projeto Aprendiz', emailBody, `professor-invite/${professorId}/${tokenHash.slice(0, 16)}`);
+    return { inviteSent: true, expiresAt: expires };
+  } catch (error) {
+    console.error('Não foi possível enviar o convite do professor:', error.message, error.providerMessage || '');
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy, 'professor_invite_email_failed', ip);
+    return { inviteSent: false, expiresAt: expires };
+  }
 }
 
 async function seedUser(name, email, password, role) {
@@ -485,6 +527,60 @@ async function authorize(request, response, roles = []) {
   return session;
 }
 
+async function professorDeletionImpact(professorId) {
+  const professor = await db.prepare(`
+    SELECT professor_profiles.id,professor_profiles.name AS nome,professor_profiles.email,
+      professor_profiles.active,professor_profiles.user_id,users.auth_user_id,
+      locations.name AS local_principal
+    FROM professor_profiles
+    LEFT JOIN users ON users.id=professor_profiles.user_id
+    LEFT JOIN locations ON locations.id=professor_profiles.home_location_id
+    WHERE professor_profiles.id=?
+  `).get(professorId);
+  if (!professor) return null;
+
+  const classes = await db.prepare(`
+    SELECT classes.id,courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time,
+      COUNT(DISTINCT CASE WHEN enrollments.status='ativa' AND students.active=1 THEN students.id END) AS alunos
+    FROM classes
+    JOIN courses ON courses.id=classes.course_id
+    JOIN locations ON locations.id=classes.location_id
+    LEFT JOIN enrollments ON enrollments.class_id=classes.id
+    LEFT JOIN students ON students.id=enrollments.student_id
+    WHERE classes.professor_id=? AND classes.active=1
+    GROUP BY classes.id,courses.name,locations.name,classes.weekday,classes.start_time
+    ORDER BY courses.name,locations.name
+  `).all(professorId);
+  const studentSummary = await db.prepare(`
+    SELECT COUNT(DISTINCT students.id) AS total
+    FROM students
+    JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa'
+    JOIN classes ON classes.id=enrollments.class_id AND classes.active=1
+    WHERE classes.professor_id=? AND students.active=1
+  `).get(professorId);
+
+  return {
+    professor: {
+      id: professor.id,
+      nome: professor.nome,
+      localPrincipal: professor.local_principal || 'Não informado',
+      possuiAcesso: Boolean(professor.user_id),
+    },
+    resumo: {
+      turmasAtivas: classes.length,
+      locais: new Set(classes.map(row => row.local)).size,
+      alunosAtivos: Number(studentSummary?.total || 0),
+    },
+    turmas: classes.map(row => ({
+      id: row.id,
+      curso: row.curso,
+      local: row.local,
+      alunos: Number(row.alunos || 0),
+      horario: [row.weekday, row.start_time].filter(Boolean).join(' · ') || 'Horário não informado',
+    })),
+  };
+}
+
 function studentView(row) {
   const courseNames = row.course_names ? row.course_names.split('||') : [];
   const locations = row.location_names ? row.location_names.split('||') : [];
@@ -559,12 +655,11 @@ async function api(request, response, url) {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/forgot-password') {
-    if (usesSupabaseAuth) return json(response, 409, { message: 'A recuperação de senha é gerenciada pelo Supabase.' });
     const { email } = await readJson(request);
     const normalized = cleanEmail(email);
     if (!limited(`reset:${ip}:${normalized}`, 3, 30 * 60_000)) {
       const user = await db.prepare('SELECT * FROM users WHERE email = ? AND active = 1').get(normalized);
-      if (user) {
+      if (user && (!usesSupabaseAuth || user.auth_user_id)) {
         const token = randomBytes(32).toString('base64url');
         const expires = new Date(Date.now() + 30 * 60_000).toISOString();
         await db.prepare('UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND used_at IS NULL').run(user.id);
@@ -572,7 +667,25 @@ async function api(request, response, url) {
         const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
         const body = `Olá, ${user.name}. Use este link em até 30 minutos para redefinir sua senha:\n\n${resetUrl}\n\nSe você não solicitou a alteração, ignore esta mensagem.`;
         try { await sendEmail(user.email, 'Recuperação de senha — Projeto Aprendiz', body, `password-reset-${sha256(token)}`); }
-        catch (error) { console.error('Não foi possível enviar recuperação de senha:', error.message); }
+        catch (error) { console.error('Não foi possível enviar recuperação de senha:', error.message, error.providerMessage || ''); }
+      } else if (!user) {
+        const pendingProfessor = await db.prepare(`
+          SELECT professor_profiles.id,professor_profiles.name,professor_profiles.email,professor_invites.created_by
+          FROM professor_profiles
+          JOIN professor_invites ON professor_invites.professor_profile_id=professor_profiles.id
+          WHERE professor_profiles.email=? AND professor_profiles.active=1 AND professor_profiles.user_id IS NULL
+          ORDER BY professor_invites.id DESC LIMIT 1
+        `).get(normalized);
+        if (pendingProfessor) {
+          await issueProfessorInvite({
+            professorId: pendingProfessor.id,
+            name: pendingProfessor.name,
+            email: pendingProfessor.email,
+            createdBy: pendingProfessor.created_by,
+            ip,
+            auditAction: 'professor_invite_requested_from_recovery',
+          });
+        }
       }
     }
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -580,11 +693,23 @@ async function api(request, response, url) {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/reset-password') {
-    if (usesSupabaseAuth) return json(response, 409, { message: 'A redefinição de senha é gerenciada pelo Supabase.' });
     const { token, password } = await readJson(request);
     if (!strongPassword(password)) return json(response, 400, { message: 'A senha não atende aos requisitos de segurança.' });
-    const reset = await db.prepare('SELECT * FROM password_resets WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?').get(sha256(String(token || '')), new Date().toISOString());
+    const reset = await db.prepare(`
+      SELECT password_resets.*,users.auth_user_id
+      FROM password_resets JOIN users ON users.id=password_resets.user_id
+      WHERE password_resets.token_hash=? AND password_resets.used_at IS NULL AND password_resets.expires_at>?
+    `).get(sha256(String(token || '')), new Date().toISOString());
     if (!reset) return json(response, 400, { message: 'Este link é inválido, expirou ou já foi utilizado.' });
+    if (usesSupabaseAuth) {
+      if (!requireSupabaseAdmin(response)) return;
+      if (!reset.auth_user_id) return json(response, 400, { message: 'Esta conta ainda não foi ativada. Solicite um novo convite.' });
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(reset.auth_user_id, { password });
+      if (error) {
+        console.error('Não foi possível atualizar a senha no Supabase:', error.message);
+        return json(response, 502, { message: 'Não foi possível alterar a senha agora. Tente novamente.' });
+      }
+    }
     const passwordHash = await hashPassword(password);
     await db.transaction(async () => {
       await db.prepare('UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(passwordHash, reset.user_id);
@@ -607,14 +732,37 @@ async function api(request, response, url) {
     const invitation=await db.prepare(`SELECT professor_invites.*,professor_profiles.name FROM professor_invites JOIN professor_profiles ON professor_profiles.id=professor_invites.professor_profile_id WHERE token_hash=? AND accepted_at IS NULL AND expires_at>?`).get(sha256(token),new Date().toISOString());
     if(!invitation)return json(response,400,{message:'Este convite é inválido, expirou ou já foi utilizado.'});
     if(await db.prepare('SELECT id FROM users WHERE email=?').get(invitation.email))return json(response,409,{message:'Já existe uma conta com este e-mail.'});
+    if (usesSupabaseAuth && !requireSupabaseAdmin(response)) return;
+    let authUserId = null;
+    if (usesSupabaseAuth) {
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email: invitation.email,
+        password: body.password,
+        email_confirm: true,
+        user_metadata: { name: invitation.name },
+        app_metadata: { role: 'professor' },
+      });
+      if (error) {
+        console.error('Não foi possível criar o usuário do professor no Supabase:', error.message);
+        const duplicate = String(error.code || error.message).toLowerCase().includes('email') && String(error.code || error.message).toLowerCase().includes('exist');
+        return json(response, duplicate ? 409 : 502, { message: duplicate ? 'Já existe uma conta de acesso com este e-mail. Use a recuperação de senha.' : 'Não foi possível ativar a conta agora. Tente novamente.' });
+      }
+      authUserId = data.user.id;
+    }
     const passwordHash=await hashPassword(usesSupabaseAuth ? randomBytes(48).toString('base64url') : body.password);
-    await db.transaction(async () => {
-      const userResult=await db.prepare("INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,'professor')").run(invitation.name,invitation.email,passwordHash);
-      const userId=Number(userResult.lastInsertRowid);
-      await db.prepare('UPDATE professor_profiles SET user_id=? WHERE id=?').run(userId,invitation.professor_profile_id);
-      await db.prepare('UPDATE professor_invites SET accepted_at=CURRENT_TIMESTAMP WHERE id=?').run(invitation.id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(userId,'professor_invite_accepted',ip);
-    });
+    try {
+      await db.transaction(async () => {
+        const userResult=await db.prepare("INSERT INTO users (auth_user_id,name,email,password_hash,role) VALUES (?,?,?,?,'professor')").run(authUserId,invitation.name,invitation.email,passwordHash);
+        const userId=Number(userResult.lastInsertRowid);
+        await db.prepare('UPDATE professor_profiles SET user_id=? WHERE id=?').run(userId,invitation.professor_profile_id);
+        await db.prepare('UPDATE professor_invites SET accepted_at=CURRENT_TIMESTAMP WHERE id=?').run(invitation.id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(userId,'professor_invite_accepted',ip);
+      });
+    } catch (error) {
+      if (usesSupabaseAuth && authUserId) await supabaseAdmin.auth.admin.deleteUser(authUserId).catch(() => {});
+      if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response,409,{message:'Já existe uma conta com este e-mail.'});
+      throw error;
+    }
     return json(response,200,{message:'Conta ativada com sucesso. Você já pode entrar.'});
   }
 
@@ -770,7 +918,26 @@ async function api(request, response, url) {
 
   if(request.method==='GET'&&url.pathname==='/professores'){
     if(!await authorize(request,response,['gestor']))return;
-    const rows=(await db.prepare(`SELECT professor_profiles.id,professor_profiles.name AS nome,professor_profiles.email AS contato,professor_profiles.phone AS telefone,locations.name AS local,CASE professor_profiles.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,GROUP_CONCAT(DISTINCT courses.name) AS course_names FROM professor_profiles LEFT JOIN locations ON locations.id=professor_profiles.home_location_id LEFT JOIN classes ON classes.professor_id=professor_profiles.id AND classes.active=1 LEFT JOIN courses ON courses.id=classes.course_id GROUP BY professor_profiles.id,locations.name ORDER BY professor_profiles.name`).all()).map(row=>({...row,cursos:row.course_names?row.course_names.split(','):[]}));
+    const rows=(await db.prepare(`
+      SELECT professor_profiles.id,professor_profiles.name AS nome,professor_profiles.email AS contato,
+        professor_profiles.phone AS telefone,locations.name AS local,
+        CASE professor_profiles.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,
+        users.active AS user_active,
+        MAX(CASE WHEN professor_invites.accepted_at IS NULL AND professor_invites.expires_at>CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS has_valid_invite,
+        GROUP_CONCAT(DISTINCT courses.name) AS course_names
+      FROM professor_profiles
+      LEFT JOIN locations ON locations.id=professor_profiles.home_location_id
+      LEFT JOIN users ON users.id=professor_profiles.user_id
+      LEFT JOIN professor_invites ON professor_invites.professor_profile_id=professor_profiles.id
+      LEFT JOIN classes ON classes.professor_id=professor_profiles.id AND classes.active=1
+      LEFT JOIN courses ON courses.id=classes.course_id
+      GROUP BY professor_profiles.id,locations.name,users.active
+      ORDER BY professor_profiles.name
+    `).all()).map(row=>({
+      ...row,
+      cursos:row.course_names?row.course_names.split(','):[],
+      acesso:row.status==='Inativo'?'Desativado':row.user_active===1?'Ativo':row.has_valid_invite===1?'Convite pendente':'Envio pendente',
+    }));
     const cursos=(await db.prepare('SELECT name FROM courses WHERE active=1 ORDER BY name').all()).map(row=>row.name);
     const locais=(await db.prepare('SELECT name FROM locations WHERE active=1 ORDER BY name').all()).map(row=>row.name);
     return json(response,200,{professores:rows,cursos,locais});
@@ -779,31 +946,63 @@ async function api(request, response, url) {
   if(request.method==='POST'&&url.pathname==='/professores'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
     const body=await readJson(request),name=String(body.nome||'').trim(),email=cleanEmail(body.contato);
-    if(!name||!email||!body.local)return json(response,400,{message:'Nome, e-mail e local são obrigatórios.'});
-    await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(body.local);
-    const locationId=(await db.prepare('SELECT id FROM locations WHERE name=?').get(body.local)).id;
+    const locationName=String(body.local||'').trim(),courseNames=[...new Set((Array.isArray(body.cursos)?body.cursos:[]).map(value=>String(value).trim()).filter(Boolean))];
+    if(!name||!email.includes('@')||!locationName||!courseNames.length)return json(response,400,{message:'Nome, e-mail, local e ao menos um curso são obrigatórios.'});
+    const existing=await db.prepare('SELECT id,user_id,active FROM professor_profiles WHERE email=?').get(email);
+    if(existing?.active!==undefined&&existing.active!==1)return json(response,409,{message:'Este professor está desativado. Reative o cadastro existente em vez de criar outro.'});
+    if(existing?.user_id)return json(response,409,{message:'Este professor já possui uma conta ativa.'});
     try{
-      const token=randomBytes(32).toString('base64url'),expires=new Date(Date.now()+48*60*60_000).toISOString();
-      const inviteUrl=`${baseUrl}/accept-invite?token=${encodeURIComponent(token)}`;
-      const emailBody=`Olá, ${name}. Você foi convidado para acessar o Projeto Aprendiz como Professor. Crie sua senha em até 48 horas:\n\n${inviteUrl}\n\nSe você não reconhece este convite, ignore esta mensagem.`;
       const professorId=await db.transaction(async()=>{
-        const result=await db.prepare('INSERT INTO professor_profiles (name,email,phone,home_location_id) VALUES (?,?,?,?)').run(name,email,body.telefone||'',locationId);
-        const newProfessorId=Number(result.lastInsertRowid);
-        for(const courseName of body.cursos||[]){
+        await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(locationName);
+        const locationId=(await db.prepare('SELECT id FROM locations WHERE name=?').get(locationName)).id;
+        let targetProfessorId=existing?.id;
+        if(targetProfessorId){
+          await db.prepare('UPDATE professor_profiles SET name=?,phone=?,home_location_id=?,active=1 WHERE id=?').run(name,body.telefone||'',locationId,targetProfessorId);
+        }else{
+          const result=await db.prepare('INSERT INTO professor_profiles (name,email,phone,home_location_id) VALUES (?,?,?,?)').run(name,email,body.telefone||'',locationId);
+          targetProfessorId=Number(result.lastInsertRowid);
+        }
+        for(const courseName of courseNames){
           await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(courseName);
           const courseId=(await db.prepare('SELECT id FROM courses WHERE name=?').get(courseName)).id;
-          await db.prepare('INSERT OR IGNORE INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(courseId,newProfessorId,locationId,`${courseName} — ${body.local}`);
+          await db.prepare('INSERT OR IGNORE INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(courseId,targetProfessorId,locationId,`${courseName} — ${locationName}`);
         }
-        await db.prepare('INSERT INTO professor_invites (professor_profile_id,email,token_hash,expires_at,created_by) VALUES (?,?,?,?,?)').run(newProfessorId,email,sha256(token),expires,session.user_id);
-        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_created',ip);
-        return newProfessorId;
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,existing?'professor_registration_resumed':'professor_created',ip);
+        return targetProfessorId;
       });
-      await sendEmail(email,'Convite de acesso — Projeto Aprendiz',emailBody,`professor-invite/${professorId}`);
-      return json(response,201,{id:professorId,message:'Professor cadastrado e convite enviado.',devMailbox:isProduction?null:'/dev-mail'});
+      const invitation=await issueProfessorInvite({professorId,name,email,createdBy:session.user_id,ip,auditAction:existing?'professor_invite_reissued':'professor_invite_created'});
+      return json(response,existing?200:201,{
+        id:professorId,
+        inviteSent:invitation.inviteSent,
+        message:invitation.inviteSent
+          ? (existing?'Cadastro existente atualizado e novo convite enviado.':'Professor cadastrado e convite enviado.')
+          : 'Professor cadastrado, mas o convite não pôde ser enviado. Use “Reenviar convite” após revisar o remetente de e-mail.',
+        devMailbox:isProduction?null:'/dev-mail',
+      });
     }catch(error){
       if(error.code === '23505' || String(error).includes('UNIQUE'))return json(response,409,{message:'Já existe um professor com este e-mail.'});
       throw error;
     }
+  }
+
+  const professorInviteMatch=url.pathname.match(/^\/professores\/(\d+)\/reenviar-convite$/);
+  if(professorInviteMatch&&request.method==='POST'){
+    const session=await authorize(request,response,['gestor']);if(!session)return;
+    const id=Number(professorInviteMatch[1]);
+    const professor=await db.prepare('SELECT id,name,email,user_id,active FROM professor_profiles WHERE id=?').get(id);
+    if(!professor||professor.active!==1)return json(response,404,{message:'Professor ativo não encontrado.'});
+    if(professor.user_id)return json(response,409,{message:'Este professor já ativou a conta.'});
+    const invitation=await issueProfessorInvite({professorId:id,name:professor.name,email:professor.email,createdBy:session.user_id,ip,auditAction:'professor_invite_reissued'});
+    if(!invitation.inviteSent)return json(response,502,{message:'O convite foi renovado, mas o provedor de e-mail recusou o envio. Revise o remetente configurado e tente novamente.'});
+    return json(response,200,{message:'Novo convite enviado com sucesso.',expiresAt:invitation.expiresAt});
+  }
+
+  const professorImpactMatch=url.pathname.match(/^\/professores\/(\d+)\/impacto-exclusao$/);
+  if(professorImpactMatch&&request.method==='GET'){
+    if(!await authorize(request,response,['gestor']))return;
+    const impact=await professorDeletionImpact(Number(professorImpactMatch[1]));
+    if(!impact)return json(response,404,{message:'Professor não encontrado.'});
+    return json(response,200,impact);
   }
 
   const professorMatch=url.pathname.match(/^\/professores\/(\d+)$/);
@@ -829,11 +1028,37 @@ async function api(request, response, url) {
   if(professorMatch&&request.method==='DELETE'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
     const id=Number(professorMatch[1]);
-    const activeClasses=(await db.prepare('SELECT COUNT(*) AS total FROM classes WHERE professor_id=? AND active=1').get(id)).total;
-    if(activeClasses)return json(response,409,{message:'Reatribua ou desative as turmas deste professor antes de desativá-lo.'});
-    await db.prepare('UPDATE professor_profiles SET active=0 WHERE id=?').run(id);
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_deactivated',ip);
-    return json(response,200,{success:true});
+    const professor=await db.prepare(`
+      SELECT professor_profiles.id,professor_profiles.user_id,users.auth_user_id
+      FROM professor_profiles LEFT JOIN users ON users.id=professor_profiles.user_id
+      WHERE professor_profiles.id=? AND professor_profiles.active=1
+    `).get(id);
+    if(!professor)return json(response,404,{message:'Professor ativo não encontrado.'});
+    const impact=await professorDeletionImpact(id);
+    await db.transaction(async()=>{
+      await db.prepare('UPDATE classes SET active=0 WHERE professor_id=? AND active=1').run(id);
+      await db.prepare('UPDATE professor_profiles SET active=0 WHERE id=?').run(id);
+      if(professor.user_id){
+        await db.prepare('UPDATE users SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(professor.user_id);
+        await db.prepare('DELETE FROM sessions WHERE user_id=?').run(professor.user_id);
+      }
+      await db.prepare('UPDATE professor_invites SET expires_at=CURRENT_TIMESTAMP WHERE professor_profile_id=? AND accepted_at IS NULL').run(id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_deactivated_with_dependencies',ip);
+    });
+    let authAccountRemoved=!professor.auth_user_id;
+    if(professor.auth_user_id&&supabaseAdmin){
+      const { error }=await supabaseAdmin.auth.admin.deleteUser(professor.auth_user_id);
+      authAccountRemoved=!error;
+      if(error)console.error('Não foi possível remover o usuário desativado do Supabase:',error.message);
+    }
+    return json(response,200,{
+      success:true,
+      authAccountRemoved,
+      resumo:impact?.resumo,
+      message:authAccountRemoved
+        ? 'Professor excluído. Turmas desativadas e histórico preservado.'
+        : 'Professor excluído e acesso ao sistema revogado. A limpeza da conta de autenticação ficou pendente.',
+    });
   }
 
   if(request.method==='GET'&&url.pathname==='/professores/meus-cursos'){
