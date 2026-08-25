@@ -4,6 +4,7 @@ import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { createClient } from '@supabase/supabase-js';
 import { createDatabase } from './database.mjs';
 
 const scrypt = promisify(scryptCallback);
@@ -16,6 +17,18 @@ const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0
 const baseUrl = process.env.APP_URL || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : `http://127.0.0.1:${port}`);
 const appOrigin = new URL(baseUrl).origin;
 const isProduction = process.env.NODE_ENV === 'production';
+const authProvider = process.env.AUTH_PROVIDER || (process.env.SUPABASE_URL ? 'supabase' : 'local');
+const usesSupabaseAuth = authProvider === 'supabase';
+
+if (usesSupabaseAuth && (!process.env.SUPABASE_URL || !process.env.SUPABASE_PUBLISHABLE_KEY)) {
+  throw new Error('SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY são obrigatórias com AUTH_PROVIDER=supabase.');
+}
+
+const supabaseAuth = usesSupabaseAuth
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, {
+      auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+    })
+  : null;
 
 await mkdir(dataRoot, { recursive: true });
 const db = await createDatabase({ sqlitePath: join(dataRoot, 'projeto-aprendiz.db') });
@@ -24,6 +37,7 @@ if (db.dialect === 'sqlite') await db.exec(`
   PRAGMA foreign_keys = ON;
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    auth_user_id TEXT UNIQUE,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
@@ -193,6 +207,12 @@ if (db.dialect === 'sqlite') await db.exec(`
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
 `);
+if (db.dialect === 'sqlite') {
+  const userColumns = await db.prepare('PRAGMA table_info(users)').all();
+  if (!userColumns.some(column => column.name === 'auth_user_id')) {
+    await db.exec('ALTER TABLE users ADD COLUMN auth_user_id TEXT; CREATE UNIQUE INDEX IF NOT EXISTS users_auth_user_id_unique ON users(auth_user_id);');
+  }
+}
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
 const cleanEmail = value => String(value || '').trim().toLowerCase();
@@ -240,19 +260,19 @@ async function sendEmail(recipient, subject, body, idempotencyKey) {
 async function seedUser(name, email, password, role) {
   if (await db.prepare('SELECT id FROM users WHERE email = ?').get(email)) return;
   await db.prepare('INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,?)')
-    .run(name, email, await hashPassword(password), role);
+    .run(name, email, await hashPassword(password || randomBytes(48).toString('base64url')), role);
 }
 
 const seedDemoData = process.env.SEED_DEMO_DATA === 'true' || !isProduction;
 if (seedDemoData) {
   await seedUser('Admin Regional', 'gestor@projetoaprendiz.local', 'Gestor@2026!', 'gestor');
   await seedUser('Marina Oliveira', 'professor@projetoaprendiz.local', 'Professor@2026!', 'professor');
-} else if (process.env.BOOTSTRAP_ADMIN_EMAIL && process.env.BOOTSTRAP_ADMIN_PASSWORD) {
-  if (!strongPassword(process.env.BOOTSTRAP_ADMIN_PASSWORD)) throw new Error('BOOTSTRAP_ADMIN_PASSWORD não atende aos requisitos de segurança.');
+} else if (process.env.BOOTSTRAP_ADMIN_EMAIL && (usesSupabaseAuth || process.env.BOOTSTRAP_ADMIN_PASSWORD)) {
+  if (!usesSupabaseAuth && !strongPassword(process.env.BOOTSTRAP_ADMIN_PASSWORD)) throw new Error('BOOTSTRAP_ADMIN_PASSWORD não atende aos requisitos de segurança.');
   await seedUser(process.env.BOOTSTRAP_ADMIN_NAME || 'Administrador', cleanEmail(process.env.BOOTSTRAP_ADMIN_EMAIL), process.env.BOOTSTRAP_ADMIN_PASSWORD, 'gestor');
 }
 if (!seedDemoData && !(await db.prepare('SELECT id FROM users LIMIT 1').get())) {
-  throw new Error('Defina BOOTSTRAP_ADMIN_EMAIL e BOOTSTRAP_ADMIN_PASSWORD para criar o primeiro Gestor.');
+  throw new Error(usesSupabaseAuth ? 'Defina BOOTSTRAP_ADMIN_EMAIL com o e-mail do primeiro Gestor criado no Supabase Auth.' : 'Defina BOOTSTRAP_ADMIN_EMAIL e BOOTSTRAP_ADMIN_PASSWORD para criar o primeiro Gestor.');
 }
 
 async function seedAcademicData() {
@@ -377,13 +397,15 @@ function cookie(name, value, maxAge = 0) {
 }
 
 function securityHeaders(contentType = 'application/json; charset=utf-8') {
+  const connectSources = ["'self'"];
+  if (process.env.SUPABASE_URL) connectSources.push(new URL(process.env.SUPABASE_URL).origin);
   const headers = {
     'Content-Type': contentType,
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'no-referrer',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
+    'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ${connectSources.join(' ')}; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
     'Cache-Control': 'no-store',
   };
   if (isProduction) headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
@@ -412,6 +434,33 @@ async function currentSession(request) {
     FROM sessions JOIN users ON users.id = sessions.user_id
     WHERE sessions.token_hash = ? AND sessions.expires_at > ?
   `).get(sha256(raw), new Date().toISOString()) || null;
+}
+
+async function createAppSession(user, ip, remember = false) {
+  const token = randomBytes(32).toString('base64url');
+  const csrfToken = randomBytes(24).toString('base64url');
+  const maxAge = remember ? 30 * 86400 : 8 * 3600;
+  const expires = new Date(Date.now() + maxAge * 1000).toISOString();
+  await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at) VALUES (?,?,?,?)').run(user.id, sha256(token), csrfToken, expires);
+  await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(user.id, 'login', ip);
+  return { token, csrfToken, maxAge };
+}
+
+async function userFromSupabaseToken(request) {
+  const match = String(request.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const { data, error } = await supabaseAuth.auth.getUser(match[1]);
+  const authUser = data?.user;
+  if (error || !authUser?.id || !authUser.email || !authUser.email_confirmed_at) return null;
+  let user = await db.prepare('SELECT * FROM users WHERE auth_user_id=? AND active=1').get(authUser.id);
+  if (!user) {
+    user = await db.prepare('SELECT * FROM users WHERE email=? AND auth_user_id IS NULL AND active=1').get(cleanEmail(authUser.email));
+    if (user) {
+      await db.prepare('UPDATE users SET auth_user_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(authUser.id,user.id);
+      user.auth_user_id = authUser.id;
+    }
+  }
+  return user || null;
 }
 
 function originAllowed(request) {
@@ -472,6 +521,7 @@ async function api(request, response, url) {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/login') {
+    if (usesSupabaseAuth) return json(response, 409, { message: 'Use o login seguro do Supabase.' });
     const { email, password, remember = false } = await readJson(request);
     const normalized = cleanEmail(email);
     if (limited(`login:${ip}:${normalized}`, 5, 15 * 60_000)) return json(response, 429, { message: 'Muitas tentativas. Aguarde alguns minutos.' });
@@ -480,12 +530,16 @@ async function api(request, response, url) {
       await new Promise(resolve => setTimeout(resolve, 350));
       return json(response, 401, { message: 'E-mail ou senha inválidos.' });
     }
-    const token = randomBytes(32).toString('base64url');
-    const csrfToken = randomBytes(24).toString('base64url');
-    const maxAge = remember ? 30 * 86400 : 8 * 3600;
-    const expires = new Date(Date.now() + maxAge * 1000).toISOString();
-    await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at) VALUES (?,?,?,?)').run(user.id, sha256(token), csrfToken, expires);
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(user.id, 'login', ip);
+    const { token, csrfToken, maxAge } = await createAppSession(user, ip, remember);
+    return json(response, 200, { user: publicUser(user), csrfToken }, { 'Set-Cookie': cookie('pa_session', token, maxAge) });
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/auth/exchange') {
+    if (!usesSupabaseAuth) return json(response, 404, { message: 'Rota não disponível.' });
+    const body = await readJson(request);
+    const user = await userFromSupabaseToken(request);
+    if (!user) return json(response, 403, { message: 'Conta autenticada, mas sem acesso ativo ao Projeto Aprendiz.' });
+    const { token, csrfToken, maxAge } = await createAppSession(user, ip, Boolean(body.remember));
     return json(response, 200, { user: publicUser(user), csrfToken }, { 'Set-Cookie': cookie('pa_session', token, maxAge) });
   }
 
@@ -505,6 +559,7 @@ async function api(request, response, url) {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/forgot-password') {
+    if (usesSupabaseAuth) return json(response, 409, { message: 'A recuperação de senha é gerenciada pelo Supabase.' });
     const { email } = await readJson(request);
     const normalized = cleanEmail(email);
     if (!limited(`reset:${ip}:${normalized}`, 3, 30 * 60_000)) {
@@ -525,6 +580,7 @@ async function api(request, response, url) {
   }
 
   if (request.method === 'POST' && url.pathname === '/api/auth/reset-password') {
+    if (usesSupabaseAuth) return json(response, 409, { message: 'A redefinição de senha é gerenciada pelo Supabase.' });
     const { token, password } = await readJson(request);
     if (!strongPassword(password)) return json(response, 400, { message: 'A senha não atende aos requisitos de segurança.' });
     const reset = await db.prepare('SELECT * FROM password_resets WHERE token_hash = ? AND used_at IS NULL AND expires_at > ?').get(sha256(String(token || '')), new Date().toISOString());
@@ -551,7 +607,7 @@ async function api(request, response, url) {
     const invitation=await db.prepare(`SELECT professor_invites.*,professor_profiles.name FROM professor_invites JOIN professor_profiles ON professor_profiles.id=professor_invites.professor_profile_id WHERE token_hash=? AND accepted_at IS NULL AND expires_at>?`).get(sha256(token),new Date().toISOString());
     if(!invitation)return json(response,400,{message:'Este convite é inválido, expirou ou já foi utilizado.'});
     if(await db.prepare('SELECT id FROM users WHERE email=?').get(invitation.email))return json(response,409,{message:'Já existe uma conta com este e-mail.'});
-    const passwordHash=await hashPassword(body.password);
+    const passwordHash=await hashPassword(usesSupabaseAuth ? randomBytes(48).toString('base64url') : body.password);
     await db.transaction(async () => {
       const userResult=await db.prepare("INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,'professor')").run(invitation.name,invitation.email,passwordHash);
       const userId=Number(userResult.lastInsertRowid);
@@ -583,6 +639,7 @@ async function api(request, response, url) {
   }
   if(request.method==='PUT'&&url.pathname==='/api/account/password'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+    if(usesSupabaseAuth)return json(response,409,{message:'A senha desta conta é gerenciada pelo Supabase.'});
     const body=await readJson(request),user=await db.prepare('SELECT * FROM users WHERE id=?').get(session.user_id);
     if(!(await verifyPassword(body.currentPassword,user.password_hash)))return json(response,400,{message:'A senha atual está incorreta.'});
     if(!strongPassword(body.newPassword))return json(response,400,{message:'A nova senha não atende aos requisitos de segurança.'});

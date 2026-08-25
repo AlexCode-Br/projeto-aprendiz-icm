@@ -18,6 +18,7 @@
     "check": "node --check backend/server.mjs && node --check backend/database.mjs && node --test backend/*.test.mjs && vite build"
   },
   "dependencies": {
+    "@supabase/supabase-js": "2.112.4",
     "axios": "^1.11.0",
     "chart.js": "^4.5.0",
     "jspdf": "^3.0.2",

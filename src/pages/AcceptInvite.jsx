@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Logo from '../assets/logo_projeto_aprendiz.png';
 import api from '../services/api';
+import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
 
 export default function AcceptInvite() {
     const [params] = useSearchParams();
@@ -22,7 +23,19 @@ export default function AcceptInvite() {
         if (!valid) return setStatus(previous => ({ ...previous, error: 'A senha não atende aos requisitos.' }));
         if (password !== confirmation) return setStatus(previous => ({ ...previous, error: 'As senhas não coincidem.' }));
         setStatus(previous => ({ ...previous, loading: true, error: '' }));
-        try { await api.post('/api/invitations/accept', { token, password }); setStatus({ loading: false, error: '', success: true }); setTimeout(() => navigate('/login', { replace: true }), 1800); }
+        try {
+            if (usesSupabaseAuth) {
+                const { error: authError } = await supabase.auth.signUp({
+                    email: invitation.email,
+                    password,
+                    options: { emailRedirectTo: `${window.location.origin}/login` },
+                });
+                if (authError) throw new Error(friendlyAuthError(authError));
+            }
+            await api.post('/api/invitations/accept', { token, password });
+            setStatus({ loading: false, error: '', success: true });
+            setTimeout(() => navigate('/login', { replace: true }), 1800);
+        }
         catch (error) { setStatus({ loading: false, error: error.message, success: false }); }
     };
 

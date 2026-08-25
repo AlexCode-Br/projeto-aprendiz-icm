@@ -101,15 +101,25 @@ class PostgresDatabase {
     } finally { client.release(); }
   }
   async migrate() {
-    await this.pool.query('CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)');
+    await this.pool.query(`
+      CREATE SCHEMA IF NOT EXISTS projeto_aprendiz;
+      REVOKE ALL ON SCHEMA projeto_aprendiz FROM PUBLIC, anon, authenticated;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA projeto_aprendiz REVOKE ALL ON TABLES FROM PUBLIC, anon, authenticated;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA projeto_aprendiz REVOKE ALL ON SEQUENCES FROM PUBLIC, anon, authenticated;
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.schema_migrations (
+        name TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
     const migrationRoot = join(here, 'migrations');
     const files = (await readdir(migrationRoot)).filter(name => name.endsWith('.sql')).sort();
     for (const name of files) {
-      if (await this.get('SELECT name FROM schema_migrations WHERE name=?', [name])) continue;
+      if (await this.get('SELECT name FROM projeto_aprendiz.schema_migrations WHERE name=?', [name])) continue;
       const sql = await readFile(join(migrationRoot, name), 'utf8');
       await this.transaction(async () => {
+        await this.exec('SET LOCAL search_path TO projeto_aprendiz, public');
         await this.exec(sql);
-        await this.run('INSERT INTO schema_migrations (name) VALUES (?)', [name]);
+        await this.run('INSERT INTO projeto_aprendiz.schema_migrations (name) VALUES (?)', [name]);
       });
     }
   }
@@ -121,9 +131,10 @@ export async function createDatabase({ sqlitePath }) {
     const { Pool } = await import('pg');
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
-      max: Number(process.env.DB_POOL_SIZE || 10),
+      max: Math.min(10, Math.max(1, Number(process.env.DB_POOL_SIZE || 5))),
       connectionTimeoutMillis: 10_000,
       idleTimeoutMillis: 30_000,
+      options: '-c search_path=projeto_aprendiz,public -c idle_in_transaction_session_timeout=30000',
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' },
     });
     pool.on('error', error => console.error('Erro inesperado no pool PostgreSQL:', error));
