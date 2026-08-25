@@ -119,27 +119,29 @@ const Alunos = () => {
 
     return (
         <div>
-            <h1 className="text-3xl font-bold text-text-default mb-6">Gestão de Alunos</h1>
+            <div className="page-header"><div><h1 className="page-title">Alunos</h1><p className="page-description">Consulte cadastros e mantenha os dados dos alunos atualizados.</p></div></div>
 
             {/* Barra de Ações */}
-            <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
+            <div className="panel mb-6 flex flex-col items-stretch justify-between gap-4 p-4 sm:flex-row sm:items-center">
+                <label htmlFor="student-search" className="sr-only">Buscar aluno</label>
                 <input
+                    id="student-search"
                     type="text"
                     placeholder="Buscar aluno por nome ou email..."
                     value={searchTerm}
                     onChange={handleSearchChange}
-                    className="w-full sm:max-w-xs px-4 py-2 border rounded-md bg-surface border-border focus:outline-none focus:ring-2 focus:ring-primary"
+                    className="form-control sm:max-w-sm"
                 />
                 <button
                     onClick={() => handleOpenFormModal()}
-                    className="w-full sm:w-auto px-4 py-2 text-white bg-primary rounded-md hover:bg-primary-dark transition-colors duration-200"
+                    className="btn btn-primary w-full sm:w-auto"
                 >
                     Adicionar Aluno
                 </button>
             </div>
 
             {/* Tabela de Alunos */}
-            <div className="bg-surface rounded-lg shadow overflow-x-auto">
+            <div className="panel overflow-x-auto">
                 <table className="min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
@@ -165,10 +167,10 @@ const Alunos = () => {
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.telefone}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex justify-end space-x-2">
-                                        <button onClick={() => handleOpenFormModal(aluno)} className="text-primary hover:text-primary-dark p-1 rounded-full hover:bg-primary/10">
+                                        <button type="button" aria-label={`Editar ${aluno.nome}`} onClick={() => handleOpenFormModal(aluno)} className="icon-button text-primary hover:text-primary-dark hover:bg-primary/10">
                                             <PencilIcon />
                                         </button>
-                                        <button onClick={() => handleOpenConfirmModal(aluno)} className="text-danger hover:text-red-700 p-1 rounded-full hover:bg-danger/10">
+                                        <button type="button" aria-label={`Excluir ${aluno.nome}`} onClick={() => handleOpenConfirmModal(aluno)} className="icon-button text-danger hover:text-red-700 hover:bg-danger/10">
                                             <TrashIcon />
                                         </button>
                                     </div>

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import { useToast } from '../../contexts/ToastContext';
+import Modal from '../../components/Modal';
 
 // --- Ícones SVG ---
 const AddIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>;
-const CloseIcon = () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>;
-const ChevronDownIcon = () => <svg className="w-5 h-5 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>;
+const ChevronDownIcon = ({ className = '' }) => <svg aria-hidden="true" className={`h-5 w-5 transition-transform duration-300 ${className}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>;
 const SendIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>;
 
 // --- Componente NewTicketModal ---
@@ -46,43 +47,39 @@ const NewTicketModal = ({ isOpen, onClose, onSave }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="modal fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 opacity-100 px-4">
-            <div className="modal-content bg-white dark:bg-surface rounded-lg shadow-xl w-full max-w-lg transform scale-100">
-                <div className="flex justify-between items-center p-6 border-b border-border">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-text-default">Abrir Novo Ticket de Suporte</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-text-default"><CloseIcon /></button>
-                </div>
+        <Modal isOpen={isOpen} onClose={onClose} title="Abrir novo ticket de suporte">
                 <form onSubmit={handleSubmit} noValidate>
-                    <div className="p-6 max-h-[70vh] overflow-y-auto space-y-4">
+                    <div className="space-y-4">
                         <div>
-                            <label htmlFor="ticket-subject" className="block text-sm font-medium text-text-default mb-1">Assunto</label>
-                            <input type="text" id="ticket-subject" name="assunto" value={formData.assunto} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-transparent ${errors.assunto ? 'border-danger' : 'border-border'}`} />
-                            {errors.assunto && <p className="text-danger text-xs mt-1">{errors.assunto}</p>}
+                            <label htmlFor="ticket-subject" className="form-label">Assunto</label>
+                            <input type="text" id="ticket-subject" name="assunto" value={formData.assunto} onChange={handleChange} aria-invalid={Boolean(errors.assunto)} aria-describedby={errors.assunto ? 'ticket-subject-error' : undefined} className={`form-control ${errors.assunto ? 'border-danger' : ''}`} />
+                            {errors.assunto && <p id="ticket-subject-error" className="text-danger text-xs mt-1">{errors.assunto}</p>}
                         </div>
                         <div>
-                            <label htmlFor="ticket-priority" className="block text-sm font-medium text-text-default mb-1">Prioridade</label>
-                            <select id="ticket-priority" name="prioridade" value={formData.prioridade} onChange={handleChange} className="w-full px-3 py-2 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-transparent">
+                            <label htmlFor="ticket-priority" className="form-label">Prioridade</label>
+                            <select id="ticket-priority" name="prioridade" value={formData.prioridade} onChange={handleChange} className="form-control">
                                 <option>Normal</option>
                                 <option>Alta</option>
                                 <option>Urgente</option>
                             </select>
                         </div>
                         <div>
-                            <label htmlFor="ticket-message" className="block text-sm font-medium text-text-default mb-1">Descreva o problema</label>
-                            <textarea id="ticket-message" name="mensagem" rows="6" value={formData.mensagem} onChange={handleChange} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-transparent ${errors.mensagem ? 'border-danger' : 'border-border'}`}></textarea>
-                            {errors.mensagem && <p className="text-danger text-xs mt-1">{errors.mensagem}</p>}
+                            <label htmlFor="ticket-message" className="form-label">Descreva o problema</label>
+                            <textarea id="ticket-message" name="mensagem" rows="6" value={formData.mensagem} onChange={handleChange} aria-invalid={Boolean(errors.mensagem)} aria-describedby={errors.mensagem ? 'ticket-message-error' : undefined} className={`form-control min-h-32 ${errors.mensagem ? 'border-danger' : ''}`}></textarea>
+                            {errors.mensagem && <p id="ticket-message-error" className="text-danger text-xs mt-1">{errors.mensagem}</p>}
                         </div>
                     </div>
-                    <div className="flex justify-end p-6 border-t border-border bg-gray-50 dark:bg-surface/50 rounded-b-lg">
-                        <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark transition-colors">Enviar Ticket</button>
+                    <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" className="btn btn-primary">Enviar ticket</button>
                     </div>
                 </form>
-            </div>
-        </div>
+        </Modal>
     );
 };
 
 const ProfessorSuporte = () => {
+    const { showToast } = useToast();
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -102,11 +99,11 @@ const ProfessorSuporte = () => {
             setError(null);
         } catch (err) {
             setError("Falha ao carregar os tickets de suporte.");
-            console.error(err);
+            showToast(err.message || 'Falha ao carregar os tickets de suporte.', 'error');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [showToast]);
 
     useEffect(() => {
         fetchTickets();
@@ -116,9 +113,10 @@ const ProfessorSuporte = () => {
         try {
             await api.post('/api/suporte', ticketData);
             setIsModalOpen(false);
+            showToast('Ticket aberto com sucesso.', 'success');
             fetchTickets();
         } catch (err) {
-            console.error("Falha ao criar ticket:", err);
+            showToast(err.message || 'Falha ao criar o ticket.', 'error');
         }
     };
     
@@ -132,18 +130,20 @@ const ProfessorSuporte = () => {
         try {
             await api.post(`/api/suporte/${ticketId}/responder`, { mensagem: message });
             handleReplyChange(ticketId, '');
+            showToast('Resposta enviada.', 'success');
             fetchTickets();
         } catch (err) {
-            console.error("Falha ao responder ticket:", err);
+            showToast(err.message || 'Falha ao responder o ticket.', 'error');
         }
     };
     
     const handleCloseTicket = async (ticketId) => {
         try {
             await api.put(`/api/suporte/${ticketId}/fechar`);
+            showToast('Ticket marcado como resolvido.', 'success');
             fetchTickets();
         } catch (err) {
-            console.error("Falha ao fechar ticket:", err);
+            showToast(err.message || 'Falha ao resolver o ticket.', 'error');
         }
     };
 
@@ -160,26 +160,26 @@ const ProfessorSuporte = () => {
         }
     };
     
-    if (loading) return <div className="text-center p-10 text-text-muted">Carregando...</div>;
-    if (error) return <div className="text-center p-10 text-red-500">{error}</div>;
+    if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando tickets...</div>;
+    if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchTickets} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
         <>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center fade-in-up mb-6">
-                <h2 className="text-2xl font-bold text-text-default mb-4 sm:mb-0">Suporte</h2>
-                <button onClick={() => setIsModalOpen(true)} className="w-full sm:w-auto flex-shrink-0 px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark transition-colors flex items-center justify-center gap-2">
-                    <AddIcon /><span>Abrir Novo Ticket</span>
+            <div className="page-header fade-in-up">
+                <div><h1 className="page-title">Suporte</h1><p className="page-description">Abra solicitações e acompanhe as respostas da equipe responsável.</p></div>
+                <button type="button" onClick={() => setIsModalOpen(true)} className="btn btn-primary w-full sm:w-auto">
+                    <AddIcon /><span>Abrir novo ticket</span>
                 </button>
             </div>
 
-            <div className="bg-surface rounded-lg shadow-sm border border-border fade-in-up delay-200">
+            <div className="panel overflow-hidden fade-in-up delay-200">
                 <div className="px-6 py-4 border-b border-border">
                     <h3 className="text-lg font-semibold text-text-default">Seus Tickets</h3>
                 </div>
                 <div className="divide-y divide-border">
                     {tickets.length > 0 ? tickets.map(ticket => (
                         <div key={ticket.id} className="ticket-item">
-                            <button onClick={() => toggleAccordion(ticket.id)} className="w-full flex justify-between items-center text-left p-6 hover:bg-gray-50 dark:hover:bg-gray-50/10 transition-colors">
+                            <button type="button" aria-expanded={activeAccordion === ticket.id} aria-controls={`ticket-${ticket.id}-details`} onClick={() => toggleAccordion(ticket.id)} className="flex min-h-20 w-full items-center justify-between p-4 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-50/10 sm:p-6">
                                 <div className="flex-1 pr-4">
                                     <p className="font-semibold text-text-default">{ticket.assunto}</p>
                                     <p className="text-sm text-text-muted">Ticket #{ticket.id} - Aberto em {new Date(ticket.data_abertura).toLocaleDateString()}</p>
@@ -189,7 +189,7 @@ const ProfessorSuporte = () => {
                                     <ChevronDownIcon className={activeAccordion === ticket.id ? 'rotate-180' : ''}/>
                                 </div>
                             </button>
-                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${activeAccordion === ticket.id ? 'max-h-[1000px]' : 'max-h-0'}`}>
+                            <div id={`ticket-${ticket.id}-details`} hidden={activeAccordion !== ticket.id}>
                                 <div className="p-6 border-t border-border bg-gray-50 dark:bg-surface/30">
                                     <div className="space-y-4 mb-6">
                                         <div className="message user">
@@ -206,12 +206,13 @@ const ProfessorSuporte = () => {
                                                     rows="4"
                                                     value={replyMessages[ticket.id] || ''}
                                                     onChange={(e) => handleReplyChange(ticket.id, e.target.value)}
-                                                    className="w-full p-3 border border-border rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary transition bg-transparent"
+                                                    aria-label={`Responder ao ticket ${ticket.id}`}
+                                                    className="form-control min-h-28"
                                                 ></textarea>
                                             </div>
                                             <div className="flex justify-end gap-3 mt-4">
-                                                <button onClick={() => handleCloseTicket(ticket.id)} className="px-4 py-2 text-sm bg-gray-200 text-text-default font-semibold rounded-lg shadow-sm hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 transition-colors">Resolver Ticket</button>
-                                                <button onClick={() => handleReplySubmit(ticket.id)} className="px-4 py-2 text-sm bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark transition-colors flex items-center gap-2"><SendIcon /> Enviar</button>
+                                                <button type="button" onClick={() => handleCloseTicket(ticket.id)} className="btn btn-secondary">Resolver ticket</button>
+                                                <button type="button" onClick={() => handleReplySubmit(ticket.id)} className="btn btn-primary"><SendIcon /> Enviar</button>
                                             </div>
                                         </>
                                     )}

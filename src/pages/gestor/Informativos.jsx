@@ -79,16 +79,16 @@ const Informativos = () => {
 
     return (
         <>
-            <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold text-text-default">Informativos</h2>
-                <button onClick={() => handleOpenFormModal()} className="px-4 py-2 bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark flex items-center">
-                    Criar Novo Informativo
+            <div className="page-header">
+                <div><h1 className="page-title">Informativos</h1><p className="page-description">Publique comunicados e acompanhe leituras e confirmações.</p></div>
+                <button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">
+                    Criar informativo
                 </button>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {informativos.map(info => (
-                    <div key={info.id} className="bg-surface rounded-lg shadow-sm border border-border flex flex-col">
+                    <article key={info.id} className="panel flex flex-col overflow-hidden">
                         <div className="p-4 flex-grow">
                             <div className="flex justify-between items-start mb-2">
                                 <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${getCategoryClass(info.categoria)}`}>{info.categoria}</span>
@@ -104,12 +104,13 @@ const Informativos = () => {
                                 {info.confirmacao && <span className="ml-4">✔️ {info.confirmacoes} Confirmações</span>}
                             </div>
                             <div className="flex items-center space-x-2">
-                                <button onClick={() => handleOpenFormModal(info)} className="text-blue-600 hover:underline">Editar</button>
-                                <button onClick={() => handleOpenDeleteConfirm(info)} className="text-danger hover:underline">Excluir</button>
+                                <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-blue-600 hover:bg-blue-50 hover:underline dark:hover:bg-blue-950/30">Editar</button>
+                                <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-10 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
                             </div>
                         </div>
-                    </div>
+                    </article>
                 ))}
+                {!informativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">Nenhum informativo publicado.</div>}
             </div>
 
             <InformativoModal
@@ -125,6 +126,8 @@ const Informativos = () => {
                 onConfirm={handleConfirmSend}
                 title="Confirmar Envio?"
                 message="O informativo será enviado para todos os destinatários selecionados. Deseja continuar?"
+                confirmLabel="Publicar"
+                destructive={false}
             />
 
             <ConfirmationModal

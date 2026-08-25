@@ -1,20 +1,11 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useContext } from 'react';
 import { NavLink } from 'react-router-dom';
 import Logo from '../assets/logo_projeto_aprendiz.png';
 import { AuthContext } from '../contexts/AuthContext';
+import useDarkMode from '../hooks/useDarkMode';
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
-    const [isDark, setIsDark] = useState(localStorage.getItem('theme') === 'dark');
-
-    useEffect(() => {
-        if (isDark) {
-            document.documentElement.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-    }, [isDark]);
+    const [isDark, setIsDark] = useDarkMode();
 
     const toggleTheme = () => {
         setIsDark(!isDark);
@@ -44,11 +35,11 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     }
 
     return (
-        <aside id="sidebar" className={`w-64 text-text-inverse flex-col fixed inset-y-0 left-0 z-40 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 shadow-lg flex shrink-0`}>
+        <aside id="sidebar" aria-label="Menu principal" className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 transform flex-col text-text-inverse shadow-lg ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:relative lg:translate-x-0`}>
             <div className="flex items-center justify-center h-20 border-b border-white/10 px-6 shrink-0">
-                <img src={Logo} alt="Projeto Aprendiz Logo" className="h-18 w-auto" />
+                <img src={Logo} alt="Projeto Aprendiz" className="h-12 w-auto" />
             </div>
-            <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <nav aria-label="Seções da aplicação" className="flex-1 space-y-2 overflow-y-auto px-4 py-6">
                 {navLinks.filter(link => link.role.includes(userRole)).map(link => (
                     <NavLink
                         key={link.label}
@@ -63,7 +54,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                     </NavLink>
                 ))}
                 <div className="mt-auto pt-4 border-t border-white/10">
-                    <button onClick={toggleTheme} className="flex items-center w-full px-4 py-2.5 text-sm font-medium rounded-lg hover:bg-white/10 transition-all duration-200">
+                    <button type="button" onClick={toggleTheme} aria-pressed={isDark} className="flex min-h-11 w-full items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-white/10">
                         {isDark ? (
                              <svg id="theme-icon-dark" className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                         ) : (

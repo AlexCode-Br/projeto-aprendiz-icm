@@ -1,46 +1,40 @@
 import React from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Link, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './contexts/AuthContext.jsx';
 import { ToastProvider } from './contexts/ToastContext.jsx';
 import MainLayout from './layouts/MainLayout.jsx';
 import PrivateRoute from './components/PrivateRoute.jsx';
 import './index.css'; // Importando o CSS global
 
-// --- Páginas ---
+const Login = React.lazy(() => import('./pages/Login.jsx'));
+const ResetPassword = React.lazy(() => import('./pages/ResetPassword.jsx'));
+const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword.jsx'));
+const AcceptInvite = React.lazy(() => import('./pages/AcceptInvite.jsx'));
+const GestorDashboard = React.lazy(() => import('./pages/gestor/Dashboard.jsx'));
+const Cursos = React.lazy(() => import('./pages/gestor/Cursos.jsx'));
+const Alunos = React.lazy(() => import('./pages/gestor/Alunos.jsx'));
+const Professores = React.lazy(() => import('./pages/gestor/Professores.jsx'));
+const GestorRelatorios = React.lazy(() => import('./pages/gestor/Relatorios.jsx'));
+const GestorInformativos = React.lazy(() => import('./pages/gestor/Informativos.jsx'));
+const GestorSuporte = React.lazy(() => import('./pages/gestor/Suporte.jsx'));
+const ProfessorDashboard = React.lazy(() => import('./pages/professor/ProfessorDashboard.jsx'));
+const ProfessorAlunos = React.lazy(() => import('./pages/professor/ProfessorAlunos.jsx'));
+const ProfessorFrequencia = React.lazy(() => import('./pages/professor/ProfessorFrequencia.jsx'));
+const ProfessorRelatorios = React.lazy(() => import('./pages/professor/ProfessorRelatorios.jsx'));
+const ProfessorInformativos = React.lazy(() => import('./pages/professor/ProfessorInformativos.jsx'));
+const ProfessorSuporte = React.lazy(() => import('./pages/professor/ProfessorSuporte.jsx'));
+const Configuracoes = React.lazy(() => import('./pages/gestor/Configuracoes.jsx'));
+const ProfessorConfiguracoes = React.lazy(() => import('./pages/professor/ProfessorConfiguracoes.jsx'));
 
-// Públicas
-import Login from './pages/Login.jsx';
-import ResetPassword from './pages/ResetPassword.jsx';
-import ForgotPassword from './pages/ForgotPassword.jsx';
-import AcceptInvite from './pages/AcceptInvite.jsx';
-
-// Gestor
-import GestorDashboard from './pages/gestor/Dashboard.jsx';
-import Cursos from './pages/gestor/Cursos.jsx';
-import Alunos from './pages/gestor/Alunos.jsx';
-import Professores from './pages/gestor/Professores.jsx';
-import GestorRelatorios from './pages/gestor/Relatorios.jsx';
-import GestorInformativos from './pages/gestor/Informativos.jsx';
-import GestorSuporte from './pages/gestor/Suporte.jsx';
-
-// Professor
-import ProfessorDashboard from './pages/professor/ProfessorDashboard.jsx';
-import ProfessorAlunos from './pages/professor/ProfessorAlunos.jsx';
-import ProfessorFrequencia from './pages/professor/ProfessorFrequencia.jsx';
-import ProfessorRelatorios from './pages/professor/ProfessorRelatorios.jsx';
-import ProfessorInformativos from './pages/professor/ProfessorInformativos.jsx';
-import ProfessorSuporte from './pages/professor/ProfessorSuporte.jsx';
-
-// Comum
-import Configuracoes from './pages/gestor/Configuracoes.jsx';
-import ProfessorConfiguracoes from './pages/professor/ProfessorConfiguracoes.jsx';
+const PageLoading = () => <div className="flex min-h-64 items-center justify-center text-sm text-text-muted" role="status">Carregando página...</div>;
 
 
 const NotFound = () => (
     <div className="flex items-center justify-center h-full">
         <div className="text-center">
             <h1 className="text-4xl font-bold text-text-default">404</h1>
-            <p className="text-text-muted">Página Não Encontrada</p>
+            <p className="mt-2 text-text-muted">Página não encontrada</p>
+            <Link to="/" className="btn btn-primary mt-6">Voltar ao início</Link>
         </div>
     </div>
 );
@@ -121,7 +115,7 @@ function App() {
     return (
         <AuthProvider>
             <ToastProvider>
-                <AppRoutes />
+                <React.Suspense fallback={<PageLoading />}><AppRoutes /></React.Suspense>
             </ToastProvider>
         </AuthProvider>
     );

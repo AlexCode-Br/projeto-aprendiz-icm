@@ -1,71 +1,57 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 
-const Modal = ({ isOpen, onClose, title, children }) => {
-    const modalRef = useRef(null);
+const focusableSelector = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) => {
+    const titleId = useId();
+    const backdropRef = useRef(null);
+    const dialogRef = useRef(null);
+    const closeRef = useRef(null);
 
     useEffect(() => {
-        const handleEsc = (event) => {
-            if (event.key === 'Escape') {
-                onClose();
+        if (!isOpen) return undefined;
+        const previousFocus = document.activeElement;
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        closeRef.current?.focus();
+
+        const handleKeyDown = event => {
+            if (event.key === 'Escape') return onClose();
+            if (event.key !== 'Tab') return;
+            const focusable = [...dialogRef.current.querySelectorAll(focusableSelector)];
+            if (!focusable.length) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+                event.preventDefault();
+                last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+                event.preventDefault();
+                first.focus();
             }
         };
-        if (isOpen) {
-            document.addEventListener('keydown', handleEsc);
-        }
+
+        document.addEventListener('keydown', handleKeyDown);
         return () => {
-            document.removeEventListener('keydown', handleEsc);
+            document.body.style.overflow = previousOverflow;
+            document.removeEventListener('keydown', handleKeyDown);
+            previousFocus?.focus?.();
         };
     }, [isOpen, onClose]);
 
-    const handleBackdropClick = (event) => {
-        if (modalRef.current && event.target === modalRef.current) {
-            onClose();
-        }
-    };
-    
-    if (!isOpen) {
-        return null;
-    }
+    if (!isOpen) return null;
 
     return (
-        <div
-            ref={modalRef}
-            onClick={handleBackdropClick}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 transition-opacity duration-300"
-            style={{ animation: 'fadeIn 0.3s ease-out' }}
-        >
-            <div 
-                className="bg-surface rounded-lg shadow-xl w-full max-w-lg m-4"
-                style={{ animation: 'scaleUp 0.3s ease-out' }}
-            >
-                <div className="flex items-center justify-between p-4 border-b border-border">
-                    <h3 className="text-xl font-semibold text-text-default">{title}</h3>
-                    <button
-                        onClick={onClose}
-                        className="text-text-muted hover:text-text-default transition-colors duration-200"
-                    >
-                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+        <div ref={backdropRef} onMouseDown={event => event.target === backdropRef.current && onClose()} className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 p-4 backdrop-blur-[2px]" role="presentation">
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full ${maxWidth} max-h-[calc(100dvh-2rem)] overflow-hidden rounded-xl border border-border bg-surface shadow-lg`}>
+                <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
+                    <h2 id={titleId} className="text-lg font-semibold text-text-default sm:text-xl">{title}</h2>
+                    <button ref={closeRef} type="button" onClick={onClose} className="icon-button shrink-0" aria-label="Fechar janela">
+                        <svg aria-hidden="true" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
-
-                <div className="p-6">
-                    {children}
-                </div>
+                <div className="max-h-[calc(100dvh-7rem)] overflow-y-auto p-5 sm:p-6">{children}</div>
             </div>
-            
-            {/* CORREÇÃO: Removido 'jsx' e 'global' da tag <style> */}
-            <style>{`
-                @keyframes fadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
-                @keyframes scaleUp {
-                    from { transform: scale(0.95); opacity: 0; }
-                    to { transform: scale(1); opacity: 1; }
-                }
-            `}</style>
         </div>
     );
 };

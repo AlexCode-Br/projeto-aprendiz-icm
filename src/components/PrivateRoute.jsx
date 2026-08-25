@@ -7,12 +7,10 @@ const PrivateRoute = ({ children }) => {
     const location = useLocation();
 
     if (loading) {
-        // Pode ser substituído por um componente de Spinner/Loading mais elegante
-        return <div>Verificando autenticação...</div>;
+        return <div className="flex min-h-screen items-center justify-center text-sm text-text-muted" role="status">Verificando autenticação...</div>;
     }
 
     if (!user) {
-        // Redireciona para a página de login, mas guarda a página que o usuário tentou acessar
         return <Navigate to="/login" state={{ from: location }} replace />;
     }
 

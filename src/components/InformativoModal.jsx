@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import Modal from './Modal';
+
+const initialFormState = {
+    titulo: '',
+    categoria: '',
+    dataAgendamento: '',
+    horaAgendamento: '',
+    conteudo: '',
+    fixarNoTopo: false,
+    exigirConfirmacao: false,
+    linkAcao: '',
+    textoLink: '',
+};
 
 const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
-    const initialFormState = {
-        titulo: '',
-        categoria: '',
-        dataAgendamento: '',
-        horaAgendamento: '',
-        conteudo: '',
-        fixarNoTopo: false,
-        exigirConfirmacao: false,
-        linkAcao: '',
-        textoLink: ''
-    };
-
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
 
@@ -74,23 +75,18 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="modal fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="modal-content bg-white dark:bg-surface rounded-lg shadow-xl w-full max-w-2xl transform">
-                <div className="flex justify-between items-center p-4 md:p-6 border-b border-border">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-text-default">{informativo ? 'Editar Informativo' : 'Criar Novo Informativo'}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">&times;</button>
-                </div>
+        <Modal isOpen={isOpen} onClose={onClose} title={informativo ? 'Editar informativo' : 'Criar informativo'} maxWidth="max-w-2xl">
                 <form onSubmit={handleSubmit} noValidate>
-                    <div className="p-4 md:p-6 max-h-[70vh] overflow-y-auto space-y-4">
+                    <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="sm:col-span-2">
-                                <label className="block text-sm font-medium text-text-default mb-1">Título</label>
-                                <input name="titulo" value={formData.titulo} onChange={handleChange} className={`w-full p-2 border rounded-lg ${errors.titulo ? 'border-danger' : 'border-border'}`} />
+                                <label htmlFor="info-title" className="form-label">Título</label>
+                                <input id="info-title" name="titulo" value={formData.titulo} onChange={handleChange} aria-invalid={Boolean(errors.titulo)} className={`form-control ${errors.titulo ? 'border-danger' : ''}`} />
                                 {errors.titulo && <p className="text-danger text-xs mt-1">{errors.titulo}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-text-default mb-1">Categoria</label>
-                                <select name="categoria" value={formData.categoria} onChange={handleChange} className={`w-full p-2 border rounded-lg ${errors.categoria ? 'border-danger' : 'border-border'}`}>
+                                <label htmlFor="info-category" className="form-label">Categoria</label>
+                                <select id="info-category" name="categoria" value={formData.categoria} onChange={handleChange} aria-invalid={Boolean(errors.categoria)} className={`form-control ${errors.categoria ? 'border-danger' : ''}`}>
                                     <option value="">Selecione...</option>
                                     <option>Geral</option>
                                     <option>Inscrições</option>
@@ -102,44 +98,44 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-text-default mb-1">Data de Agendamento</label>
-                                <input name="dataAgendamento" type="date" value={formData.dataAgendamento} onChange={handleChange} className={`w-full p-2 border rounded-lg ${errors.dataAgendamento ? 'border-danger' : 'border-border'}`} />
+                                <label htmlFor="info-date" className="form-label">Data de agendamento</label>
+                                <input id="info-date" name="dataAgendamento" type="date" value={formData.dataAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.dataAgendamento)} className={`form-control ${errors.dataAgendamento ? 'border-danger' : ''}`} />
                                 {errors.dataAgendamento && <p className="text-danger text-xs mt-1">{errors.dataAgendamento}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-text-default mb-1">Hora de Agendamento</label>
-                                <input name="horaAgendamento" type="time" value={formData.horaAgendamento} onChange={handleChange} className={`w-full p-2 border rounded-lg ${errors.horaAgendamento ? 'border-danger' : 'border-border'}`} />
+                                <label htmlFor="info-time" className="form-label">Hora de agendamento</label>
+                                <input id="info-time" name="horaAgendamento" type="time" value={formData.horaAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.horaAgendamento)} className={`form-control ${errors.horaAgendamento ? 'border-danger' : ''}`} />
                                 {errors.horaAgendamento && <p className="text-danger text-xs mt-1">{errors.horaAgendamento}</p>}
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-text-default mb-1">Conteúdo</label>
-                            <textarea name="conteudo" value={formData.conteudo} onChange={handleChange} rows="5" className={`w-full p-2 border rounded-lg ${errors.conteudo ? 'border-danger' : 'border-border'}`}></textarea>
+                            <label htmlFor="info-content" className="form-label">Conteúdo</label>
+                            <textarea id="info-content" name="conteudo" value={formData.conteudo} onChange={handleChange} rows="5" aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-32 ${errors.conteudo ? 'border-danger' : ''}`}></textarea>
                             {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
                         <div className="space-y-2">
-                            <label className="flex items-center gap-2"><input type="checkbox" name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} /> Fixar no topo</label>
-                            <label className="flex items-center gap-2"><input type="checkbox" name="exigirConfirmacao" checked={formData.exigirConfirmacao} onChange={handleChange} /> Exigir confirmação de leitura</label>
+                            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} className="h-4 w-4 accent-primary" /> Fixar no topo</label>
+                            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="exigirConfirmacao" checked={formData.exigirConfirmacao} onChange={handleChange} className="h-4 w-4 accent-primary" /> Exigir confirmação de leitura</label>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
                             <div>
-                                <label className="block text-sm font-medium text-text-default mb-1">Link de Ação (Opcional)</label>
-                                <input name="linkAcao" placeholder="https://exemplo.com" value={formData.linkAcao} onChange={handleChange} className={`w-full p-2 border rounded-lg ${errors.linkAcao ? 'border-danger' : 'border-border'}`} />
+                                <label htmlFor="info-link" className="form-label">Link de ação (opcional)</label>
+                                <input id="info-link" name="linkAcao" type="url" placeholder="https://exemplo.com" value={formData.linkAcao} onChange={handleChange} aria-invalid={Boolean(errors.linkAcao)} className={`form-control ${errors.linkAcao ? 'border-danger' : ''}`} />
                                 {errors.linkAcao && <p className="text-danger text-xs mt-1">{errors.linkAcao}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-text-default mb-1">Texto do Link</label>
-                                <input name="textoLink" placeholder="Ex: Inscreva-se aqui" value={formData.textoLink} onChange={handleChange} className={`w-full p-2 border rounded-lg ${errors.textoLink ? 'border-danger' : 'border-border'}`} />
+                                <label htmlFor="info-link-label" className="form-label">Texto do link</label>
+                                <input id="info-link-label" name="textoLink" placeholder="Ex.: Inscreva-se aqui" value={formData.textoLink} onChange={handleChange} aria-invalid={Boolean(errors.textoLink)} className={`form-control ${errors.textoLink ? 'border-danger' : ''}`} />
                                 {errors.textoLink && <p className="text-danger text-xs mt-1">{errors.textoLink}</p>}
                             </div>
                         </div>
                     </div>
-                    <div className="flex justify-end p-4 md:p-6 border-t border-border bg-gray-50 dark:bg-surface/30">
-                        <button type="submit" className="px-6 py-2 bg-primary text-white font-semibold rounded-lg shadow-sm hover:bg-primary-dark">Salvar e Enviar</button>
+                    <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" className="btn btn-primary">Revisar e publicar</button>
                     </div>
                 </form>
-            </div>
-        </div>
+        </Modal>
     );
 };
 

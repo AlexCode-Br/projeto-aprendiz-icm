@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import Logo from '../assets/logo_projeto_aprendiz.png';
+import AuthLayout from '../layouts/AuthLayout';
 import api from '../services/api';
 import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
 
@@ -13,12 +13,11 @@ const ForgotPassword = () => {
 
     const submit = async event => {
         event.preventDefault();
-        setLoading(true); setError('');
+        setLoading(true);
+        setError('');
         try {
             if (usesSupabaseAuth) {
-                const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
-                    redirectTo: `${window.location.origin}/reset-password`,
-                });
+                const { error: authError } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` });
                 if (authError) throw new Error(friendlyAuthError(authError));
                 setMessage('Se o e-mail estiver cadastrado, enviaremos as instruções.');
                 setMailbox('');
@@ -29,36 +28,31 @@ const ForgotPassword = () => {
             }
         } catch (requestError) {
             setError(requestError.message);
-        } finally { setLoading(false); }
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="bg-gray-100 min-h-screen flex items-center justify-center p-4">
-            <div className="w-full max-w-md">
-                <img src={Logo} alt="Logo Projeto Aprendiz" className="h-20 mx-auto mb-8 bg-[#b71c1c] p-4 rounded-2xl shadow-lg" />
-                <div className="bg-white p-8 sm:p-10 rounded-2xl shadow-2xl">
-                    <h1 className="text-3xl font-bold text-center text-gray-800">Recuperar acesso</h1>
-                    <p className="text-center text-gray-500 mt-2 mb-8">Informe o e-mail cadastrado para receber as instruções.</p>
-                    {message ? (
-                        <div className="space-y-5">
-                            <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg" role="status">{message}</div>
-                            {mailbox && <a href={mailbox} className="block w-full text-center py-3 rounded-lg bg-gray-800 text-white font-semibold">Abrir caixa de e-mail de testes</a>}
-                            <Link to="/login" className="block text-center font-medium text-[var(--color-primary)]">Voltar ao login</Link>
-                        </div>
-                    ) : (
-                        <form onSubmit={submit} className="space-y-6">
-                            {error && <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">{error}</div>}
-                            <label className="block">
-                                <span className="block text-sm font-medium text-gray-700 mb-2">E-mail</span>
-                                <input type="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="seu.email@exemplo.com" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]" />
-                            </label>
-                            <button disabled={loading} className="w-full submit-btn disabled:opacity-60">{loading ? 'Enviando...' : 'Enviar instruções'}</button>
-                            <Link to="/login" className="block text-center font-medium text-gray-600 hover:text-gray-900">Voltar ao login</Link>
-                        </form>
-                    )}
+        <AuthLayout title="Recuperar acesso" description="Informe o e-mail cadastrado para receber um link seguro de redefinição.">
+            {message ? (
+                <div className="space-y-5">
+                    <div className="alert-success" role="status">{message}</div>
+                    {mailbox && <a href={mailbox} className="btn btn-secondary w-full">Abrir caixa de e-mail de testes</a>}
+                    <Link to="/login" className="block text-center font-semibold text-primary hover:underline">Voltar ao login</Link>
                 </div>
-            </div>
-        </div>
+            ) : (
+                <form onSubmit={submit} className="space-y-5">
+                    {error && <div className="alert-error" role="alert">{error}</div>}
+                    <label className="block" htmlFor="recovery-email">
+                        <span className="form-label">E-mail</span>
+                        <input id="recovery-email" name="email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="seu.email@exemplo.com" className="form-control" />
+                    </label>
+                    <button type="submit" disabled={loading} className="submit-btn w-full">{loading ? 'Enviando...' : 'Enviar instruções'}</button>
+                    <Link to="/login" className="block text-center font-medium text-text-muted hover:text-text-default hover:underline">Voltar ao login</Link>
+                </form>
+            )}
+        </AuthLayout>
     );
 };
 

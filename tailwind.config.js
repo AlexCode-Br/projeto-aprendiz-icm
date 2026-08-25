@@ -14,6 +14,8 @@ export default {
         'bg-start': 'var(--color-bg-start)',
         'bg-end': 'var(--color-bg-end)',
         surface: 'var(--color-surface)',
+        'surface-muted': 'var(--color-surface-muted)',
+        'surface-hover': 'var(--color-surface-hover)',
         border: 'var(--color-border)',
         'text-default': 'var(--color-text-default)',
         'text-muted': 'var(--color-text-muted)',
@@ -28,6 +30,7 @@ export default {
       boxShadow: {
         'sm': 'var(--shadow-sm)',
         'md': 'var(--shadow-md)',
+        'lg': 'var(--shadow-lg)',
       },
       keyframes: {
         fadeInUp: {

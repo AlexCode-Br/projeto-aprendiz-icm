@@ -16,11 +16,11 @@ const KebabMenu = ({ children }) => {
 
     return (
         <div className="relative" ref={menuRef}>
-            <button onClick={() => setIsOpen(!isOpen)} className="p-2 text-text-muted hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full">
+            <button type="button" aria-label="Abrir menu de ações" aria-haspopup="menu" aria-expanded={isOpen} onClick={() => setIsOpen(!isOpen)} className="icon-button">
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
             </button>
             {isOpen && (
-                <div className="action-menu-dropdown absolute right-0 mt-1 w-40 bg-white dark:bg-surface rounded-md shadow-lg py-1 z-10 origin-top-right ring-1 ring-black ring-opacity-5">
+                <div role="menu" className="action-menu-dropdown absolute right-0 z-10 mt-1 w-40 origin-top-right rounded-lg border border-border bg-surface py-1 shadow-lg">
                     {children}
                 </div>
             )}
