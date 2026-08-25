@@ -1,43 +1,71 @@
 # Projeto Aprendiz Aprimorado
 
-Nova versão independente do Projeto Aprendiz, com frontend React e backend local.
+Aplicação web com frontend React e backend Node.js para a gestão do Projeto Aprendiz. Gestores e professores usam o mesmo sistema, com rotas, menus e permissões próprias para cada perfil.
 
-## Recursos implementados
+## Recursos
 
-- Banco SQLite persistente no ambiente local.
-- Senhas protegidas com `scrypt` e salt aleatório.
-- Sessões armazenadas no banco e cookie `HttpOnly`/`SameSite=Strict`.
-- Perfis separados de Gestor e Professor.
-- Proteção CSRF, verificação de origem e limitação de tentativas.
-- Recuperação de senha com token aleatório, temporário, de uso único e armazenado como hash.
-- Invalidação das sessões após redefinir a senha.
-- Caixa de e-mail local para testar o fluxo sem enviar mensagens reais.
-- Registros de auditoria de login, logout e alteração de senha.
-- Modelo acadêmico relacional para alunos, professores, cursos, turmas e matrículas.
-- Lançamento de frequência persistente por turma e data.
-- Permissões reais: Gestor administra cadastros; Professor acessa somente suas turmas e alunos.
-- Perfil, preferências de notificação e alteração autenticada de senha persistentes.
-- Convite de novos professores por link temporário, de uso único, com criação da própria senha.
-- Dashboards de Gestor e Professor calculados diretamente a partir do banco.
+- Login e recuperação de senha com Supabase Auth, seguido de sessão própria em cookie `HttpOnly`, `Secure` e proteção CSRF.
+- Papéis de Gestor e Professor autorizados no backend, sem confiar em metadados editáveis do usuário.
+- Convites com tokens temporários, de uso único e armazenados somente como hash.
+- E-mails reais via Resend em produção e caixa local em `/dev-mail` durante o desenvolvimento.
+- Gestão de alunos, professores, cursos, turmas, matrículas, frequência, informativos, suporte e relatórios.
+- PostgreSQL do Supabase em um schema privado e isolado das tabelas antigas do projeto.
+- Migrações automáticas, endpoint de saúde e encerramento seguro do servidor.
 
-## Contas locais iniciais
+## Desenvolvimento local
+
+Requisitos: Node.js 22.12–24 e pnpm 11.
+
+```bash
+pnpm install --frozen-lockfile
+pnpm build
+pnpm start
+```
+
+Acesse `http://127.0.0.1:4180`. O banco SQLite é criado em `backend/data/` e não é versionado.
+
+Contas de demonstração locais:
 
 | Perfil | E-mail | Senha |
 |---|---|---|
 | Gestor | `gestor@projetoaprendiz.local` | `Gestor@2026!` |
 | Professor | `professor@projetoaprendiz.local` | `Professor@2026!` |
 
-As credenciais são somente para desenvolvimento e devem ser substituídas antes da publicação.
+Essas contas não são criadas em produção. Use `.env.example` como referência, sem versionar o arquivo `.env`.
 
-## Executar
+## Hospedagem web: Render + Supabase
 
-1. Instale as dependências do frontend: `npm install`
-2. Compile: `npm run build`
-3. Inicie frontend e backend: `npm start`
-4. Acesse `http://127.0.0.1:4180`
+O arquivo `render.yaml` descreve o serviço web gratuito no Render. O banco e a autenticação ficam no Supabase. As migrações são aplicadas automaticamente no schema privado `projeto_aprendiz` quando o servidor inicia.
 
-A caixa local de mensagens fica em `http://127.0.0.1:4180/dev-mail`.
+> **Limitação do Render gratuito:** o serviço pode entrar em repouso sem tráfego e demorar no primeiro acesso seguinte. O banco gratuito do Supabase não expira a cada 30 dias, mas projetos inativos podem ser pausados.
 
-## Situação dos módulos
+1. Crie e confirme o primeiro usuário em **Supabase Auth**.
+2. No Supabase, configure a URL pública do Render em **Auth → URL Configuration** e conecte um SMTP próprio para e-mails de produção.
+3. Crie um **Blueprint** no Render e conecte este repositório.
+4. Informe a conexão **Supavisor Session** (porta 5432) em `DATABASE_URL`, a chave pública em `SUPABASE_PUBLISHABLE_KEY` e `VITE_SUPABASE_PUBLISHABLE_KEY`, e o e-mail do primeiro Gestor em `BOOTSTRAP_ADMIN_EMAIL`.
+5. Informe `RESEND_API_KEY` e `EMAIL_FROM` para os convites de professores.
+6. Aplique o Blueprint. O build, as migrações privadas e `/api/health` já estão configurados.
 
-Autenticação, configurações, convites, dashboards, alunos, cursos, professores, matrículas, frequência, informativos, suporte e relatórios já usam o banco real. Em ambiente local, os e-mails de recuperação e convite aparecem na caixa de mensagens de desenvolvimento.
+O backend usa a conexão Supavisor compatível com IPv4. As tabelas da nova aplicação ficam fora do schema público e não são acessadas diretamente pelo navegador.
+
+## Variáveis de produção
+
+| Variável | Finalidade |
+|---|---|
+| `DATABASE_URL` | Conexão Supavisor Session do Supabase. |
+| `AUTH_PROVIDER` | Deve ser `supabase` na web. |
+| `SUPABASE_URL` / `VITE_SUPABASE_URL` | URL pública do projeto Supabase. |
+| `SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` | Chave pública; nunca use `service_role` ou chave secreta no frontend. |
+| `BOOTSTRAP_ADMIN_EMAIL` | E-mail confirmado no Supabase Auth que receberá o papel Gestor. |
+| `RESEND_API_KEY` | Credencial para recuperação de senha e convites. |
+| `EMAIL_FROM` | Remetente validado, como `Projeto Aprendiz <acesso@dominio.com>`. |
+| `APP_URL` | Opcional; URL pública usada nos links. No Render ela é detectada automaticamente. |
+| `DATABASE_SSL` | `true` para a conexão segura com o Supabase. |
+
+## Validação
+
+```bash
+pnpm check
+```
+
+O comando valida o backend, executa os testes do banco e compila o frontend. O mesmo processo roda em cada pull request pelo GitHub Actions.

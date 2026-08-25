@@ -1,6 +1,7 @@
 import mockApi from './mockApi';
 
 let csrfToken = '';
+let accessToken = '';
 
 async function request(method, url, body, options = {}) {
   const response = await fetch(url, {
@@ -9,6 +10,7 @@ async function request(method, url, body, options = {}) {
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -45,6 +47,7 @@ const withQuery = (url, config) => {
 const api = {
   defaults: { headers: {} },
   setCsrfToken(value) { csrfToken = value || ''; },
+  setAccessToken(value) { accessToken = value || ''; },
   get(url, config) {
     return isRealRoute(url) ? request('GET', withQuery(url, config)) : mockApi.get(url, config);
   },

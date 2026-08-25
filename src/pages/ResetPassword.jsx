@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import Logo from '../assets/logo_projeto_aprendiz.png';
 import api from '../services/api';
+import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
 
 const ResetPassword = () => {
     const [params] = useSearchParams();
@@ -12,6 +13,7 @@ const ResetPassword = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const [recoveryReady, setRecoveryReady] = useState(!usesSupabaseAuth);
     const rules = useMemo(() => ({
         length: password.length >= 10,
         upper: /[A-Z]/.test(password),
@@ -20,14 +22,36 @@ const ResetPassword = () => {
         symbol: /[^A-Za-z0-9]/.test(password),
     }), [password]);
 
+    useEffect(() => {
+        if (!usesSupabaseAuth) return undefined;
+        let active = true;
+        const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+            if (active && event === 'PASSWORD_RECOVERY' && session) setRecoveryReady(true);
+        });
+        supabase.auth.getSession().then(({ data }) => {
+            if (active && data.session) setRecoveryReady(true);
+        });
+        return () => {
+            active = false;
+            listener.subscription.unsubscribe();
+        };
+    }, []);
+
     const submit = async event => {
         event.preventDefault(); setError('');
-        if (!token) return setError('O link de recuperação está incompleto.');
+        if (!usesSupabaseAuth && !token) return setError('O link de recuperação está incompleto.');
+        if (usesSupabaseAuth && !recoveryReady) return setError('O link de recuperação é inválido ou expirou. Solicite um novo.');
         if (Object.values(rules).some(value => !value)) return setError('A senha não atende aos requisitos.');
         if (password !== confirmation) return setError('As senhas não coincidem.');
         setLoading(true);
         try {
-            await api.post('/api/auth/reset-password', { token, password });
+            if (usesSupabaseAuth) {
+                const { error: authError } = await supabase.auth.updateUser({ password });
+                if (authError) throw new Error(friendlyAuthError(authError));
+                await supabase.auth.signOut();
+            } else {
+                await api.post('/api/auth/reset-password', { token, password });
+            }
             setSuccess(true);
             setTimeout(() => navigate('/login', { replace: true }), 1800);
         } catch (requestError) { setError(requestError.message); }

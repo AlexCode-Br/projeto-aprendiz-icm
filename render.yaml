@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: projeto-aprendiz
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: 24.19.0
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DB_POOL_SIZE
+        value: "5"
+      - key: AUTH_PROVIDER
+        value: supabase
+      - key: SUPABASE_URL
+        value: https://ggghsddanuuekztxngxj.supabase.co
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        value: https://ggghsddanuuekztxngxj.supabase.co
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SEED_DEMO_DATA
+        value: "false"
+      - key: BOOTSTRAP_ADMIN_NAME
+        value: Gestor
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

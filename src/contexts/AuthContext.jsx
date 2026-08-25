@@ -1,8 +1,21 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
 
 export const AuthContext = createContext(null);
+
+async function exchangeSession(session, remember = true) {
+    if (!session?.access_token) throw new Error('Sessão do Supabase não encontrada.');
+    api.setAccessToken(session.access_token);
+    try {
+        const response = await api.post('/api/auth/exchange', { remember });
+        api.setCsrfToken(response.data.csrfToken);
+        return response.data.user;
+    } finally {
+        api.setAccessToken('');
+    }
+}
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -15,7 +28,16 @@ export const AuthProvider = ({ children }) => {
             api.setCsrfToken(response.data.csrfToken);
             setUser(response.data.user);
         } catch {
-            setUser(null);
+            if (!usesSupabaseAuth) {
+                setUser(null);
+            } else {
+                const { data } = await supabase.auth.getSession();
+                if (!data.session) setUser(null);
+                else {
+                    try { setUser(await exchangeSession(data.session)); }
+                    catch { setUser(null); }
+                }
+            }
         } finally {
             setLoading(false);
         }
@@ -24,6 +46,13 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => { loadUser(); }, [loadUser]);
 
     const login = async (email, password, remember = false) => {
+        if (usesSupabaseAuth) {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw new Error(friendlyAuthError(error));
+            const authenticatedUser = await exchangeSession(data.session, remember);
+            setUser(authenticatedUser);
+            return authenticatedUser;
+        }
         const response = await api.post('/api/auth/login', { email, password, remember });
         api.setCsrfToken(response.data.csrfToken);
         setUser(response.data.user);
@@ -32,14 +61,16 @@ export const AuthProvider = ({ children }) => {
 
     const logout = async () => {
         try { await api.post('/api/auth/logout', {}); } finally {
+            if (usesSupabaseAuth) await supabase.auth.signOut().catch(() => {});
             api.setCsrfToken('');
+            api.setAccessToken('');
             setUser(null);
             navigate('/login', { replace: true });
         }
     };
 
     const value = useMemo(() => ({
-        isAuthenticated: Boolean(user), user, loading, login, logout, refreshUser: loadUser,
+        isAuthenticated: Boolean(user), user, loading, login, logout, refreshUser: loadUser, usesSupabaseAuth,
     }), [user, loading, loadUser]);
 
     return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;

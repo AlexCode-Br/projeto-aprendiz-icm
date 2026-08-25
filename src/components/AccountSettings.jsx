@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { friendlyAuthError, supabase } from '../services/supabase';
 
 const fieldClass = 'mt-1 w-full px-3 py-2.5 border border-border rounded-lg bg-surface text-text-default focus:ring-2 focus:ring-primary/40 focus:border-primary';
 
 export default function AccountSettings() {
-    const { user, refreshUser } = useAuth();
+    const { user, refreshUser, usesSupabaseAuth } = useAuth();
     const { showToast } = useToast();
     const [profile, setProfile] = useState({ nome: user?.nome || '', email: user?.email || '' });
     const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirmation: '' });
@@ -24,7 +25,12 @@ export default function AccountSettings() {
 
     const saveProfile = async event => {
         event.preventDefault(); setSaving('profile');
-        try { await api.put('/api/account/profile', profile); await refreshUser(); showToast('Dados pessoais atualizados.', 'success'); }
+        try {
+            const nextProfile = usesSupabaseAuth ? { ...profile, email: user.email } : profile;
+            await api.put('/api/account/profile', nextProfile);
+            await refreshUser();
+            showToast('Dados pessoais atualizados.', 'success');
+        }
         catch (error) { showToast(error.message, 'error'); } finally { setSaving(''); }
     };
     const changePassword = async event => {
@@ -32,7 +38,18 @@ export default function AccountSettings() {
         if (!passwordValid) return showToast('A nova senha não atende aos requisitos.', 'warning');
         if (password.newPassword !== password.confirmation) return showToast('As senhas não coincidem.', 'warning');
         setSaving('password');
-        try { await api.put('/api/account/password', { currentPassword: password.currentPassword, newPassword: password.newPassword }); setPassword({ currentPassword: '', newPassword: '', confirmation: '' }); showToast('Senha alterada com sucesso.', 'success'); }
+        try {
+            if (usesSupabaseAuth) {
+                const { error: signInError } = await supabase.auth.signInWithPassword({ email: user.email, password: password.currentPassword });
+                if (signInError) throw new Error(friendlyAuthError(signInError));
+                const { error: updateError } = await supabase.auth.updateUser({ password: password.newPassword });
+                if (updateError) throw new Error(friendlyAuthError(updateError));
+            } else {
+                await api.put('/api/account/password', { currentPassword: password.currentPassword, newPassword: password.newPassword });
+            }
+            setPassword({ currentPassword: '', newPassword: '', confirmation: '' });
+            showToast('Senha alterada com sucesso.', 'success');
+        }
         catch (error) { showToast(error.message, 'error'); } finally { setSaving(''); }
     };
     const savePreferences = async () => {
@@ -50,7 +67,7 @@ export default function AccountSettings() {
         <div><h2 className="text-2xl font-bold text-text-default">Configurações da conta</h2><p className="text-text-muted mt-1">Seus dados são salvos com segurança e usados no acesso ao sistema.</p></div>
         <form onSubmit={saveProfile} className="bg-surface border border-border rounded-xl shadow-sm p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Dados pessoais</h3>
-            <div className="grid md:grid-cols-2 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Nome completo<input required value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">E-mail de acesso<input required type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} className={fieldClass} /></label></div>
+            <div className="grid md:grid-cols-2 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Nome completo<input required value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">E-mail de acesso<input required readOnly={usesSupabaseAuth} type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} className={`${fieldClass} ${usesSupabaseAuth ? 'opacity-70 cursor-not-allowed' : ''}`} />{usesSupabaseAuth && <span className="block mt-1 text-xs text-text-muted">Para trocar o e-mail de acesso, fale com o Gestor.</span>}</label></div>
             <div className="mt-5 flex justify-end"><button disabled={saving === 'profile'} className="submit-btn disabled:opacity-60">{saving === 'profile' ? 'Salvando...' : 'Salvar dados'}</button></div>
         </form>
         <form onSubmit={changePassword} className="bg-surface border border-border rounded-xl shadow-sm p-5 md:p-7">
