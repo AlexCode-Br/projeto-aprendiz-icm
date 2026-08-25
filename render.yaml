@@ -2,10 +2,9 @@ services:
   - type: web
     name: projeto-aprendiz
     runtime: node
-    plan: starter
+    plan: free
     region: virginia
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
-    preDeployCommand: pnpm db:migrate
     startCommand: pnpm start
     healthCheckPath: /api/health
     autoDeployTrigger: checksPass
@@ -35,7 +34,7 @@ services:
 
 databases:
   - name: projeto-aprendiz-db
-    plan: basic-256mb
+    plan: free
     region: virginia
     postgresMajorVersion: "18"
     databaseName: projeto_aprendiz

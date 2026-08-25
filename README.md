@@ -35,7 +35,9 @@ Essas contas não são criadas em produção. Use `.env.example` como referênci
 
 ## Hospedagem no Render
 
-O arquivo `render.yaml` descreve um serviço web `starter` e um banco PostgreSQL `basic-256mb`, ambos pagos e na região da Virgínia. O painel do Render mostra os valores antes da confirmação:
+O arquivo `render.yaml` descreve um serviço web gratuito e um banco PostgreSQL gratuito, ambos na região da Virgínia. As migrações são aplicadas automaticamente quando o servidor inicia, pois o plano gratuito não oferece o comando de pré-deploy.
+
+> **Limitações do plano gratuito:** o serviço entra em repouso após 15 minutos sem tráfego e pode levar cerca de um minuto para voltar. O PostgreSQL gratuito tem 1 GB, não oferece backups e expira 30 dias após a criação. Use esta opção para validação e demonstração, não para dados definitivos.
 
 1. Crie um **Blueprint** e conecte este repositório.
 2. Informe `BOOTSTRAP_ADMIN_EMAIL` e uma `BOOTSTRAP_ADMIN_PASSWORD` forte para criar o primeiro Gestor.
