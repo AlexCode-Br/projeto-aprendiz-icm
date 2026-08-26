@@ -6,6 +6,7 @@ import api from '../../services/api';
 
 import InformativoReadersModal from '../../components/InformativoReadersModal';
 import AnnouncementAttachments from '../../components/AnnouncementAttachments';
+import AnnouncementAudienceModal from '../../components/AnnouncementAudienceModal';
 
 const Informativos = () => {
     const { showToast } = useToast();
@@ -13,6 +14,8 @@ const Informativos = () => {
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [isDeleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
     const [isSendConfirmModalOpen, setSendConfirmModalOpen] = useState(false);
+    const [audienceOptions, setAudienceOptions] = useState({ professores: [], cursos: [] });
+    const [audienceLoading, setAudienceLoading] = useState(false);
     const [isReadersModalOpen, setReadersModalOpen] = useState(false);
     const [currentInformativo, setCurrentInformativo] = useState(null);
     const [formDataToSave, setFormDataToSave] = useState(null);
@@ -41,6 +44,7 @@ const Informativos = () => {
             showToast('Cadastre ao menos um professor antes de criar informativos.', 'warning');
             return;
         }
+        setFormDataToSave(null);
         setCurrentInformativo(info);
         setFormModalOpen(true);
     };
@@ -56,18 +60,32 @@ const Informativos = () => {
     };
 
     const handleSaveAndOpenConfirm = (formData) => {
-        setFormDataToSave(formData);
+        setFormDataToSave({
+            ...formData,
+            destinatarios: formData.destinatarios || currentInformativo?.destinatarios || { todos: true, professores: [], cursos: [] },
+        });
         setFormModalOpen(false); // Fecha o form
         setSendConfirmModalOpen(true); // Abre a confirmação de envio
+        setAudienceLoading(true);
+        api.get('/api/informativos/destinatarios')
+            .then(response => setAudienceOptions({ professores: response.data?.professores || [], cursos: response.data?.cursos || [] }))
+            .catch(error => showToast(error.message || 'Não foi possível carregar os destinatários.', 'error'))
+            .finally(() => setAudienceLoading(false));
     };
 
-    const handleConfirmSend = async () => {
+    const handleCloseAudience = () => {
+        setSendConfirmModalOpen(false);
+        if (formDataToSave) setFormModalOpen(true);
+    };
+
+    const handleConfirmSend = async (destinatarios) => {
         try {
+            const payload = { ...formDataToSave, destinatarios };
             if (currentInformativo) {
-                await api.put(`/api/informativos/${currentInformativo.id}`, formDataToSave);
+                await api.put(`/api/informativos/${currentInformativo.id}`, payload);
                 showToast('Informativo atualizado com sucesso!', 'success');
             } else {
-                await api.post('/api/informativos', formDataToSave);
+                await api.post('/api/informativos', payload);
                 showToast('Informativo criado e publicado com sucesso!', 'success');
             }
             setSendConfirmModalOpen(false);
@@ -136,25 +154,25 @@ const Informativos = () => {
 
             <InformativoModal
                 isOpen={isFormModalOpen}
-                onClose={() => setFormModalOpen(false)}
+                onClose={() => { setFormModalOpen(false); setFormDataToSave(null); }}
                 onSave={handleSaveAndOpenConfirm}
                 informativo={currentInformativo}
+                draft={formDataToSave}
+            />
+
+            <AnnouncementAudienceModal
+                isOpen={isSendConfirmModalOpen}
+                onClose={handleCloseAudience}
+                onConfirm={handleConfirmSend}
+                options={audienceOptions}
+                loading={audienceLoading}
+                initialAudience={formDataToSave?.destinatarios}
             />
 
             <InformativoReadersModal
                 isOpen={isReadersModalOpen}
                 onClose={() => setReadersModalOpen(false)}
                 informativo={currentInformativo}
-            />
-
-            <ConfirmationModal
-                isOpen={isSendConfirmModalOpen}
-                onClose={() => setSendConfirmModalOpen(false)}
-                onConfirm={handleConfirmSend}
-                title="Confirmar Envio?"
-                message="O informativo será enviado para todos os destinatários selecionados. Deseja continuar?"
-                confirmLabel="Publicar"
-                destructive={false}
             />
 
             <ConfirmationModal

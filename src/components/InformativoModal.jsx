@@ -12,6 +12,7 @@ const initialFormState = {
     conteudo: '',
     fixarNoTopo: false,
     anexos: [],
+    destinatarios: { todos: true, professores: [], cursos: [] },
 };
 
 const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
@@ -32,10 +33,18 @@ const dataUrlByteSize = value => {
     return Math.max(0, Math.floor(normalized.length * 3 / 4) - padding);
 };
 
-const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
+const escapeHtml = value => String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+    const [linkText, setLinkText] = useState('');
     const [linkUrl, setLinkUrl] = useState('');
     const [linkError, setLinkError] = useState('');
     const [imageProcessing, setImageProcessing] = useState(false);
@@ -44,7 +53,16 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
     const savedSelectionRef = useRef(null);
 
     useEffect(() => {
-        if (informativo) {
+        if (draft) {
+            const nextForm = {
+                ...initialFormState,
+                ...draft,
+                anexos: Array.isArray(draft.anexos) ? draft.anexos : [],
+                destinatarios: draft.destinatarios || { todos: true, professores: [], cursos: [] },
+            };
+            setFormData(nextForm);
+            if (editorRef.current) editorRef.current.innerHTML = nextForm.conteudo;
+        } else if (informativo) {
             const nextForm = {
                 titulo: informativo.titulo || '',
                 categoria: informativo.categoria || '',
@@ -54,6 +72,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                 conteudo: informativo.conteudo || '',
                 fixarNoTopo: informativo.fixado || false,
                 anexos: Array.isArray(informativo.anexos) ? informativo.anexos : [],
+                destinatarios: informativo.destinatarios || { todos: true, professores: [], cursos: [] },
             };
             setFormData(nextForm);
             if (editorRef.current) editorRef.current.innerHTML = nextForm.conteudo;
@@ -63,10 +82,11 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
         }
         setErrors({});
         setLinkDialogOpen(false);
+        setLinkText('');
         setLinkUrl('');
         setLinkError('');
         setImageProcessing(false);
-    }, [informativo, isOpen]);
+    }, [draft, informativo, isOpen]);
 
     const validate = () => {
         const newErrors = {};
@@ -119,17 +139,36 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
         if (savedSelectionRef.current && selection) { selection.removeAllRanges(); selection.addRange(savedSelectionRef.current); }
     };
     const format = command => { restoreSelection(); document.execCommand(command, false); syncEditor(); };
-    const openLinkDialog = () => { saveSelection(); setLinkUrl(''); setLinkError(''); setLinkDialogOpen(true); };
+    const openLinkDialog = () => {
+        saveSelection();
+        const selection = window.getSelection();
+        setLinkText(selection?.toString().trim() || '');
+        setLinkUrl('');
+        setLinkError('');
+        setLinkDialogOpen(true);
+    };
     const applyLink = event => {
         event.preventDefault();
-        const value = linkUrl.trim();
-        if (!/^https:\/\//i.test(value)) return setLinkError('Use uma URL HTTPS válida.');
+        const rawUrl = linkUrl.trim();
+        if (!rawUrl) return setLinkError('Informe o endereço do link.');
+        const value = /^[a-z][a-z\d+.-]*:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(value);
+        } catch {
+            return setLinkError('Informe uma URL válida, como google.com.');
+        }
+        if (parsedUrl.protocol !== 'https:' || !parsedUrl.hostname) return setLinkError('Use uma URL HTTPS válida.');
         restoreSelection();
         const selection = window.getSelection();
-        if (selection?.toString().trim()) document.execCommand('createLink', false, value);
-        else document.execCommand('insertHTML', false, `<a href="${value.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer">${value}</a>`);
+        const selectedText = selection?.toString().trim() || '';
+        const displayText = linkText.trim() || selectedText || parsedUrl.hostname.replace(/^www\./i, '') || value;
+        const anchor = `<a href="${escapeHtml(parsedUrl.toString())}" target="_blank" rel="noopener noreferrer">${escapeHtml(displayText)}</a>`;
+        document.execCommand('insertHTML', false, anchor);
         syncEditor();
         setLinkDialogOpen(false);
+        setLinkText('');
+        setLinkUrl('');
     };
     const addImage = event => {
         const file = event.target.files?.[0];
@@ -246,7 +285,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                             <FormCheckbox name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} label="Fixar no topo" />
                         </div>
                     </div>
-                    {linkDialogOpen && <div className="mt-4 rounded-lg border border-border bg-surface-muted p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-end"><label className="flex-1"><span className="form-label">URL do link</span><input autoFocus type="url" value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError(''); }} placeholder="https://exemplo.com" className={`form-control ${linkError ? 'border-danger' : ''}`} />{linkError && <span className="mt-1 block text-xs text-danger">{linkError}</span>}</label><button type="button" onClick={applyLink} className="btn btn-primary">Inserir link</button><button type="button" onClick={() => setLinkDialogOpen(false)} className="btn btn-secondary">Cancelar</button></div></div>}
+                    {linkDialogOpen && <div className="mt-4 rounded-lg border border-border bg-surface-muted p-3"><div className="grid gap-3 sm:grid-cols-2"><label><span className="form-label">Texto do link</span><input autoFocus type="text" value={linkText} onChange={event => { setLinkText(event.target.value); setLinkError(''); }} placeholder="Texto visível (opcional)" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label><label><span className="form-label">Link</span><input type="text" value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError(''); }} placeholder="google.com" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label></div><p className="mt-2 text-xs text-text-muted">Você pode digitar google.com; o endereço será convertido para HTTPS automaticamente.</p>{linkError && <p className="mt-2 text-xs text-danger">{linkError}</p>}<div className="mt-3 flex flex-wrap justify-end gap-2"><button type="button" onClick={applyLink} className="btn btn-primary">Aplicar</button><button type="button" onClick={() => setLinkDialogOpen(false)} className="btn btn-secondary">Cancelar</button></div></div>}
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
                         <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
                         <button type="submit" disabled={imageProcessing} className="btn btn-primary">{imageProcessing ? 'Processando imagem…' : 'Revisar e publicar'}</button>
