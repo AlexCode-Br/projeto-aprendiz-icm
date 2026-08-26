@@ -757,6 +757,15 @@ function sanitizeAnnouncementContent(value) {
     .slice(0, 12000000);
 }
 
+function scheduleIsPast(date, time) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return false;
+  const nowParts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: process.env.APP_TIMEZONE || 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date()).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return `${date}T${time}` < `${nowParts.year}-${nowParts.month}-${nowParts.day}T${nowParts.hour}:${nowParts.minute}`;
+}
+
 async function supportTicketForSession(ticketId, session) {
   const where = session.role === 'professor' ? 'AND support_tickets.requester_user_id=?' : '';
   return db.prepare(`
@@ -1565,7 +1574,7 @@ async function api(request, response, url) {
     const body=await readJson(request),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo);
     const scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
     const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.'};
-    if(new Date(scheduled).getTime()<Date.now())errors.dataAgendamento='A data e hora devem ser futuras.';
+    if(scheduleIsPast(body.dataAgendamento, body.horaAgendamento))errors.dataAgendamento='A data e hora devem ser futuras.';
     if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
     const result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0);
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
@@ -1576,7 +1585,7 @@ async function api(request, response, url) {
     const session=await authorize(request,response,['gestor']);if(!session)return;
     const body=await readJson(request),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
     const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.'};
-    if(new Date(scheduled).getTime()<Date.now())errors.dataAgendamento='A data e hora devem ser futuras.';
+    if(scheduleIsPast(body.dataAgendamento, body.horaAgendamento))errors.dataAgendamento='A data e hora devem ser futuras.';
     if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
     const result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,body.fixarNoTopo?1:0,Number(announcementMatch[1]));
     if(!result.changes)return json(response,404,{message:'Informativo não encontrado.'});
