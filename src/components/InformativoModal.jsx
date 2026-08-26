@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
 import FormCheckbox from './FormCheckbox';
-import { httpsUrlError, requiredTextError } from '../../shared/validation.mjs';
+import { requiredTextError } from '../../shared/validation.mjs';
 
 const initialFormState = {
     titulo: '',
@@ -11,14 +11,12 @@ const initialFormState = {
     horaAgendamento: '',
     conteudo: '',
     fixarNoTopo: false,
-    exigirConfirmacao: false,
-    linkAcao: '',
-    textoLink: '',
 };
 
 const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
+    const editorRef = useRef(null);
 
     useEffect(() => {
         if (informativo) {
@@ -30,9 +28,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                 horaAgendamento: informativo.hora || '',
                 conteudo: informativo.conteudo || '',
                 fixarNoTopo: informativo.fixado || false,
-                exigirConfirmacao: informativo.confirmacao || false,
-                linkAcao: informativo.linkUrl || '',
-                textoLink: informativo.linkTexto || ''
+                
             });
         } else {
             setFormData(initialFormState);
@@ -43,17 +39,14 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
     const validate = () => {
         const newErrors = {};
         const titleError = requiredTextError(formData.titulo, 'O título', 3, 120);
-        const contentError = requiredTextError(formData.conteudo, 'O conteúdo', 10, 5000);
+        const contentError = requiredTextError(formData.conteudo.replace(/<[^>]+>/g, ' '), 'O conteúdo', 10, 5000);
         if (titleError) newErrors.titulo = titleError;
         if (!formData.categoria) newErrors.categoria = 'A categoria é obrigatória.';
         if (!formData.dataAgendamento) newErrors.dataAgendamento = 'A data é obrigatória.';
         if (!formData.horaAgendamento) newErrors.horaAgendamento = 'A hora é obrigatória.';
+        const scheduled = new Date(`${formData.dataAgendamento}T${formData.horaAgendamento}:00`);
+        if (formData.dataAgendamento && formData.horaAgendamento && scheduled.getTime() < Date.now()) newErrors.dataAgendamento = 'A data e hora devem ser futuras.';
         if (contentError) newErrors.conteudo = contentError;
-        const urlError = httpsUrlError(formData.linkAcao);
-        if (urlError) newErrors.linkAcao = urlError;
-        if (formData.linkAcao && !formData.textoLink) newErrors.textoLink = 'O texto para o link é obrigatório.';
-        if (formData.textoLink && !formData.linkAcao) newErrors.linkAcao = 'A URL do link é obrigatória.';
-
         return newErrors;
     };
 
@@ -75,8 +68,24 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
             setErrors(validationErrors);
             return;
         }
-        // A função onSave (que abre o modal de confirmação) é chamada com os dados
         onSave(formData);
+    };
+
+    const format = command => { document.execCommand(command, false); editorRef.current?.focus(); };
+    const addLink = () => {
+        const url = window.prompt('Cole uma URL HTTPS para inserir no texto:');
+        if (url && /^https:\/\//i.test(url)) document.execCommand('createLink', false, url);
+        editorRef.current?.focus();
+    };
+    const addImage = event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!['image/png','image/jpeg','image/heic','image/heif'].includes(file.type)) return setErrors(prev => ({ ...prev, conteudo: 'Imagem inválida. Use PNG, JPG/JPEG ou HEIC.' }));
+        if (file.size > 2 * 1024 * 1024) return setErrors(prev => ({ ...prev, conteudo: 'A imagem deve ter no máximo 2 MB.' }));
+        const reader = new FileReader();
+        reader.onload = () => { document.execCommand('insertImage', false, reader.result); editorRef.current?.focus(); };
+        reader.readAsDataURL(file);
     };
 
     if (!isOpen) return null;
@@ -107,7 +116,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="info-date" className="form-label">Data de agendamento</label>
-                                <input id="info-date" name="dataAgendamento" type="date" value={formData.dataAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.dataAgendamento)} className={`form-control ${errors.dataAgendamento ? 'border-danger' : ''}`} />
+                                <input id="info-date" name="dataAgendamento" type="date" min={new Date().toISOString().slice(0, 10)} value={formData.dataAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.dataAgendamento)} className={`form-control ${errors.dataAgendamento ? 'border-danger' : ''}`} />
                                 {errors.dataAgendamento && <p className="text-danger text-xs mt-1">{errors.dataAgendamento}</p>}
                             </div>
                             <div>
@@ -118,24 +127,18 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                         </div>
                         <div>
                             <label htmlFor="info-content" className="form-label">Conteúdo</label>
-                            <textarea id="info-content" name="conteudo" maxLength="5000" value={formData.conteudo} onChange={handleChange} rows="5" aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-32 ${errors.conteudo ? 'border-danger' : ''}`}></textarea>
-                            {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
+                                <div className="mb-2 flex flex-wrap items-center gap-1 rounded-t-lg border border-border bg-surface-muted p-2" role="toolbar" aria-label="Formatação do conteúdo">
+                                    {[['bold','Negrito','B'],['italic','Itálico','I'],['underline','Sublinhado','U']].map(([command,label,icon]) => <button key={command} type="button" onClick={() => format(command)} className="min-h-9 min-w-9 rounded px-2 font-semibold text-text-default hover:bg-surface-hover" aria-label={label}><span className={command}>{icon}</span></button>)}
+                                    <button type="button" onClick={() => format('insertUnorderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista com marcadores">• Lista</button>
+                                    <button type="button" onClick={addLink} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Inserir link">🔗 Link</button>
+                                    <label className="min-h-9 cursor-pointer rounded px-2 py-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Adicionar imagem">🖼 Imagem<input type="file" className="sr-only" accept="image/png,image/jpeg,image/heic,image/heif" onChange={addImage} /></label>
+                                </div>
+                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); }} dangerouslySetInnerHTML={{ __html: formData.conteudo }} aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
+                                <p className="mt-1 text-xs text-text-muted">Formatação e imagens PNG, JPG/JPEG ou HEIC, até 2 MB.</p>
+                                {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
                         <div className="space-y-3 pt-2">
                             <FormCheckbox name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} label="Fixar no topo" />
-                            <FormCheckbox name="exigirConfirmacao" checked={formData.exigirConfirmacao} onChange={handleChange} label="Exigir confirmação de leitura" />
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
-                            <div>
-                                <label htmlFor="info-link" className="form-label">Link de ação (opcional)</label>
-                                <input id="info-link" name="linkAcao" type="url" placeholder="https://exemplo.com" value={formData.linkAcao} onChange={handleChange} aria-invalid={Boolean(errors.linkAcao)} className={`form-control ${errors.linkAcao ? 'border-danger' : ''}`} />
-                                {errors.linkAcao && <p className="text-danger text-xs mt-1">{errors.linkAcao}</p>}
-                            </div>
-                            <div>
-                                <label htmlFor="info-link-label" className="form-label">Texto do link</label>
-                                <input id="info-link-label" name="textoLink" maxLength="80" placeholder="Ex.: Inscreva-se aqui" value={formData.textoLink} onChange={handleChange} aria-invalid={Boolean(errors.textoLink)} className={`form-control ${errors.textoLink ? 'border-danger' : ''}`} />
-                                {errors.textoLink && <p className="text-danger text-xs mt-1">{errors.textoLink}</p>}
-                            </div>
                         </div>
                     </div>
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">

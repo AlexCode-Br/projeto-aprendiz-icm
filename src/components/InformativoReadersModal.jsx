@@ -35,7 +35,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
     if (!isOpen) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Confirmações de Leitura" maxWidth="max-w-2xl">
+        <Modal isOpen={isOpen} onClose={onClose} title="Quem visualizou" maxWidth="max-w-2xl">
             {loading ? (
                 <div className="py-8 text-center text-text-muted">Carregando leituras...</div>
             ) : error ? (
@@ -48,9 +48,6 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
                                 <th scope="col" className="px-4 py-3 text-left font-medium text-text-muted">Professor</th>
                                 <th scope="col" className="px-4 py-3 text-left font-medium text-text-muted">E-mail</th>
                                 <th scope="col" className="px-4 py-3 text-left font-medium text-text-muted">Data/Hora</th>
-                                {informativo.confirmacao && (
-                                    <th scope="col" className="px-4 py-3 text-center font-medium text-text-muted">Confirmação</th>
-                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -62,20 +59,11 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
                                         <td className="px-4 py-3 text-text-muted">
                                             {new Date(reader.read_at).toLocaleString('pt-BR')}
                                         </td>
-                                        {informativo.confirmacao && (
-                                            <td className="px-4 py-3 text-center">
-                                                {reader.confirmed ? (
-                                                    <span className="text-green-600 font-medium text-xs">Sim</span>
-                                                ) : (
-                                                    <span className="text-text-muted text-xs">Não</span>
-                                                )}
-                                            </td>
-                                        )}
                                     </tr>
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan={informativo.confirmacao ? 4 : 3} className="px-4 py-8 text-center text-text-muted">
+                                    <td colSpan={3} className="px-4 py-8 text-center text-text-muted">
                                         Ninguém leu este informativo ainda.
                                     </td>
                                 </tr>
