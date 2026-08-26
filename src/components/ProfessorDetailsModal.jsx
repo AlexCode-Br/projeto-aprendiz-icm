@@ -7,7 +7,7 @@ const ProfessorDetailsModal = ({ isOpen, onClose, professor }) => {
         ['Nome completo', professor.nome],
         ['E-mail', professor.contato],
         ['Telefone', professor.telefone],
-        ['Local principal', professor.local],
+        ['Igreja principal', professor.local],
     ];
 
     return (

@@ -40,9 +40,9 @@ const ProfessorRelatorios = () => {
             const rows = response.data;
             const filename = `relatorio_${reportType}_${new Date().toISOString().split('T')[0]}.${format}`;
             if (format === 'pdf') {
-                exportToPdf('Relatório da Turma', ['Curso','Aluno','Professor','Local','Frequência'], rows.map(Object.values));
+                exportToPdf('Relatório da Turma', ['Curso','Aluno','Professor','Igreja','Frequência'], rows.map(Object.values));
             } else {
-                const csv = ['Curso;Aluno;Professor;Local;Frequência', ...rows.map(row => Object.values(row).join(';'))].join('\n');
+                const csv = ['Curso;Aluno;Professor;Igreja;Frequência', ...rows.map(row => Object.values(row).join(';'))].join('\n');
                 handleDownload(csv, filename, 'csv');
             }
 

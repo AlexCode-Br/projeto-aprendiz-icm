@@ -21,7 +21,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
     const validate = () => {
         const newErrors = {};
         if (!formData.nome.trim()) newErrors.nome = 'O nome do curso é obrigatório.';
-        if (!formData.local) newErrors.local = 'O local é obrigatório.';
+        if (!formData.local) newErrors.local = 'A igreja é obrigatória.';
         if (!formData.professor) newErrors.professor = 'O professor é obrigatório.';
         return newErrors;
     };
@@ -68,7 +68,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                             {errors.nome && <p className="text-danger text-xs mt-1">{errors.nome}</p>}
                         </div>
                         <div>
-                            <label htmlFor="local" className="form-label">Local</label>
+                            <label htmlFor="local" className="form-label">Igreja</label>
                             <select
                                 name="local"
                                 id="local"
@@ -77,7 +77,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                                 aria-invalid={Boolean(errors.local)}
                                 className={`form-control ${errors.local ? 'border-danger' : ''}`}
                             >
-                                <option value="">Selecione um local</option>
+                                <option value="">Selecione uma igreja</option>
                                 {allLocais.map(loc => <option key={loc} value={loc}>{loc}</option>)}
                             </select>
                             {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}

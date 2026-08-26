@@ -16,12 +16,12 @@ const ProfessorDeletionImpactModal = ({ isOpen, onClose, onContinue, impact, loa
             <div className="space-y-6">
                 <div>
                     <p className="font-semibold text-text-default">{impact.professor.nome}</p>
-                    <p className="mt-1 text-sm text-text-muted">Local principal: {impact.professor.localPrincipal}</p>
+                    <p className="mt-1 text-sm text-text-muted">Igreja principal: {impact.professor.localPrincipal}</p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Resumo dos vínculos">
                     <SummaryCard label="Turmas cadastradas" value={impact.resumo.turmas} />
-                    <SummaryCard label="Locais" value={impact.resumo.locais} />
+                    <SummaryCard label="Igrejas" value={impact.resumo.locais} />
                     <SummaryCard label="Alunos vinculados" value={impact.resumo.alunosAtivos} />
                 </div>
 
