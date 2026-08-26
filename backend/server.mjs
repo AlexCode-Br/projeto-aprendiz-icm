@@ -19,6 +19,12 @@ import {
   validateStudent,
   validateProfessor,
   validateClassSchedule,
+  validateSupportTicket,
+  supportMessageError,
+  supportClientMessageIdError,
+  SUPPORT_CATEGORIES,
+  SUPPORT_PRIORITIES,
+  SUPPORT_STATUSES,
 } from '../shared/validation.mjs';
 
 const scrypt = promisify(scryptCallback);
@@ -208,6 +214,7 @@ if (db.dialect === 'sqlite') await db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     requester_user_id INTEGER NOT NULL REFERENCES users(id),
     subject TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'Outro' CHECK(category IN ('Acesso ao sistema','Alunos','Turmas','Frequência','Cursos','Relatórios','Outro')),
     priority TEXT NOT NULL DEFAULT 'Normal' CHECK(priority IN ('Normal','Alta','Urgente')),
     status TEXT NOT NULL DEFAULT 'Aberto' CHECK(status IN ('Aberto','Pendente','Resolvido')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -218,8 +225,28 @@ if (db.dialect === 'sqlite') await db.exec(`
     ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
     author_user_id INTEGER NOT NULL REFERENCES users(id),
     body TEXT NOT NULL,
+    client_message_id TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS support_ticket_reads (
+    ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_read_message_id INTEGER REFERENCES support_messages(id) ON DELETE SET NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(ticket_id,user_id)
+  );
+  CREATE INDEX IF NOT EXISTS support_ticket_reads_user_id_idx ON support_ticket_reads(user_id);
+  CREATE TABLE IF NOT EXISTS support_ticket_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    actor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    event_type TEXT NOT NULL CHECK(event_type IN ('status_changed')),
+    from_status TEXT,
+    to_status TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS support_ticket_events_ticket_activity_idx ON support_ticket_events(ticket_id,created_at,id);
+  CREATE INDEX IF NOT EXISTS support_ticket_events_actor_user_id_idx ON support_ticket_events(actor_user_id);
   CREATE TABLE IF NOT EXISTS dropout_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL REFERENCES students(id),
@@ -234,6 +261,18 @@ if (db.dialect === 'sqlite') {
   if (!userColumns.some(column => column.name === 'auth_user_id')) {
     await db.exec('ALTER TABLE users ADD COLUMN auth_user_id TEXT; CREATE UNIQUE INDEX IF NOT EXISTS users_auth_user_id_unique ON users(auth_user_id);');
   }
+  const supportTicketColumns = await db.prepare('PRAGMA table_info(support_tickets)').all();
+  if (!supportTicketColumns.some(column => column.name === 'category')) {
+    await db.exec("ALTER TABLE support_tickets ADD COLUMN category TEXT NOT NULL DEFAULT 'Outro';");
+  }
+  const supportMessageColumns = await db.prepare('PRAGMA table_info(support_messages)').all();
+  if (!supportMessageColumns.some(column => column.name === 'client_message_id')) {
+    await db.exec('ALTER TABLE support_messages ADD COLUMN client_message_id TEXT;');
+  }
+  await db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS support_messages_author_client_message_unique ON support_messages(author_user_id,client_message_id) WHERE client_message_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS support_messages_ticket_activity_idx ON support_messages(ticket_id,created_at,id);
+  `);
 }
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -692,6 +731,109 @@ const studentSelect = `
   LEFT JOIN courses ON courses.id=classes.course_id
   LEFT JOIN locations ON locations.id=classes.location_id
 `;
+
+const supportStatusFromDatabase = status => status === 'Pendente' ? 'Em atendimento' : status;
+const supportStatusToDatabase = status => status === 'Em atendimento' ? 'Pendente' : status;
+const supportWaitingFor = role => role === 'professor' ? 'Gestor' : role === 'gestor' ? 'Professor' : '';
+
+function supportTicketView(row) {
+  const status=supportStatusFromDatabase(row.status);
+  return {
+    id: Number(row.id),
+    nome: row.requester_name,
+    contato: row.requester_email,
+    assunto: row.subject,
+    categoria: row.category || 'Outro',
+    prioridade: row.priority,
+    status,
+    data_abertura: row.created_at,
+    atualizado_em: row.updated_at,
+    ultima_mensagem: row.last_message || '',
+    ultima_mensagem_em: row.last_message_at || row.updated_at,
+    ultima_mensagem_por: row.last_author_role || '',
+    aguardando: status==='Resolvido'?'':supportWaitingFor(row.last_author_role),
+    nao_lidas: Number(row.unread_count || 0),
+    total_mensagens: Number(row.message_count || 0),
+  };
+}
+
+async function supportTicketForSession(ticketId, session) {
+  const where = session.role === 'professor' ? 'AND support_tickets.requester_user_id=?' : '';
+  return db.prepare(`
+    SELECT support_tickets.*,users.name AS requester_name,users.email AS requester_email
+    FROM support_tickets
+    JOIN users ON users.id=support_tickets.requester_user_id
+    WHERE support_tickets.id=? ${where}
+  `).get(ticketId, ...(session.role === 'professor' ? [session.user_id] : []));
+}
+
+async function markSupportTicketRead(ticketId, userId, requestedMessageId) {
+  const latest = requestedMessageId
+    ? await db.prepare('SELECT id FROM support_messages WHERE ticket_id=? AND id=?').get(ticketId,requestedMessageId)
+    : await db.prepare('SELECT MAX(id) AS id FROM support_messages WHERE ticket_id=?').get(ticketId);
+  if (!latest?.id) return;
+  await db.prepare(`
+    INSERT INTO support_ticket_reads (ticket_id,user_id,last_read_message_id,updated_at)
+    VALUES (?,?,?,CURRENT_TIMESTAMP)
+    ON CONFLICT(ticket_id,user_id) DO UPDATE SET
+      last_read_message_id=excluded.last_read_message_id,
+      updated_at=CURRENT_TIMESTAMP
+  `).run(ticketId,userId,latest.id);
+}
+
+async function listSupportTickets(session, url) {
+  const clauses = [];
+  const whereParams = [];
+  if (session.role === 'professor') {
+    clauses.push('support_tickets.requester_user_id=?');
+    whereParams.push(session.user_id);
+  }
+  const search = cleanText(url.searchParams.get('search'),120);
+  if (search) {
+    clauses.push(`(
+      CAST(support_tickets.id AS TEXT) LIKE ? OR support_tickets.subject LIKE ? OR users.name LIKE ? OR users.email LIKE ? OR
+      EXISTS (SELECT 1 FROM support_messages searched_messages WHERE searched_messages.ticket_id=support_tickets.id AND searched_messages.body LIKE ?)
+    )`);
+    const pattern = `%${search}%`;
+    whereParams.push(pattern,pattern,pattern,pattern,pattern);
+  }
+  const requestedStatus = cleanText(url.searchParams.get('status'),30);
+  if (requestedStatus && SUPPORT_STATUSES.includes(requestedStatus)) {
+    clauses.push('support_tickets.status=?');
+    whereParams.push(supportStatusToDatabase(requestedStatus));
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const rows = await db.prepare(`
+    SELECT support_tickets.*,users.name AS requester_name,users.email AS requester_email,
+      last_message.body AS last_message,last_message.created_at AS last_message_at,
+      last_author.role AS last_author_role,
+      (SELECT COUNT(*) FROM support_messages counted_messages WHERE counted_messages.ticket_id=support_tickets.id) AS message_count,
+      (SELECT COUNT(*) FROM support_messages unread_messages
+        WHERE unread_messages.ticket_id=support_tickets.id
+          AND unread_messages.author_user_id<>?
+          AND unread_messages.id>COALESCE(ticket_read.last_read_message_id,0)) AS unread_count
+    FROM support_tickets
+    JOIN users ON users.id=support_tickets.requester_user_id
+    LEFT JOIN support_ticket_reads ticket_read ON ticket_read.ticket_id=support_tickets.id AND ticket_read.user_id=?
+    LEFT JOIN support_messages last_message ON last_message.id=(
+      SELECT latest_message.id FROM support_messages latest_message
+      WHERE latest_message.ticket_id=support_tickets.id
+      ORDER BY latest_message.created_at DESC,latest_message.id DESC LIMIT 1
+    )
+    LEFT JOIN users last_author ON last_author.id=last_message.author_user_id
+    ${where}
+    ORDER BY support_tickets.updated_at DESC,support_tickets.id DESC
+    LIMIT 200
+  `).all(session.user_id,session.user_id,...whereParams);
+  const tickets = rows.map(supportTicketView).filter(ticket => url.searchParams.get('unread') !== '1' || ticket.nao_lidas > 0);
+  return tickets.sort((left,right) => {
+    if (left.nao_lidas !== right.nao_lidas) return right.nao_lidas-left.nao_lidas;
+    const expected = session.role === 'gestor' ? 'Gestor' : 'Professor';
+    if ((left.aguardando===expected) !== (right.aguardando===expected)) return left.aguardando===expected ? -1 : 1;
+    if ((left.status==='Resolvido') !== (right.status==='Resolvido')) return left.status==='Resolvido' ? 1 : -1;
+    return new Date(right.ultima_mensagem_em)-new Date(left.ultima_mensagem_em);
+  });
+}
 
 async function api(request, response, url) {
   const ip = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || 'local').split(',')[0].trim();
@@ -1473,57 +1615,151 @@ async function api(request, response, url) {
 
   if(request.method==='GET'&&url.pathname==='/api/suporte'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
-    const where=session.role==='professor'?'WHERE support_tickets.requester_user_id=?':'';
-    const sql="SELECT support_tickets.*,users.name AS requester_name,users.email AS requester_email,(SELECT body FROM support_messages WHERE ticket_id=support_tickets.id ORDER BY id LIMIT 1) AS first_message FROM support_tickets JOIN users ON users.id=support_tickets.requester_user_id "+where+" ORDER BY CASE support_tickets.status WHEN 'Aberto' THEN 0 WHEN 'Pendente' THEN 1 ELSE 2 END,support_tickets.updated_at DESC";
-    const rows=await db.prepare(sql).all(...(session.role==='professor'?[session.user_id]:[]));
-    const mapped=rows.map(row=>({id:row.id,nome:row.requester_name,contato:row.requester_email,assunto:row.subject,prioridade:row.priority,status:row.status,mensagem:row.first_message,data_abertura:row.created_at,data:new Date(row.created_at).toLocaleDateString('pt-BR')}));
-    return json(response,200,mapped);
+    return json(response,200,await listSupportTickets(session,url));
+  }
+  if(request.method==='GET'&&url.pathname==='/api/suporte/nao-lidos'){
+    const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+    const ownership=session.role==='professor'?'AND support_tickets.requester_user_id=?':'';
+    const params=[session.user_id,session.user_id,...(session.role==='professor'?[session.user_id]:[])];
+    const result=await db.prepare(`
+      SELECT COUNT(*) AS total FROM support_tickets
+      LEFT JOIN support_ticket_reads ON support_ticket_reads.ticket_id=support_tickets.id AND support_ticket_reads.user_id=?
+      WHERE EXISTS (
+        SELECT 1 FROM support_messages
+        WHERE support_messages.ticket_id=support_tickets.id
+          AND support_messages.author_user_id<>?
+          AND support_messages.id>COALESCE(support_ticket_reads.last_read_message_id,0)
+      ) ${ownership}
+    `).get(...params);
+    return json(response,200,{total:Number(result.total||0)});
   }
   if(request.method==='POST'&&url.pathname==='/api/suporte'){
     const session=await authorize(request,response,['professor']);if(!session)return;
-    const body=await readJson(request),subject=cleanText(body.assunto,120),message=String(body.mensagem||'').trim().slice(0,4000),priority=body.prioridade;
-    const errors={assunto:requiredTextError(subject,'O assunto',5,120),mensagem:requiredTextError(message,'A mensagem',10,4000),prioridade:['Normal','Alta','Urgente'].includes(priority)?'':'Selecione uma prioridade válida.'};
+    const body=await readJson(request),rawSubject=String(body.assunto||''),rawMessage=String(body.mensagem||''),category=cleanText(body.categoria,40);
+    const subject=cleanText(rawSubject,120),message=rawMessage.trim();
+    const suppliedClientId=String(body.client_message_id||'').trim(),clientMessageId=suppliedClientId||`server_${randomBytes(18).toString('base64url')}`;
+    const errors={...validateSupportTicket({assunto:rawSubject,mensagem:rawMessage,categoria:category}),client_message_id:suppliedClientId?supportClientMessageIdError(suppliedClientId):''};
+    if(message.length>4000)errors.mensagem='A mensagem deve ter entre 10 e 4000 caracteres.';
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const result=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,priority) VALUES (?,?,?)').run(session.user_id,subject,priority);
-    await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body) VALUES (?,?,?)').run(result.lastInsertRowid,session.user_id,message);
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'ticket_created',ip);
-    return json(response,201,{id:Number(result.lastInsertRowid)});
+    if(suppliedClientId){
+      const existing=await db.prepare('SELECT ticket_id FROM support_messages WHERE author_user_id=? AND client_message_id=?').get(session.user_id,clientMessageId);
+      if(existing)return json(response,200,{id:Number(existing.ticket_id),duplicate:true});
+    }
+    try{
+      const created=await db.transaction(async()=>{
+        const ticketResult=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,category,priority) VALUES (?,?,?,?)').run(session.user_id,subject,category,'Normal');
+        const ticketId=Number(ticketResult.lastInsertRowid);
+        const messageResult=await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body,client_message_id) VALUES (?,?,?,?)').run(ticketId,session.user_id,message,clientMessageId);
+        await db.prepare('INSERT INTO support_ticket_reads (ticket_id,user_id,last_read_message_id) VALUES (?,?,?)').run(ticketId,session.user_id,Number(messageResult.lastInsertRowid));
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_created:${ticketId}`,ip);
+        return ticketId;
+      });
+      return json(response,201,{id:created});
+    }catch(error){
+      if(duplicateError(error)&&suppliedClientId){
+        const existing=await db.prepare('SELECT ticket_id FROM support_messages WHERE author_user_id=? AND client_message_id=?').get(session.user_id,clientMessageId);
+        if(existing)return json(response,200,{id:Number(existing.ticket_id),duplicate:true});
+      }
+      throw error;
+    }
+  }
+  const ticketDetailMatch=url.pathname.match(/^\/api\/suporte\/(\d+)$/);
+  if(ticketDetailMatch&&request.method==='GET'){
+    const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+    const ticketId=Number(ticketDetailMatch[1]),ticket=await supportTicketForSession(ticketId,session);
+    if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
+    const [messages,events]=await Promise.all([
+      db.prepare(`
+        SELECT support_messages.id,support_messages.author_user_id,support_messages.body,support_messages.created_at,
+          users.name AS author_name,users.role AS author_role
+        FROM support_messages JOIN users ON users.id=support_messages.author_user_id
+        WHERE support_messages.ticket_id=?
+        ORDER BY support_messages.created_at,support_messages.id
+      `).all(ticketId),
+      db.prepare(`
+        SELECT support_ticket_events.id,support_ticket_events.event_type,support_ticket_events.from_status,
+          support_ticket_events.to_status,support_ticket_events.created_at,users.name AS actor_name
+        FROM support_ticket_events LEFT JOIN users ON users.id=support_ticket_events.actor_user_id
+        WHERE support_ticket_events.ticket_id=?
+        ORDER BY support_ticket_events.created_at,support_ticket_events.id
+      `).all(ticketId),
+    ]);
+    return json(response,200,{
+      ticket:{...supportTicketView({...ticket,last_message_at:ticket.updated_at}),status:supportStatusFromDatabase(ticket.status)},
+      messages:messages.map(item=>({id:Number(item.id),author_user_id:Number(item.author_user_id),author_name:item.author_name,author_role:item.author_role,body:item.body,created_at:item.created_at})),
+      events:events.map(item=>({...item,id:Number(item.id),from_status:supportStatusFromDatabase(item.from_status),to_status:supportStatusFromDatabase(item.to_status)})),
+    });
+  }
+  const ticketReadMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/lido$/);
+  if(ticketReadMatch&&request.method==='POST'){
+    const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+    const ticketId=Number(ticketReadMatch[1]),ticket=await supportTicketForSession(ticketId,session);
+    if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
+    const body=await readJson(request),lastMessageId=Number(body.last_message_id||0);
+    if(body.last_message_id!==undefined&&(!Number.isInteger(lastMessageId)||lastMessageId<1))return json(response,400,{message:'Mensagem de leitura inválida.'});
+    if(lastMessageId&&!(await db.prepare('SELECT id FROM support_messages WHERE ticket_id=? AND id=?').get(ticketId,lastMessageId)))return json(response,400,{message:'Mensagem de leitura não pertence a este chamado.'});
+    await markSupportTicketRead(ticketId,session.user_id,lastMessageId);
+    return json(response,200,{success:true});
   }
   const replyMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/responder$/);
   if(replyMatch&&request.method==='POST'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
-    const id=Number(replyMatch[1]),ticket=await db.prepare('SELECT * FROM support_tickets WHERE id=?').get(id);
-    if(!ticket||(session.role==='professor'&&ticket.requester_user_id!==session.user_id))return json(response,404,{message:'Ticket não encontrado.'});
-    if(ticket.status==='Resolvido')return json(response,409,{message:'Reabra o ticket antes de responder.'});
-    const body=await readJson(request),message=String(body.mensagem||'').trim().slice(0,4000),messageError=requiredTextError(message,'A resposta',2,4000);if(messageError)return invalid(response,{mensagem:messageError});
-    await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body) VALUES (?,?,?)').run(id,session.user_id,message);
-    await db.prepare("UPDATE support_tickets SET status='Pendente',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'ticket_replied',ip);
-    return json(response,200,{success:true});
-  }
-  const closeMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/fechar$/);
-  if(closeMatch&&request.method==='PUT'){
-    const session=await authorize(request,response,['professor']);if(!session)return;
-    const result=await db.prepare("UPDATE support_tickets SET status='Resolvido',updated_at=CURRENT_TIMESTAMP WHERE id=? AND requester_user_id=?").run(Number(closeMatch[1]),session.user_id);
-    if(!result.changes)return json(response,404,{message:'Ticket não encontrado.'});
-    return json(response,200,{success:true});
-  }
-  const reabrirMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/reabrir$/);
-  if(reabrirMatch&&request.method==='PUT'){
-    const session=await authorize(request,response,['professor']);if(!session)return;
-    const result=await db.prepare("UPDATE support_tickets SET status='Aberto',updated_at=CURRENT_TIMESTAMP WHERE id=? AND requester_user_id=? AND status='Resolvido'").run(Number(reabrirMatch[1]),session.user_id);
-    if(!result.changes)return json(response,404,{message:'Ticket não encontrado.'});
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'ticket_reopened',ip);
-    return json(response,200,{success:true});
+    const ticketId=Number(replyMatch[1]),ticket=await supportTicketForSession(ticketId,session);
+    if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
+    if(ticket.status==='Resolvido'&&session.role==='gestor')return json(response,409,{message:'Reabra o chamado antes de responder.'});
+    const body=await readJson(request),message=String(body.mensagem||'').trim(),suppliedClientId=String(body.client_message_id||'').trim();
+    const clientMessageId=suppliedClientId||`server_${randomBytes(18).toString('base64url')}`;
+    const errors={mensagem:supportMessageError(message,'A resposta'),client_message_id:suppliedClientId?supportClientMessageIdError(suppliedClientId):''};
+    if(message.length>4000)errors.mensagem='A resposta deve ter entre 2 e 4000 caracteres.';
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    if(suppliedClientId){
+      const existing=await db.prepare('SELECT id,ticket_id FROM support_messages WHERE author_user_id=? AND client_message_id=?').get(session.user_id,clientMessageId);
+      if(existing)return Number(existing.ticket_id)===ticketId?json(response,200,{success:true,id:Number(existing.id),duplicate:true}):json(response,409,{message:'Este identificador de envio já foi utilizado.'});
+    }
+    const nextStatus=session.role==='gestor'?'Pendente':'Aberto';
+    try{
+      const messageId=await db.transaction(async()=>{
+        const inserted=await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body,client_message_id) VALUES (?,?,?,?)').run(ticketId,session.user_id,message,clientMessageId);
+        const id=Number(inserted.lastInsertRowid);
+        await db.prepare(`INSERT INTO support_ticket_reads (ticket_id,user_id,last_read_message_id,updated_at) VALUES (?,?,?,CURRENT_TIMESTAMP)
+          ON CONFLICT(ticket_id,user_id) DO UPDATE SET last_read_message_id=excluded.last_read_message_id,updated_at=CURRENT_TIMESTAMP`).run(ticketId,session.user_id,id);
+        await db.prepare('UPDATE support_tickets SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(nextStatus,ticketId);
+        if(ticket.status!==nextStatus)await db.prepare('INSERT INTO support_ticket_events (ticket_id,actor_user_id,event_type,from_status,to_status) VALUES (?,?,\'status_changed\',?,?)').run(ticketId,session.user_id,ticket.status,nextStatus);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_replied:${ticketId}`,ip);
+        return id;
+      });
+      return json(response,201,{success:true,id:messageId,status:supportStatusFromDatabase(nextStatus)});
+    }catch(error){
+      if(duplicateError(error)&&suppliedClientId){
+        const existing=await db.prepare('SELECT id,ticket_id FROM support_messages WHERE author_user_id=? AND client_message_id=?').get(session.user_id,clientMessageId);
+        if(existing&&Number(existing.ticket_id)===ticketId)return json(response,200,{success:true,id:Number(existing.id),duplicate:true});
+      }
+      throw error;
+    }
   }
   const ticketStatusMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/status$/);
   if(ticketStatusMatch&&request.method==='PUT'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request);
-    if(!['Aberto','Pendente','Resolvido'].includes(body.status))return json(response,400,{message:'Status inválido.'});
-    await db.prepare('UPDATE support_tickets SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(body.status,Number(ticketStatusMatch[1]));
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'ticket_status_changed',ip);
-    return json(response,200,{success:true});
+    const ticketId=Number(ticketStatusMatch[1]),body=await readJson(request),requestedStatus=cleanText(body.status,30);
+    if(!SUPPORT_STATUSES.includes(requestedStatus))return json(response,400,{message:'Status inválido.'});
+    const ticket=await supportTicketForSession(ticketId,session);if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
+    const nextStatus=supportStatusToDatabase(requestedStatus);
+    if(ticket.status!==nextStatus)await db.transaction(async()=>{
+      await db.prepare('UPDATE support_tickets SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(nextStatus,ticketId);
+      await db.prepare('INSERT INTO support_ticket_events (ticket_id,actor_user_id,event_type,from_status,to_status) VALUES (?,?,\'status_changed\',?,?)').run(ticketId,session.user_id,ticket.status,nextStatus);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_status_changed:${ticketId}`,ip);
+    });
+    return json(response,200,{success:true,status:requestedStatus});
+  }
+  const ticketPriorityMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/prioridade$/);
+  if(ticketPriorityMatch&&request.method==='PUT'){
+    const session=await authorize(request,response,['gestor']);if(!session)return;
+    const ticketId=Number(ticketPriorityMatch[1]),body=await readJson(request),priority=cleanText(body.prioridade,20);
+    if(!SUPPORT_PRIORITIES.includes(priority))return json(response,400,{message:'Prioridade inválida.'});
+    const result=await db.prepare('UPDATE support_tickets SET priority=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(priority,ticketId);
+    if(!result.changes)return json(response,404,{message:'Chamado não encontrado.'});
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_priority_changed:${ticketId}`,ip);
+    return json(response,200,{success:true,prioridade:priority});
   }
 
   if(request.method==='GET'&&url.pathname==='/api/dashboard/gestor'){

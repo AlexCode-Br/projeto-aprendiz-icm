@@ -35,7 +35,7 @@ const tablesWithId = new Set([
   'users', 'sessions', 'password_resets', 'dev_emails', 'audit_log', 'locations',
   'professor_profiles', 'professor_invites', 'students', 'courses', 'classes',
   'enrollments', 'attendance_sessions', 'attendance_records', 'announcements',
-  'support_tickets', 'support_messages', 'dropout_events',
+  'support_tickets', 'support_messages', 'support_ticket_events', 'dropout_events',
 ]);
 
 function returningId(sql) {

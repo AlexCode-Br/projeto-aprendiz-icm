@@ -2,6 +2,10 @@ const PERSON_NAME = /^[\p{L}]+(?:[\p{L}'’-]*[\p{L}])?(?:\s+[\p{L}]+(?:[\p{L}'�
 const CATALOG_NAME = /^[\p{L}\p{N}][\p{L}\p{N}\s.'’()&+\-/ºª]*$/u;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u;
 
+export const SUPPORT_CATEGORIES = ['Acesso ao sistema', 'Alunos', 'Turmas', 'Frequência', 'Cursos', 'Relatórios', 'Outro'];
+export const SUPPORT_STATUSES = ['Aberto', 'Em atendimento', 'Resolvido'];
+export const SUPPORT_PRIORITIES = ['Normal', 'Alta', 'Urgente'];
+
 export const cleanText = (value, maxLength = 500) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 export const normalizeEmail = value => cleanText(value, 254).toLowerCase();
 export const phoneDigits = value => String(value ?? '').replace(/\D/g, '');
@@ -37,7 +41,7 @@ export function catalogNameError(value, label = 'nome') {
 
 export function requiredTextError(value, label, min = 3, max = 2000) {
   const text = cleanText(value, max + 1);
-  if (!text) return `${label} é obrigatório.`;
+  if (!text) return `${label} é ${/^A\s/i.test(label) ? 'obrigatória' : 'obrigatório'}.`;
   if (text.length < min || text.length > max) return `${label} deve ter entre ${min} e ${max} caracteres.`;
   return '';
 }
@@ -94,6 +98,26 @@ export function validateClassSchedule(values) {
   if (startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) errors.start_time = 'Informe um horário válido.';
   if (weekday && !startTime) errors.start_time = 'Informe o horário da turma.';
   if (!weekday && startTime) errors.weekday = 'Selecione o dia da semana.';
+  return errors;
+}
+
+export function supportMessageError(value, label = 'A mensagem') {
+  return requiredTextError(value, label, 2, 4000);
+}
+
+export function supportClientMessageIdError(value) {
+  const id = String(value ?? '').trim();
+  if (!/^[A-Za-z0-9_-]{16,80}$/.test(id)) return 'Não foi possível identificar este envio. Atualize a página e tente novamente.';
+  return '';
+}
+
+export function validateSupportTicket(values) {
+  const errors = {};
+  const subjectError = requiredTextError(values.assunto, 'O assunto', 5, 120);
+  const messageError = requiredTextError(values.mensagem, 'A mensagem', 10, 4000);
+  if (subjectError) errors.assunto = subjectError;
+  if (messageError) errors.mensagem = messageError;
+  if (!SUPPORT_CATEGORIES.includes(cleanText(values.categoria, 40))) errors.categoria = 'Selecione uma categoria válida.';
   return errors;
 }
 

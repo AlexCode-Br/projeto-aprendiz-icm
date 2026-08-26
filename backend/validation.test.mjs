@@ -8,6 +8,9 @@ import {
   validateProfessor,
   validateStudent,
   validateClassSchedule,
+  validateSupportTicket,
+  supportClientMessageIdError,
+  supportMessageError,
 } from '../shared/validation.mjs';
 
 test('valida dados pessoais e rejeita conteúdo arbitrário', () => {
@@ -82,4 +85,19 @@ test('valida dia e horário da turma como um único agendamento opcional', () =>
   assert.equal(validateClassSchedule({ weekday: 'Quarta-feira', start_time: '' }).start_time, 'Informe o horário da turma.');
   assert.equal(validateClassSchedule({ weekday: '', start_time: '19:30' }).weekday, 'Selecione o dia da semana.');
   assert.equal(validateClassSchedule({ weekday: 'Feriado', start_time: '25:99' }).weekday, 'Selecione um dia da semana válido.');
+});
+
+test('valida chamados, mensagens e identificadores idempotentes', () => {
+  assert.deepEqual(validateSupportTicket({
+    assunto: 'Problema com frequência',
+    categoria: 'Frequência',
+    mensagem: 'Não consigo registrar a presença da turma.',
+  }), {});
+  assert.equal(validateSupportTicket({ assunto: '   ', categoria: 'Qualquer', mensagem: 'x' }).categoria, 'Selecione uma categoria válida.');
+  assert.match(validateSupportTicket({ assunto: 'a'.repeat(121), categoria: 'Outro', mensagem: 'Mensagem suficientemente longa.' }).assunto, /120/);
+  assert.match(validateSupportTicket({ assunto: 'Assunto válido', categoria: 'Outro', mensagem: 'a'.repeat(4001) }).mensagem, /4000/);
+  assert.match(supportMessageError(' '), /obrigatória/);
+  assert.equal(supportMessageError('Tudo certo agora.'), '');
+  assert.equal(supportClientMessageIdError('12345678-1234-1234-1234-123456789abc'), '');
+  assert.notEqual(supportClientMessageIdError('curto'), '');
 });

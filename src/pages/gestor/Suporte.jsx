@@ -1,171 +1,139 @@
-import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import TicketDetailsModal from '../../components/TicketDetailsModal';
-import FormSelect from '../../components/FormSelect';
+import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import { SupportConversation, SupportTicketList } from '../../components/support/SupportUI';
 import api from '../../services/api';
+import { SUPPORT_PRIORITIES, SUPPORT_STATUSES } from '../../../shared/validation.mjs';
 
-const StatusDropdown = ({ ticket, onStatusChange }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = useRef(null);
-
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    const statusOptions = ['Aberto', 'Pendente', 'Resolvido'];
-    const getStatusClass = (status, base = false) => {
-        const classes = {
-            'Aberto': 'bg-success/10 text-success',
-            'Pendente': 'bg-warning/10 text-yellow-500',
-            'Resolvido': 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200',
-        };
-        return `${classes[status] || ''} ${base ? 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer' : ''}`;
-    };
-
-    return (
-        <div className="relative" ref={dropdownRef}>
-            <button type="button" aria-haspopup="menu" aria-expanded={isOpen} onClick={() => setIsOpen(!isOpen)} className={`${getStatusClass(ticket.status, true)} min-h-9`}>
-                {ticket.status}
-                <svg className="w-2.5 h-2.5 ml-1.5" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 10 6"><path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="m1 1 4 4 4-4"/></svg>
-            </button>
-            {isOpen && (
-                <div className="absolute z-10 mt-1 w-32 rounded-lg border border-border bg-surface shadow-lg" role="menu">
-                    <ul className="py-1 text-sm text-text-default">
-                        {statusOptions.map(status => (
-                            <li key={status}>
-                                <button type="button" role="menuitem" onClick={() => { onStatusChange(ticket.id, status); setIsOpen(false); }} className="block min-h-11 w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600">{status}</button>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-        </div>
-    );
-};
-
+const filters = ['Todos','Abertos','Em atendimento','Resolvidos','Não lidos'];
 
 const Suporte = () => {
-    const { showToast } = useToast();
-    const [tickets, setTickets] = useState([]);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedStatus, setSelectedStatus] = useState('');
-    const [isModalOpen, setModalOpen] = useState(false);
-    const [currentTicket, setCurrentTicket] = useState(null);
+  const { user } = useContext(AuthContext);
+  const { showToast } = useToast();
+  const [tickets,setTickets]=useState([]);
+  const [selectedId,setSelectedId]=useState(null);
+  const [detail,setDetail]=useState(null);
+  const [search,setSearch]=useState('');
+  const [filter,setFilter]=useState('Todos');
+  const [loading,setLoading]=useState(true);
+  const [detailLoading,setDetailLoading]=useState(false);
+  const [error,setError]=useState('');
+  const [detailError,setDetailError]=useState('');
+  const [sending,setSending]=useState(false);
+  const [updating,setUpdating]=useState(false);
 
-    const fetchTickets = useCallback(async () => {
-        try {
-            const response = await api.get('/api/suporte');
-            setTickets(response.data);
-        } catch (error) {
-            showToast(error.message || 'Erro ao carregar tickets.', 'error');
-        }
-    }, [showToast]);
+  const query=useMemo(()=>({
+    search:search.trim()||undefined,
+    status:filter==='Abertos'?'Aberto':filter==='Em atendimento'?'Em atendimento':filter==='Resolvidos'?'Resolvido':undefined,
+    unread:filter==='Não lidos'?'1':undefined,
+  }),[search,filter]);
 
-    useEffect(() => { fetchTickets(); }, [fetchTickets]);
+  const fetchTickets=useCallback(async({silent=false}={})=>{
+    if(!silent)setLoading(true);
+    try{
+      const response=await api.get('/api/suporte',{params:query});
+      setTickets(response.data);
+      setError('');
+    }catch(requestError){
+      setError('Não foi possível carregar os chamados.');
+      if(!silent)showToast(requestError.message||'Erro ao carregar chamados.','error');
+    }finally{if(!silent)setLoading(false);}
+  },[query,showToast]);
 
-    const handleOpenModal = (ticket) => {
-        setCurrentTicket(ticket);
-        setModalOpen(true);
-    };
+  const fetchDetail=useCallback(async(ticketId,{silent=false}={})=>{
+    if(!ticketId)return;
+    if(!silent)setDetailLoading(true);
+    try{
+      const response=await api.get(`/api/suporte/${ticketId}`);
+      setDetail(response.data);
+      setDetailError('');
+      const lastMessageId=response.data.messages.at(-1)?.id;
+      await api.post(`/api/suporte/${ticketId}/lido`,lastMessageId?{last_message_id:lastMessageId}:{});
+      setTickets(current=>current.map(ticket=>Number(ticket.id)===Number(ticketId)?{...ticket,nao_lidas:0}:ticket));
+      window.dispatchEvent(new Event('support:updated'));
+    }catch(requestError){
+      setDetailError(requestError.response?.status===404?'Este chamado não está mais disponível.':'Não foi possível atualizar esta conversa.');
+      if(!silent)showToast(requestError.message||'Erro ao abrir chamado.','error');
+    }finally{if(!silent)setDetailLoading(false);}
+  },[showToast]);
 
-    const handleStatusChange = async (ticketId, newStatus) => {
-        try {
-            await api.put(`/api/suporte/${ticketId}/status`, { status: newStatus });
-            showToast(`Status do ticket #${ticketId} alterado para ${newStatus}.`, 'success');
-            await fetchTickets();
-        } catch (error) {
-            showToast(error.message || 'Erro ao alterar o status.', 'error');
-        }
-    };
+  useEffect(()=>{const timer=setTimeout(()=>fetchTickets(),250);return()=>clearTimeout(timer);},[fetchTickets]);
+  useEffect(()=>{
+    const refresh=()=>{fetchTickets({silent:true});if(selectedId)fetchDetail(selectedId,{silent:true});};
+    const interval=setInterval(refresh,15000);
+    window.addEventListener('focus',refresh);
+    return()=>{clearInterval(interval);window.removeEventListener('focus',refresh);};
+  },[fetchTickets,fetchDetail,selectedId]);
 
-    const handleReply = async (ticketId, mensagem) => {
-        await api.post(`/api/suporte/${ticketId}/responder`, { mensagem });
-        showToast('Resposta enviada com sucesso!', 'success');
-        setModalOpen(false);
-        await fetchTickets();
-    };
+  const openTicket=async ticketId=>{setSelectedId(ticketId);setDetail(null);await fetchDetail(ticketId);};
 
-    const filteredTickets = useMemo(() => {
-        return tickets.filter(ticket =>
-            (ticket.assunto.toLowerCase().includes(searchTerm.toLowerCase()) || ticket.nome.toLowerCase().includes(searchTerm.toLowerCase())) &&
-            (selectedStatus === '' || ticket.status === selectedStatus)
-        );
-    }, [tickets, searchTerm, selectedStatus]);
+  const sendReply=async(message,clientMessageId)=>{
+    setSending(true);
+    try{
+      await api.post(`/api/suporte/${selectedId}/responder`,{mensagem:message,client_message_id:clientMessageId});
+      await Promise.all([fetchDetail(selectedId,{silent:true}),fetchTickets({silent:true})]);
+      window.dispatchEvent(new Event('support:updated'));
+    }catch(requestError){
+      showToast(requestError.message||'Não foi possível enviar a resposta. O texto foi preservado.','error');
+      throw requestError;
+    }finally{setSending(false);}
+  };
 
-    return (
-        <>
-            <div className="page-header"><div><h1 className="page-title">Central de suporte</h1><p className="page-description">Acompanhe solicitações, responda usuários e atualize o andamento de cada ticket.</p></div></div>
+  const updateTicket=async(type,value)=>{
+    if(!selectedId||updating)return;
+    setUpdating(true);
+    try{
+      const path=type==='status'?'status':'prioridade';
+      const payload=type==='status'?{status:value}:{prioridade:value};
+      await api.put(`/api/suporte/${selectedId}/${path}`,payload);
+      await Promise.all([fetchDetail(selectedId,{silent:true}),fetchTickets({silent:true})]);
+      window.dispatchEvent(new Event('support:updated'));
+    }catch(requestError){showToast(requestError.message||'Não foi possível atualizar o chamado.','error');}
+    finally{setUpdating(false);}
+  };
 
-            <section className="panel mb-6 p-4" aria-label="Filtros de suporte">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <label><span className="sr-only">Pesquisar tickets</span><input
-                        type="text"
-                        placeholder="Pesquisar por assunto ou nome..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        className="form-control" /></label>
-                    <div>
-                        <label className="sr-only">Filtrar tickets por status</label>
-                        <FormSelect
-                            value={selectedStatus}
-                            onChange={e => setSelectedStatus(e.target.value)}
-                            options={['Aberto', 'Pendente', 'Resolvido']}
-                            placeholder="Todos os Status"
-                        />
-                    </div>
-                </div>
-            </section>
+  const counts=useMemo(()=>({
+    total:tickets.length,
+    unread:tickets.filter(ticket=>ticket.nao_lidas>0).length,
+    waiting:tickets.filter(ticket=>ticket.aguardando==='Gestor'&&ticket.status!=='Resolvido').length,
+  }),[tickets]);
 
-            <div className="panel overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-surface-muted text-xs uppercase text-text-muted">
-                            <tr>
-                                <th className="px-6 py-3">ID</th>
-                                <th className="px-6 py-3">Assunto</th>
-                                <th className="px-6 py-3">Nome</th>
-                                <th className="px-6 py-3">Data</th>
-                                <th className="px-6 py-3 text-center">Status</th>
-                                <th className="px-6 py-3 text-center">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredTickets.map(ticket => (
-                                <tr key={ticket.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-                                    <td className="px-6 py-4 font-mono text-text-muted">#{ticket.id}</td>
-                                    <td className="px-6 py-4 font-medium">{ticket.assunto}</td>
-                                    <td className="px-6 py-4">{ticket.nome}</td>
-                                    <td className="px-6 py-4">{ticket.data}</td>
-                                    <td className="px-6 py-4 text-center">
-                                        <StatusDropdown ticket={ticket} onStatusChange={handleStatusChange} />
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        <button type="button" onClick={() => handleOpenModal(ticket)} className="btn min-h-9 rounded-full bg-primary/10 px-3 py-1.5 text-xs text-primary hover:bg-primary/20">
-                                            Detalhes
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {!filteredTickets.length && <tr><td colSpan="6" className="px-6 py-10 text-center text-sm text-text-muted">Nenhum ticket encontrado com estes filtros.</td></tr>}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+  const actions=detail?.ticket?<>
+    <label className="sr-only" htmlFor="support-priority">Prioridade</label>
+    <select id="support-priority" className="form-control min-h-9 w-auto py-1.5 text-xs" value={detail.ticket.prioridade} disabled={updating} onChange={event=>updateTicket('prioridade',event.target.value)}>{SUPPORT_PRIORITIES.map(value=><option key={value}>{value}</option>)}</select>
+    <label className="sr-only" htmlFor="support-status">Status</label>
+    <select id="support-status" className="form-control min-h-9 w-auto py-1.5 text-xs" value={detail.ticket.status} disabled={updating} onChange={event=>updateTicket('status',event.target.value)}>{SUPPORT_STATUSES.map(value=><option key={value}>{value}</option>)}</select>
+  </>:null;
 
-            <TicketDetailsModal
-                isOpen={isModalOpen}
-                onClose={() => setModalOpen(false)}
-                ticket={currentTicket}
-                onReply={handleReply}
-            />
-        </>
-    );
+  return <>
+    <div className="page-header">
+      <div><h1 className="page-title">Central de Suporte</h1><p className="page-description">Atenda solicitações dos professores com histórico completo, prioridades claras e acompanhamento de leitura.</p></div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        {[['Na lista',counts.total],['Não lidos',counts.unread],['Aguardando',counts.waiting]].map(([label,value])=><div key={label} className="rounded-xl border border-border bg-surface px-3 py-2"><strong className="block text-lg text-text-default">{value}</strong><span className="text-[0.68rem] uppercase tracking-wide text-text-muted">{label}</span></div>)}
+      </div>
+    </div>
+
+    <section className="panel mb-4 p-3 sm:p-4" aria-label="Busca e filtros de chamados">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+        <label className="flex-1"><span className="sr-only">Buscar chamados</span><input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Buscar por professor, assunto, conteúdo ou número..." className="form-control"/></label>
+        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar chamados">
+          {filters.map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-10 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}
+        </div>
+      </div>
+    </section>
+
+    {error&&<div className="alert-error mb-4 flex items-center justify-between gap-3" role="alert"><span>{error}</span><button type="button" onClick={()=>fetchTickets()} className="font-semibold underline">Tentar novamente</button></div>}
+
+    <div className="panel grid min-h-[38rem] overflow-hidden lg:grid-cols-[minmax(19rem,0.82fr)_minmax(0,1.7fr)]">
+      <aside className={`${selectedId?'hidden lg:block':'block'} border-r-0 border-border lg:border-r`} aria-label="Chamados">
+        <div className="border-b border-border px-5 py-4"><h2 className="font-bold text-text-default">Chamados</h2><p className="mt-1 text-xs text-text-muted">Ordenados por atenção necessária e atividade recente.</p></div>
+        <div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={tickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor"/></div>
+      </aside>
+      <div className={`${selectedId?'block':'hidden lg:block'}`}>
+        <SupportConversation detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedId)} onBack={()=>setSelectedId(null)} onSend={sendReply} sending={sending} actions={actions}/>
+      </div>
+    </div>
+  </>;
 };
 
 export default Suporte;
