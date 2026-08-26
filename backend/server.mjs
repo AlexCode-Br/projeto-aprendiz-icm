@@ -23,7 +23,6 @@ import {
   supportMessageError,
   supportClientMessageIdError,
   SUPPORT_CATEGORIES,
-  SUPPORT_PRIORITIES,
   SUPPORT_STATUSES,
 } from '../shared/validation.mjs';
 
@@ -215,7 +214,6 @@ if (db.dialect === 'sqlite') await db.exec(`
     requester_user_id INTEGER NOT NULL REFERENCES users(id),
     subject TEXT NOT NULL,
     category TEXT NOT NULL DEFAULT 'Outro' CHECK(category IN ('Acesso ao sistema','Alunos','Turmas','Frequência','Cursos','Relatórios','Outro')),
-    priority TEXT NOT NULL DEFAULT 'Normal' CHECK(priority IN ('Normal','Alta','Urgente')),
     status TEXT NOT NULL DEFAULT 'Aberto' CHECK(status IN ('Aberto','Pendente','Resolvido')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -455,12 +453,12 @@ async function seedCommunicationData() {
   }
   if (!await db.prepare('SELECT id FROM support_tickets LIMIT 1').get()) {
     const tickets = [
-      ['Ajuste na lista de chamada','Alta','Um aluno novo ainda não aparece na turma de Violão I.','Aberto','2026-08-23T14:30:00Z'],
-      ['Projetor da sala 3','Normal','O projetor está com a imagem oscilando.','Pendente','2026-08-18T09:15:00Z'],
-      ['Material de teoria musical','Normal','Solicitação de novas cópias das apostilas.','Resolvido','2026-08-02T10:00:00Z'],
+      ['Ajuste na lista de chamada','Alunos','Um aluno novo ainda não aparece na turma de Violão I.','Aberto','2026-08-23T14:30:00Z'],
+      ['Projetor da sala 3','Outro','O projetor está com a imagem oscilando.','Pendente','2026-08-18T09:15:00Z'],
+      ['Material de teoria musical','Cursos','Solicitação de novas cópias das apostilas.','Resolvido','2026-08-02T10:00:00Z'],
     ];
-    for (const [subject,priority,message,status,created] of tickets) {
-      const result=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,priority,status,created_at,updated_at) VALUES (?,?,?,?,?,?)').run(professor.id,subject,priority,status,created,created);
+    for (const [subject,category,message,status,created] of tickets) {
+      const result=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,category,status,created_at,updated_at) VALUES (?,?,?,?,?,?)').run(professor.id,subject,category,status,created,created);
       await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body,created_at) VALUES (?,?,?,?)').run(result.lastInsertRowid,professor.id,message,created);
     }
   }
@@ -744,7 +742,6 @@ function supportTicketView(row) {
     contato: row.requester_email,
     assunto: row.subject,
     categoria: row.category || 'Outro',
-    prioridade: row.priority,
     status,
     data_abertura: row.created_at,
     atualizado_em: row.updated_at,
@@ -1647,7 +1644,7 @@ async function api(request, response, url) {
     }
     try{
       const created=await db.transaction(async()=>{
-        const ticketResult=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,category,priority) VALUES (?,?,?,?)').run(session.user_id,subject,category,'Normal');
+        const ticketResult=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,category) VALUES (?,?,?)').run(session.user_id,subject,category);
         const ticketId=Number(ticketResult.lastInsertRowid);
         const messageResult=await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body,client_message_id) VALUES (?,?,?,?)').run(ticketId,session.user_id,message,clientMessageId);
         await db.prepare('INSERT INTO support_ticket_reads (ticket_id,user_id,last_read_message_id) VALUES (?,?,?)').run(ticketId,session.user_id,Number(messageResult.lastInsertRowid));
@@ -1689,6 +1686,17 @@ async function api(request, response, url) {
       messages:messages.map(item=>({id:Number(item.id),author_user_id:Number(item.author_user_id),author_name:item.author_name,author_role:item.author_role,body:item.body,created_at:item.created_at})),
       events:events.map(item=>({...item,id:Number(item.id),from_status:supportStatusFromDatabase(item.from_status),to_status:supportStatusFromDatabase(item.to_status)})),
     });
+  }
+  if(ticketDetailMatch&&request.method==='DELETE'){
+    const session=await authorize(request,response,['gestor']);if(!session)return;
+    const ticketId=Number(ticketDetailMatch[1]);
+    const ticket=await supportTicketForSession(ticketId,session);
+    if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
+    await db.transaction(async()=>{
+      await db.prepare('DELETE FROM support_tickets WHERE id=?').run(ticketId);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_deleted:${ticketId}`,ip);
+    });
+    return json(response,200,{success:true});
   }
   const ticketReadMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/lido$/);
   if(ticketReadMatch&&request.method==='POST'){
@@ -1750,16 +1758,6 @@ async function api(request, response, url) {
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_status_changed:${ticketId}`,ip);
     });
     return json(response,200,{success:true,status:requestedStatus});
-  }
-  const ticketPriorityMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/prioridade$/);
-  if(ticketPriorityMatch&&request.method==='PUT'){
-    const session=await authorize(request,response,['gestor']);if(!session)return;
-    const ticketId=Number(ticketPriorityMatch[1]),body=await readJson(request),priority=cleanText(body.prioridade,20);
-    if(!SUPPORT_PRIORITIES.includes(priority))return json(response,400,{message:'Prioridade inválida.'});
-    const result=await db.prepare('UPDATE support_tickets SET priority=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(priority,ticketId);
-    if(!result.changes)return json(response,404,{message:'Chamado não encontrado.'});
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_priority_changed:${ticketId}`,ip);
-    return json(response,200,{success:true,prioridade:priority});
   }
 
   if(request.method==='GET'&&url.pathname==='/api/dashboard/gestor'){

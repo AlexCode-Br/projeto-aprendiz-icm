@@ -1,9 +1,10 @@
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
+import Modal from '../../components/Modal';
 import { SupportConversation, SupportTicketList } from '../../components/support/SupportUI';
 import api from '../../services/api';
-import { SUPPORT_PRIORITIES, SUPPORT_STATUSES } from '../../../shared/validation.mjs';
+import { SUPPORT_STATUSES } from '../../../shared/validation.mjs';
 
 const filters = ['Todos','Abertos','Em atendimento','Resolvidos','Não lidos'];
 
@@ -21,6 +22,8 @@ const Suporte = () => {
   const [detailError,setDetailError]=useState('');
   const [sending,setSending]=useState(false);
   const [updating,setUpdating]=useState(false);
+  const [deleteOpen,setDeleteOpen]=useState(false);
+  const [deleting,setDeleting]=useState(false);
 
   const query=useMemo(()=>({
     search:search.trim()||undefined,
@@ -79,17 +82,28 @@ const Suporte = () => {
     }finally{setSending(false);}
   };
 
-  const updateTicket=async(type,value)=>{
+  const updateTicket=async(value)=>{
     if(!selectedId||updating)return;
     setUpdating(true);
     try{
-      const path=type==='status'?'status':'prioridade';
-      const payload=type==='status'?{status:value}:{prioridade:value};
-      await api.put(`/api/suporte/${selectedId}/${path}`,payload);
+      await api.put(`/api/suporte/${selectedId}/status`,{status:value});
       await Promise.all([fetchDetail(selectedId,{silent:true}),fetchTickets({silent:true})]);
       window.dispatchEvent(new Event('support:updated'));
     }catch(requestError){showToast(requestError.message||'Não foi possível atualizar o chamado.','error');}
     finally{setUpdating(false);}
+  };
+
+  const deleteTicket=async()=>{
+    if(!selectedId||deleting)return;
+    setDeleting(true);
+    try{
+      await api.delete(`/api/suporte/${selectedId}`);
+      setDeleteOpen(false);setSelectedId(null);setDetail(null);
+      await fetchTickets({silent:true});
+      window.dispatchEvent(new Event('support:updated'));
+      showToast('Chamado apagado definitivamente.','success');
+    }catch(requestError){showToast(requestError.message||'Não foi possível apagar o chamado.','error');}
+    finally{setDeleting(false);}
   };
 
   const counts=useMemo(()=>({
@@ -99,15 +113,14 @@ const Suporte = () => {
   }),[tickets]);
 
   const actions=detail?.ticket?<>
-    <label className="sr-only" htmlFor="support-priority">Prioridade</label>
-    <select id="support-priority" className="form-control min-h-9 w-auto py-1.5 text-xs" value={detail.ticket.prioridade} disabled={updating} onChange={event=>updateTicket('prioridade',event.target.value)}>{SUPPORT_PRIORITIES.map(value=><option key={value}>{value}</option>)}</select>
-    <label className="sr-only" htmlFor="support-status">Status</label>
-    <select id="support-status" className="form-control min-h-9 w-auto py-1.5 text-xs" value={detail.ticket.status} disabled={updating} onChange={event=>updateTicket('status',event.target.value)}>{SUPPORT_STATUSES.map(value=><option key={value}>{value}</option>)}</select>
+    <label className="sr-only" htmlFor="support-status">Status do chamado</label>
+    <select id="support-status" className="form-control min-h-9 w-auto py-1.5 text-xs" value={detail.ticket.status} disabled={updating} onChange={event=>updateTicket(event.target.value)}>{SUPPORT_STATUSES.map(value=><option key={value}>{value}</option>)}</select>
+    <button type="button" onClick={()=>setDeleteOpen(true)} className="btn btn-secondary min-h-9 border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10" aria-label="Apagar chamado">Apagar chamado</button>
   </>:null;
 
   return <>
     <div className="page-header">
-      <div><h1 className="page-title">Central de Suporte</h1><p className="page-description">Atenda solicitações dos professores com histórico completo, prioridades claras e acompanhamento de leitura.</p></div>
+      <div><h1 className="page-title">Central de Suporte</h1><p className="page-description">Atenda solicitações dos professores com histórico completo e acompanhamento de leitura.</p></div>
       <div className="grid grid-cols-3 gap-2 text-center">
         {[['Na lista',counts.total],['Não lidos',counts.unread],['Aguardando',counts.waiting]].map(([label,value])=><div key={label} className="rounded-xl border border-border bg-surface px-3 py-2"><strong className="block text-lg text-text-default">{value}</strong><span className="text-[0.68rem] uppercase tracking-wide text-text-muted">{label}</span></div>)}
       </div>
@@ -133,6 +146,12 @@ const Suporte = () => {
         <SupportConversation detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedId)} onBack={()=>setSelectedId(null)} onSend={sendReply} sending={sending} actions={actions}/>
       </div>
     </div>
+    <Modal isOpen={deleteOpen} onClose={()=>{if(!deleting)setDeleteOpen(false);}} title="Apagar chamado?" maxWidth="max-w-md">
+      <div className="space-y-4">
+        <p className="text-sm leading-6 text-text-muted">Esta ação apagará permanentemente o chamado, todas as mensagens e o histórico de status. Professores não têm acesso a esta ação.</p>
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end"><button type="button" className="btn btn-secondary" disabled={deleting} onClick={()=>setDeleteOpen(false)}>Cancelar</button><button type="button" className="btn btn-danger" disabled={deleting} onClick={deleteTicket}>{deleting?'Apagando...':'Apagar definitivamente'}</button></div>
+      </div>
+    </Modal>
   </>;
 };
 

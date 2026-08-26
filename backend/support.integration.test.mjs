@@ -114,6 +114,7 @@ test('suporte mantém conversa bidirecional, isolamento, leitura, status e idemp
     assert.equal((await call(professorA,'GET',`/api/suporte/${ticketB}`)).status,404);
     assert.equal((await call(professorA,'POST',`/api/suporte/${ticketB}/responder`,{mensagem:'Tentativa indevida',client_message_id:'forbidden-message-0001'})).status,404);
     assert.equal((await call(professorA,'PUT',`/api/suporte/${ticketB}/status`,{status:'Resolvido'})).status,403);
+    assert.equal((await call(professorA,'DELETE',`/api/suporte/${ticketB}`)).status,403);
 
     assert.equal((await call(gestor,'PUT',`/api/suporte/${ticketA}/status`,{status:'Resolvido'})).status,200);
     assert.equal((await call(professorA,'GET',`/api/suporte/${ticketA}`)).data.ticket.status,'Resolvido');
@@ -130,6 +131,8 @@ test('suporte mantém conversa bidirecional, isolamento, leitura, status e idemp
     assert.equal(finalDetail.data.messages.filter(message=>message.body==='Verificamos o caso e ajustamos a configuração.').length,1);
     assert.ok(finalDetail.data.events.some(event=>event.to_status==='Resolvido'));
     assert.ok(finalDetail.data.events.some(event=>event.to_status==='Aberto'));
+    assert.equal((await call(gestor,'DELETE',`/api/suporte/${ticketC}`)).status,200);
+    assert.equal((await call(gestor,'GET',`/api/suporte/${ticketC}`)).status,404);
   }finally{
     if(server.exitCode===null)server.kill('SIGTERM');
     await new Promise(resolve=>server.once('exit',resolve));

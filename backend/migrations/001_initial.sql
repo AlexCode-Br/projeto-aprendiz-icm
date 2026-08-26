@@ -175,7 +175,6 @@ CREATE TABLE IF NOT EXISTS support_tickets (
   id SERIAL PRIMARY KEY,
   requester_user_id INTEGER NOT NULL REFERENCES users(id),
   subject TEXT NOT NULL,
-  priority TEXT NOT NULL DEFAULT 'Normal' CHECK(priority IN ('Normal','Alta','Urgente')),
   status TEXT NOT NULL DEFAULT 'Aberto' CHECK(status IN ('Aberto','Pendente','Resolvido')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
