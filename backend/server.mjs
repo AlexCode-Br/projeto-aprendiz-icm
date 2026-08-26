@@ -195,9 +195,6 @@ if (db.dialect === 'sqlite') await db.exec(`
     scheduled_at TEXT NOT NULL,
     published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     pinned INTEGER NOT NULL DEFAULT 0,
-    requires_confirmation INTEGER NOT NULL DEFAULT 0,
-    action_url TEXT,
-    action_label TEXT,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -205,7 +202,6 @@ if (db.dialect === 'sqlite') await db.exec(`
   CREATE TABLE IF NOT EXISTS announcement_reads (
     announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    confirmed INTEGER NOT NULL DEFAULT 0,
     read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(announcement_id,user_id)
   );
@@ -441,14 +437,14 @@ async function seedCommunicationData() {
   const professor = await db.prepare('SELECT id FROM users WHERE email=?').get('professor@projetoaprendiz.local');
   if (!await db.prepare('SELECT id FROM announcements LIMIT 1').get()) {
     const rows = [
-      ['Reunião pedagógica','Urgente','A reunião mensal será realizada na sexta-feira, às 18h.','2026-08-24T12:00:00Z',1,1],
-      ['Recital de primavera','Eventos','As inscrições para apresentações estão abertas até 5 de setembro.','2026-08-20T12:00:00Z',1,0],
-      ['Atualização do calendário','Geral','O calendário de aulas e reposições do próximo mês já está disponível.','2026-08-17T12:00:00Z',0,0],
-      ['Novos materiais didáticos','Inscrições','Os materiais complementares foram adicionados à biblioteca.','2026-08-12T12:00:00Z',0,0],
+      ['Reunião pedagógica','Urgente','A reunião mensal será realizada na sexta-feira, às 18h.','2026-08-24T12:00:00Z',1],
+      ['Recital de primavera','Eventos','As inscrições para apresentações estão abertas até 5 de setembro.','2026-08-20T12:00:00Z',1],
+      ['Atualização do calendário','Geral','O calendário de aulas e reposições do próximo mês já está disponível.','2026-08-17T12:00:00Z',0],
+      ['Novos materiais didáticos','Inscrições','Os materiais complementares foram adicionados à biblioteca.','2026-08-12T12:00:00Z',0],
     ];
-    for (const [title,category,content,scheduled,pinned,confirmation] of rows) {
-      await db.prepare('INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned,requires_confirmation) VALUES (?,?,?,?,?,?,?,?)')
-        .run(gestor.id,title,category,content,scheduled,scheduled,pinned,confirmation);
+    for (const [title,category,content,scheduled,pinned] of rows) {
+      await db.prepare('INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)')
+        .run(gestor.id,title,category,content,scheduled,scheduled,pinned);
     }
   }
   if (!await db.prepare('SELECT id FROM support_tickets LIMIT 1').get()) {
@@ -752,6 +748,14 @@ function supportTicketView(row) {
     nao_lidas: Number(row.unread_count || 0),
     total_mensagens: Number(row.message_count || 0),
   };
+}
+
+function sanitizeAnnouncementContent(value) {
+  return String(value || '')
+    .replace(/<\/?(?:script|style|iframe|object|embed|form)[^>]*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"')
+    .slice(0, 4000000);
 }
 
 async function supportTicketForSession(ticketId, session) {
@@ -1550,30 +1554,32 @@ async function api(request, response, url) {
   if(request.method==='GET'&&url.pathname==='/api/informativos'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
     const visibility=session.role==='professor'?' AND announcements.scheduled_at <= CURRENT_TIMESTAMP':'';
-    const rows=await db.prepare(`SELECT announcements.*,COUNT(announcement_reads.user_id) AS read_count,COALESCE(SUM(CASE announcement_reads.confirmed WHEN 1 THEN 1 ELSE 0 END),0) AS confirmation_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read,MAX(CASE WHEN announcement_reads.user_id=? AND announcement_reads.confirmed=1 THEN 1 ELSE 0 END) AS has_confirmed FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id WHERE announcements.active=1${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(session.user_id,session.user_id);
+    const rows=await db.prepare(`SELECT announcements.*,COUNT(announcement_reads.user_id) AS read_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id WHERE announcements.active=1${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(session.user_id);
     const mapped=rows.map(row=>{
       const date=new Date(row.scheduled_at);
-      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:row.content,data_publicacao:row.published_at,data:date.toLocaleDateString('pt-BR',{timeZone:'UTC'}),hora:date.toISOString().slice(11,16),lido:row.read_count,confirmacoes:row.confirmation_count,fixado:Boolean(row.pinned),confirmacao:Boolean(row.requires_confirmation),linkUrl:row.action_url||'',linkTexto:row.action_label||'',hasRead:Boolean(row.has_read),hasConfirmed:Boolean(row.has_confirmed)};
+      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:row.content,data_publicacao:row.published_at,data:date.toLocaleDateString('pt-BR',{timeZone:'UTC'}),hora:date.toISOString().slice(11,16),lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read)};
     });
     return json(response,200,mapped);
   }
   if(request.method==='POST'&&url.pathname==='/api/informativos'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request),title=cleanText(body.titulo,120),content=String(body.conteudo||'').trim().slice(0,5000),actionUrl=cleanText(body.linkAcao,2048),actionLabel=cleanText(body.textoLink,80);
+    const body=await readJson(request),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo);
     const scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
-    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content,'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',linkAcao:httpsUrlError(actionUrl),textoLink:actionUrl&&!actionLabel?'Informe o texto do link.':!actionUrl&&actionLabel?'Informe a URL do link.':''};
+    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.'};
+    if(new Date(scheduled).getTime()<Date.now())errors.dataAgendamento='A data e hora devem ser futuras.';
     if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
-    const result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned,requires_confirmation,action_url,action_label) VALUES (?,?,?,?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0,body.exigirConfirmacao?1:0,actionUrl||null,actionLabel||null);
+    const result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0);
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
     return json(response,201,{id:Number(result.lastInsertRowid)});
   }
   const announcementMatch=url.pathname.match(/^\/api\/informativos\/(\d+)$/);
   if(announcementMatch&&request.method==='PUT'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request),title=cleanText(body.titulo,120),content=String(body.conteudo||'').trim().slice(0,5000),actionUrl=cleanText(body.linkAcao,2048),actionLabel=cleanText(body.textoLink,80),scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
-    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content,'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',linkAcao:httpsUrlError(actionUrl),textoLink:actionUrl&&!actionLabel?'Informe o texto do link.':!actionUrl&&actionLabel?'Informe a URL do link.':''};
+    const body=await readJson(request),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
+    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.'};
+    if(new Date(scheduled).getTime()<Date.now())errors.dataAgendamento='A data e hora devem ser futuras.';
     if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
-    const result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,requires_confirmation=?,action_url=?,action_label=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,body.fixarNoTopo?1:0,body.exigirConfirmacao?1:0,actionUrl||null,actionLabel||null,Number(announcementMatch[1]));
+    const result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,body.fixarNoTopo?1:0,Number(announcementMatch[1]));
     if(!result.changes)return json(response,404,{message:'Informativo não encontrado.'});
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
     return json(response,200,{success:true});
@@ -1587,11 +1593,10 @@ async function api(request, response, url) {
   const readMatch = url.pathname.match(/^\/api\/informativos\/(\d+)\/lida$/);
   if (readMatch && request.method === 'POST') {
     const session = await authorize(request, response, ['gestor', 'professor']); if (!session) return;
-    const body = await readJson(request);
     const announcementId=Number(readMatch[1]);
     const announcement=await db.prepare('SELECT id FROM announcements WHERE id=? AND active=1 AND scheduled_at<=CURRENT_TIMESTAMP').get(announcementId);
     if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
-    await db.prepare('INSERT INTO announcement_reads (announcement_id,user_id,confirmed) VALUES (?,?,?) ON CONFLICT(announcement_id,user_id) DO UPDATE SET confirmed=CASE WHEN announcement_reads.confirmed=1 OR excluded.confirmed=1 THEN 1 ELSE 0 END,read_at=CURRENT_TIMESTAMP').run(announcementId,session.user_id,body.confirmado===true?1:0);
+    await db.prepare('INSERT INTO announcement_reads (announcement_id,user_id) VALUES (?,?) ON CONFLICT(announcement_id,user_id) DO UPDATE SET read_at=CURRENT_TIMESTAMP').run(announcementId,session.user_id);
     return json(response, 200, { success: true });
   }
 
@@ -1599,7 +1604,7 @@ async function api(request, response, url) {
   if (readersMatch && request.method === 'GET') {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const rows = await db.prepare(`
-      SELECT users.name, users.email, professor_profiles.phone, announcement_reads.read_at, announcement_reads.confirmed
+      SELECT users.name, users.email, professor_profiles.phone, announcement_reads.read_at
       FROM announcement_reads
       JOIN users ON users.id = announcement_reads.user_id
       LEFT JOIN professor_profiles ON professor_profiles.user_id = users.id

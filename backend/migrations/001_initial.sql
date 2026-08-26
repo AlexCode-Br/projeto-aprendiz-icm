@@ -154,9 +154,6 @@ CREATE TABLE IF NOT EXISTS announcements (
   scheduled_at TIMESTAMPTZ NOT NULL,
   published_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   pinned INTEGER NOT NULL DEFAULT 0,
-  requires_confirmation INTEGER NOT NULL DEFAULT 0,
-  action_url TEXT,
-  action_label TEXT,
   active INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -166,7 +163,6 @@ CREATE INDEX IF NOT EXISTS announcements_active_scheduled_at_idx ON announcement
 CREATE TABLE IF NOT EXISTS announcement_reads (
   announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  confirmed INTEGER NOT NULL DEFAULT 0,
   read_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY(announcement_id,user_id)
 );

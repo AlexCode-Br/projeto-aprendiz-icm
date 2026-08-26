@@ -100,7 +100,7 @@ const Informativos = () => {
     return (
         <>
             <div className="page-header">
-                <div><h1 className="page-title">Informativos</h1><p className="page-description">Publique comunicados e acompanhe leituras e confirmações.</p></div>
+                <div><h1 className="page-title">Informativos</h1><p className="page-description">Publique comunicados e acompanhe quem visualizou.</p></div>
                 <button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">
                     Criar informativo
                 </button>
@@ -116,12 +116,11 @@ const Informativos = () => {
                             </div>
                             <h3 className="font-bold text-lg text-text-default">{info.titulo}</h3>
                             <p className="text-sm text-text-muted mt-1">{info.data} às {info.hora}</p>
-                            <p className="text-sm text-text-default mt-4">{info.conteudo}</p>
+                            <div className="prose prose-sm mt-4 max-w-none text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
                         </div>
                         <div className="p-4 border-t border-border flex justify-between items-center text-xs text-text-muted">
                             <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem leu">
-                                <span>👁️ {info.lido} Leituras</span>
-                                {info.confirmacao && <span>✔️ {info.confirmacoes} Confirmações</span>}
+                                <span>👁️ {info.lido} visualizações</span>
                             </button>
                             <div className="flex items-center space-x-2">
                                 <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-blue-600 hover:bg-blue-50 hover:underline dark:hover:bg-blue-950/30">Editar</button>

@@ -13,7 +13,7 @@ const ProfessorInformativos = () => {
             // Ordena para que os mais recentes apareçam primeiro
             const sorted = response.data.sort((a, b) => new Date(b.data_publicacao) - new Date(a.data_publicacao));
             setInformativos(sorted);
-            await Promise.allSettled(sorted.filter(info => !info.hasRead).map(info => api.post(`/api/informativos/${info.id}/lida`, { confirmado: false })));
+            await Promise.allSettled(sorted.filter(info => !info.hasRead).map(info => api.post(`/api/informativos/${info.id}/lida`)));
             setError(null);
         } catch (err) {
             setError("Falha ao carregar os informativos. Tente novamente mais tarde.");
@@ -41,15 +41,6 @@ const ProfessorInformativos = () => {
     if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando informativos...</div>;
     if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchInformativos} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
-    const handleConfirmRead = async (id) => {
-        try {
-            await api.post(`/api/informativos/${id}/lida`, { confirmado: true });
-            fetchInformativos();
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
     return (
         <div className="">
             <div className="page-header">
@@ -71,33 +62,13 @@ const ProfessorInformativos = () => {
                             {info.fixado && <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Fixado</span>}
                         </div>
                         <h3 className="text-xl font-bold text-text-default mb-2">{info.titulo}</h3>
-                        <p className="text-text-default mb-4 whitespace-pre-wrap">{info.conteudo}</p>
-
-                        {info.linkUrl && (
-                            <a href={info.linkUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm font-medium block mb-4">
-                                {info.linkTexto || 'Acessar link'}
-                            </a>
-                        )}
+                        <div className="prose prose-sm mb-4 max-w-none text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
 
                         <div className="flex items-center justify-between pt-4 border-t border-border">
                             <p className="text-xs text-text-muted">
                                 Publicado em {new Date(info.data_publicacao).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
                             </p>
 
-                            {info.confirmacao && (
-                                <div>
-                                    {info.hasConfirmed ? (
-                                        <span className="text-sm text-green-600 font-medium">✓ Leitura confirmada</span>
-                                    ) : (
-                                        <button
-                                            onClick={() => handleConfirmRead(info.id)}
-                                            className="btn btn-sm btn-primary"
-                                        >
-                                            Confirmar leitura
-                                        </button>
-                                    )}
-                                </div>
-                            )}
                         </div>
                     </div>
                 )) : (
