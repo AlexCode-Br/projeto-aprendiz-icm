@@ -2,7 +2,7 @@ import React from 'react';
 import Modal from './Modal';
 
 const SummaryCard = ({ label, value }) => (
-    <div className="rounded-xl border border-border bg-gray-50 p-4 dark:bg-white/5">
+    <div className="rounded-xl border border-border bg-gray-50 p-4 bg-surface-muted">
         <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{label}</p>
         <p className="mt-1 text-2xl font-bold text-text-default">{value}</p>
     </div>
@@ -44,7 +44,7 @@ const ProfessorDeletionImpactModal = ({ isOpen, onClose, onContinue, impact, loa
                             ))}
                         </div>
                     ) : (
-                        <p className="mt-3 rounded-xl border border-border bg-gray-50 p-4 text-sm text-text-muted dark:bg-white/5">Este professor não possui turmas cadastradas.</p>
+                        <p className="mt-3 rounded-xl border border-border bg-gray-50 p-4 text-sm text-text-muted bg-surface-muted">Este professor não possui turmas cadastradas.</p>
                     )}
                 </div>
 

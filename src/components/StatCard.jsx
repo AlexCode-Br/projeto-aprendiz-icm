@@ -9,9 +9,9 @@ const StatCard = ({ to, title, value, icon, colorClass, delay }) => {
     };
 
     return (
-        <Link 
-            to={to} 
-            className={`block p-5 bg-surface rounded-lg shadow-sm interactive-card fade-in-up border border-border delay-${delay}`}
+        <Link
+            to={to}
+            className={`block p-5 bg-surface rounded-lg shadow-sm interactive-card  border border-border delay-${delay}`}
         >
             <div className="grid grid-cols-[1fr,auto] items-center gap-4">
                 <div className="min-w-0">

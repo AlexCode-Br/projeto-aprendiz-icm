@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { exportToPdf } from '../../utils/exportUtils.js';
+import FormSelect from '../../components/FormSelect';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -17,14 +18,14 @@ const ReportTable = ({ headers, data, itemsPerPage = 5 }) => {
         <div className="mt-4">
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-text-default">
-                    <thead className="bg-gray-50 dark:bg-surface/30 text-xs uppercase text-text-muted">
+                    <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                         <tr>
                             {headers.map(header => <th key={header} className="px-6 py-3">{header}</th>)}
                         </tr>
                     </thead>
                     <tbody>
                         {paginatedData.map((row, rowIndex) => (
-                            <tr key={rowIndex} className="border-b border-border hover:bg-gray-50 dark:hover:bg-gray-50/10">
+                            <tr key={rowIndex} className="border-b border-border hover:bg-surface-hover transition-colors">
                                 {Object.values(row).map((cell, cellIndex) => (
                                     <td key={cellIndex} className="px-6 py-4">{cell}</td>
                                 ))}
@@ -39,7 +40,7 @@ const ReportTable = ({ headers, data, itemsPerPage = 5 }) => {
                     <div className="flex items-center space-x-1">
                         <button type="button" aria-label="Página anterior" className="icon-button min-h-9 min-w-9" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>&lt;</button>
                         {[...Array(totalPages).keys()].map(i => (
-                            <button type="button" aria-label={`Página ${i + 1}`} aria-current={currentPage === i + 1 ? 'page' : undefined} key={i} onClick={() => setCurrentPage(i + 1)} className={`min-h-9 min-w-9 rounded-md ${currentPage === i + 1 ? 'bg-primary font-bold text-white' : 'hover:bg-gray-100 dark:hover:bg-white/10'}`}>{i + 1}</button>
+                            <button type="button" aria-label={`Página ${i + 1}`} aria-current={currentPage === i + 1 ? 'page' : undefined} key={i} onClick={() => setCurrentPage(i + 1)} className={`min-h-9 min-w-9 rounded-md ${currentPage === i + 1 ? 'bg-primary font-bold text-white' : 'hover:bg-surface-hover transition-colors'}`}>{i + 1}</button>
                         ))}
                         <button type="button" aria-label="Próxima página" className="icon-button min-h-9 min-w-9" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>&gt;</button>
                     </div>
@@ -86,7 +87,7 @@ const Relatorios = () => {
         const data = generatedFreqData.map(Object.values);
         exportToPdf("Relatório de Frequência", headers, data);
     };
-    
+
     const handleExportDropout = () => {
         const headers = ["Curso", "Aluno", "Data Inscrição", "Data Evasão", "Motivo"];
         const data = generatedDropoutData.map(Object.values);
@@ -105,13 +106,22 @@ const Relatorios = () => {
                 </div>
                 <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Filtros aqui */}
-                    <label><span className="form-label">Curso</span><select value={freqFilters.curso} onChange={event => setFreqFilters({...freqFilters,curso:event.target.value})} className="form-control"><option value="">Todos os cursos</option>{options.cursos.map(c => <option key={c}>{c}</option>)}</select></label>
-                    <label><span className="form-label">Igreja</span><select value={freqFilters.local} onChange={event => setFreqFilters({...freqFilters,local:event.target.value})} className="form-control"><option value="">Todas as igrejas</option>{options.locais.map(l => <option key={l}>{l}</option>)}</select></label>
-                    <label><span className="form-label">Professor</span><select value={freqFilters.professor} onChange={event => setFreqFilters({...freqFilters,professor:event.target.value})} className="form-control"><option value="">Todos os professores</option>{options.professores.map(p => <option key={p}>{p}</option>)}</select></label>
+                    <div>
+                        <label className="form-label">Curso</label>
+                        <FormSelect value={freqFilters.curso} onChange={event => setFreqFilters({...freqFilters,curso:event.target.value})} options={options.cursos} placeholder="Todos os cursos" />
+                    </div>
+                    <div>
+                        <label className="form-label">Igreja</label>
+                        <FormSelect value={freqFilters.local} onChange={event => setFreqFilters({...freqFilters,local:event.target.value})} options={options.locais} placeholder="Todas as igrejas" />
+                    </div>
+                    <div>
+                        <label className="form-label">Professor</label>
+                        <FormSelect value={freqFilters.professor} onChange={event => setFreqFilters({...freqFilters,professor:event.target.value})} options={options.professores} placeholder="Todos os professores" />
+                    </div>
                     <label><span className="form-label">Data inicial</span><input type="date" value={freqFilters.dataInicio} onChange={event => setFreqFilters({...freqFilters,dataInicio:event.target.value})} className="form-control" /></label>
                     <label><span className="form-label">Data final</span><input type="date" value={freqFilters.dataFim} onChange={event => setFreqFilters({...freqFilters,dataFim:event.target.value})} className="form-control" /></label>
                 </div>
-                <div className="p-4 md:px-6 flex justify-end items-center border-t border-border bg-gray-50 dark:bg-surface/30">
+                <div className="p-4 md:px-6 flex justify-end items-center border-t border-border bg-surface-muted">
                     <button type="button" onClick={handleGenerateFrequencyReport} className="btn btn-primary">Gerar relatório</button>
                 </div>
                 {generatedFreqData && (
@@ -133,12 +143,18 @@ const Relatorios = () => {
                 </div>
                  <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Filtros aqui */}
-                    <label><span className="form-label">Curso</span><select value={dropoutFilters.curso} onChange={event => setDropoutFilters({...dropoutFilters,curso:event.target.value})} className="form-control"><option value="">Todos os cursos</option>{options.cursos.map(c => <option key={c}>{c}</option>)}</select></label>
-                    <label><span className="form-label">Motivo</span><select value={dropoutFilters.motivo} onChange={event => setDropoutFilters({...dropoutFilters,motivo:event.target.value})} className="form-control"><option value="">Todos os motivos</option><option>Conflito de horários</option><option>Questões pessoais</option></select></label>
+                    <div>
+                        <label className="form-label">Curso</label>
+                        <FormSelect value={dropoutFilters.curso} onChange={event => setDropoutFilters({...dropoutFilters,curso:event.target.value})} options={options.cursos} placeholder="Todos os cursos" />
+                    </div>
+                    <div>
+                        <label className="form-label">Motivo</label>
+                        <FormSelect value={dropoutFilters.motivo} onChange={event => setDropoutFilters({...dropoutFilters,motivo:event.target.value})} options={['Conflito de horários', 'Questões pessoais', 'Excluído pelo gestor']} placeholder="Todos os motivos" />
+                    </div>
                     <label><span className="form-label">Data inicial</span><input type="date" value={dropoutFilters.dataInicio} onChange={event => setDropoutFilters({...dropoutFilters,dataInicio:event.target.value})} className="form-control" /></label>
                     <label><span className="form-label">Data final</span><input type="date" value={dropoutFilters.dataFim} onChange={event => setDropoutFilters({...dropoutFilters,dataFim:event.target.value})} className="form-control" /></label>
                 </div>
-                <div className="p-4 md:px-6 flex justify-end items-center border-t border-border bg-gray-50 dark:bg-surface/30">
+                <div className="p-4 md:px-6 flex justify-end items-center border-t border-border bg-surface-muted">
                     <button type="button" onClick={handleGenerateDropoutReport} className="btn btn-primary">Gerar relatório</button>
                 </div>
                  {generatedDropoutData && (

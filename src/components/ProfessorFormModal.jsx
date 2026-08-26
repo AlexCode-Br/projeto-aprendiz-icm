@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
+import FormSelect from './FormSelect';
+import FormCheckbox from './FormCheckbox';
 import { cleanText, hasValidationErrors, normalizeEmail, phoneDigits, validateProfessor } from '../../shared/validation.mjs';
 
 const initialFormState = { nome: '', contato: '', telefone: '', local: '', cursos: [] };
@@ -76,17 +78,31 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
                         </div>
                         <div>
                             <label htmlFor="professor-local" className="form-label">Igreja principal</label>
-                            <select id="professor-local" name="local" value={formData.local} onChange={event => update('local', event.target.value)} aria-invalid={Boolean(errors.local)} className={`form-control ${errors.local ? 'border-danger' : ''}`}>
-                                <option value="">Selecione uma igreja</option>
-                                {locations.map(location => <option key={location} value={location}>{location}</option>)}
-                            </select>
+                            <FormSelect
+                                id="professor-local"
+                                name="local"
+                                value={formData.local}
+                                onChange={event => update('local', event.target.value)}
+                                options={locations}
+                                placeholder="Selecione uma igreja"
+                                invalid={Boolean(errors.local)}
+                            />
                             {errors.local && <p className="mt-1 text-xs text-danger">{errors.local}</p>}
                         </div>
                     </div>
                     <fieldset>
                         <legend className="form-label">Cursos que o professor ministrará</legend>
                         <div className={`grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2 ${errors.cursos ? 'border-danger' : 'border-border'}`}>
-                            {courses.map(course => <label key={course} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={formData.cursos.includes(course)} onChange={() => toggleCourse(course)} className="h-4 w-4 accent-primary" /><span className="text-sm">{course}</span></label>)}
+                            {courses.map(course => (
+                                <div key={course} className="rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                                    <FormCheckbox
+                                        checked={formData.cursos.includes(course)}
+                                        onChange={() => toggleCourse(course)}
+                                        label={course}
+                                        className="py-2 px-3 min-h-11 items-center"
+                                    />
+                                </div>
+                            ))}
                             {!courses.length && <p className="col-span-full py-4 text-center text-sm text-text-muted">Nenhum curso ativo cadastrado.</p>}
                         </div>
                         {errors.cursos && <p className="mt-1 text-xs text-danger">{errors.cursos}</p>}

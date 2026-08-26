@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import CursoModal from '../../components/CursoModal';
 import CatalogItemModal from '../../components/CatalogItemModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import FormSelect from '../../components/FormSelect';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 
@@ -164,15 +165,13 @@ const Cursos = () => {
                     </div>
                     <div>
                         <label htmlFor="course-location" className="form-label">Filtrar por igreja</label>
-                        <select
+                        <FormSelect
                             id="course-location"
                             value={selectedLocal}
                             onChange={(e) => setSelectedLocal(e.target.value)}
-                            className="form-control"
-                        >
-                            <option value="">Todas as Igrejas</option>
-                            {locaisDisponiveis.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-                        </select>
+                            options={locaisDisponiveis}
+                            placeholder="Todas as Igrejas"
+                        />
                     </div>
                 </div>
             </section>
@@ -180,11 +179,12 @@ const Cursos = () => {
             <div className="panel overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-text-default">
-                        <thead className="bg-gray-50 dark:bg-surface/30 text-xs uppercase text-text-muted">
+                        <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                             <tr>
                                 <th scope="col" className="px-6 py-3">Curso</th>
                                 <th scope="col" className="px-6 py-3">Igreja</th>
                                 <th scope="col" className="px-6 py-3">Professor</th>
+                                <th scope="col" className="px-6 py-3">Horário</th>
                                 <th scope="col" className="px-6 py-3 text-center">Alunos</th>
                                 <th scope="col" className="px-6 py-3 text-center">Status</th>
                                 <th scope="col" className="px-6 py-3 text-center">Ações</th>
@@ -192,10 +192,13 @@ const Cursos = () => {
                         </thead>
                         <tbody>
                             {filteredCursos.map(curso => (
-                                <tr key={curso.id} className="border-b border-border hover:bg-gray-50 dark:hover:bg-gray-50/10">
+                                <tr key={curso.id} className="border-b border-border hover:bg-surface-hover transition-colors">
                                     <td className="px-6 py-4 font-medium">{curso.nome}</td>
                                     <td className="px-6 py-4">{curso.local}</td>
                                     <td className="px-6 py-4">{curso.professor}</td>
+                                    <td className="px-6 py-4 text-xs">
+                                        {curso.weekday ? `${curso.weekday} às ${curso.start_time || '--:--'}` : 'A definir'}
+                                    </td>
                                     <td className="px-6 py-4 text-center">{curso.alunos}</td>
                                     <td className="px-6 py-4 text-center">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${curso.status === 'Ativo' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>

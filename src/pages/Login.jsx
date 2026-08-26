@@ -1,5 +1,6 @@
 import React, { useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import FormCheckbox from '../components/FormCheckbox';
 import { AuthContext } from '../contexts/AuthContext';
 import AuthLayout from '../layouts/AuthLayout';
 
@@ -64,10 +65,12 @@ const Login = () => {
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-text-default">
-                            <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)} className="h-4 w-4 accent-primary" />
-                            Lembrar meu acesso
-                        </label>
+                        <FormCheckbox
+                            checked={remember}
+                            onChange={event => setRemember(event.target.checked)}
+                            label="Lembrar meu acesso"
+                            className="items-center min-h-11"
+                        />
                         <Link to="/forgot-password" className="font-semibold text-primary hover:text-primary-dark hover:underline">Esqueceu a senha?</Link>
                     </div>
 

@@ -36,10 +36,10 @@ const Dashboard = () => {
 
     return (
         <>
-            <div className="page-header fade-in-up">
+            <div className="page-header">
                 <div><h1 className="page-title">Visão geral</h1><p className="page-description">Acompanhe inscrições, turmas, equipe e frequência em um só lugar.</p></div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
                 <StatCard to="/gestor/alunos" title="Total de Alunos" value={loading ? '—' : dashboard.stats.totalAlunos} icon={<AlunosIcon />} colorClass="primary" delay="100" />
                 <StatCard to="/gestor/cursos" title="Turmas Ativas" value={loading ? '—' : dashboard.stats.cursosAtivos} icon={<CursosIcon />} colorClass="success" delay="200" />
@@ -48,7 +48,7 @@ const Dashboard = () => {
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-6">
-                <div className="panel p-4 fade-in-up delay-500 md:p-6 xl:col-span-2">
+                <div className="panel p-4   md:p-6 xl:col-span-2">
                     <h3 className="text-lg font-semibold text-text-default">Total de Inscrições por Curso</h3>
                     <div className="mt-4" style={{ position: 'relative', height: '40vh', minHeight: '320px' }}>
                        <EnrollmentOverviewChart data={dashboard.inscricoesPorCurso} />
@@ -56,13 +56,13 @@ const Dashboard = () => {
                 </div>
                 <RecentActivities students={dashboard.ultimasInscricoes} />
             </div>
-            
+
             <LowFrequencyTable students={dashboard.baixaFrequencia} onSelectStudent={handleSelectStudent} />
 
-            <StudentDetailsModal 
-                student={selectedStudent} 
-                isOpen={isModalOpen} 
-                onClose={handleCloseModal} 
+            <StudentDetailsModal
+                student={selectedStudent}
+                isOpen={isModalOpen}
+                onClose={handleCloseModal}
             />
         </>
     );

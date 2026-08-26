@@ -7,7 +7,7 @@ const StatusIndicator = ({ status }) => {
   return (
     <div className="flex items-center space-x-2">
       <span className={`h-2.5 w-2.5 rounded-full ${bgColor}`}></span>
-      <span className="text-sm text-gray-700">{status}</span>
+      <span className="text-sm text-text-default">{status}</span>
     </div>
   );
 };

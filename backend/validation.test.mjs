@@ -7,6 +7,7 @@ import {
   phoneError,
   validateProfessor,
   validateStudent,
+  validateClassSchedule,
 } from '../shared/validation.mjs';
 
 test('valida dados pessoais e rejeita conteúdo arbitrário', () => {
@@ -63,4 +64,12 @@ test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () =
     'curso',
     'telefone',
   ].sort());
+});
+
+test('valida dia e horário da turma como um único agendamento opcional', () => {
+  assert.deepEqual(validateClassSchedule({ weekday: '', start_time: '' }), {});
+  assert.deepEqual(validateClassSchedule({ weekday: 'Quarta-feira', start_time: '19:30' }), {});
+  assert.equal(validateClassSchedule({ weekday: 'Quarta-feira', start_time: '' }).start_time, 'Informe o horário da turma.');
+  assert.equal(validateClassSchedule({ weekday: '', start_time: '19:30' }).weekday, 'Selecione o dia da semana.');
+  assert.equal(validateClassSchedule({ weekday: 'Feriado', start_time: '25:99' }).weekday, 'Selecione um dia da semana válido.');
 });

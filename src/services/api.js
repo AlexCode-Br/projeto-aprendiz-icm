@@ -1,5 +1,3 @@
-import mockApi from './mockApi';
-
 let csrfToken = '';
 let accessToken = '';
 
@@ -24,19 +22,6 @@ async function request(method, url, body, options = {}) {
   return { data, ...options };
 }
 
-const isRealRoute = url => (
-  url.startsWith('/api/auth/') ||
-  url.startsWith('/api/professores/') ||
-  url.startsWith('/api/informativos') ||
-  url.startsWith('/api/suporte') ||
-  url.startsWith('/api/relatorios') ||
-  url.startsWith('/api/account') ||
-  url.startsWith('/api/invitations') ||
-  url.startsWith('/api/dashboard') ||
-  url.startsWith('/api/catalogos') ||
-  ['/alunos', '/cursos', '/professores', '/frequencia'].some(prefix => url === prefix || url.startsWith(`${prefix}/`))
-);
-
 const normalizeBody = body => body instanceof FormData ? Object.fromEntries(body.entries()) : body;
 const withQuery = (url, config) => {
   const params = config?.params;
@@ -49,14 +34,10 @@ const api = {
   defaults: { headers: {} },
   setCsrfToken(value) { csrfToken = value || ''; },
   setAccessToken(value) { accessToken = value || ''; },
-  get(url, config) {
-    return isRealRoute(url) ? request('GET', withQuery(url, config)) : mockApi.get(url, config);
-  },
-  post(url, body, config) {
-    return isRealRoute(url) ? request('POST', url, normalizeBody(body), config) : mockApi.post(url, body, config);
-  },
-  put(url, body, config) { return isRealRoute(url) ? request('PUT', url, normalizeBody(body), config) : mockApi.put(url, body, config); },
-  delete(url, config) { return isRealRoute(url) ? request('DELETE', url, undefined, config) : mockApi.delete(url, config); },
+  get(url, config) { return request('GET', withQuery(url, config)); },
+  post(url, body, config) { return request('POST', url, normalizeBody(body), config); },
+  put(url, body, config) { return request('PUT', url, normalizeBody(body), config); },
+  delete(url, config) { return request('DELETE', url, undefined, config); },
 };
 
 export default api;

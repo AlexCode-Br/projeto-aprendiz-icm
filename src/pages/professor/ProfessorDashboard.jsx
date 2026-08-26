@@ -46,9 +46,9 @@ const ProfessorDashboard = () => {
                 api.get('/api/informativos?limit=3'),
                 api.get('/api/dashboard/professor')
             ]);
-            
+
             const studentData = studentResponse.data.alunos || [];
-            
+
             const summary = dashboardResponse.data;
             setStats({
                 totalAlunos: summary.stats.totalAlunos,
@@ -59,7 +59,7 @@ const ProfessorDashboard = () => {
 
             setRecentStudents(studentData.slice(0, 5));
             setInformativos(infoResponse.data.sort((a, b) => new Date(b.data_publicacao) - new Date(a.data_publicacao)).slice(0, 3));
-            
+
             setError(null);
         } catch (err) {
             setError("Falha ao carregar os dados do dashboard.");
@@ -72,12 +72,12 @@ const ProfessorDashboard = () => {
     useEffect(() => {
         fetchData();
     }, [fetchData]);
-    
+
     if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando painel...</div>;
     if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchData} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
-        <div className="fade-in-up">
+        <div className="">
             <h1 className="page-title mb-2">
                 Olá, Professor(a) {user?.nome?.split(' ')[0] || ''}!
             </h1>
@@ -103,7 +103,7 @@ const ProfessorDashboard = () => {
                     </div>
                     <ul className="divide-y divide-border">
                         {recentStudents.length > 0 ? recentStudents.map(student => (
-                            <li key={student.id} className="p-4 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-50/10">
+                            <li key={student.id} className="p-4 flex items-center justify-between hover:bg-surface-hover transition-colors">
                                 <div>
                                     <p className="font-medium text-text-default">{student.nome}</p>
                                     <p className="text-sm text-text-muted">{student.email}</p>
@@ -115,7 +115,7 @@ const ProfessorDashboard = () => {
                         )}
                     </ul>
                 </div>
-                
+
                 {/* Avisos e Informativos */}
                 <div className="panel overflow-hidden">
                     <div className="p-5 flex justify-between items-center border-b border-border">
@@ -126,7 +126,7 @@ const ProfessorDashboard = () => {
                     </div>
                     <ul className="divide-y divide-border">
                        {informativos.length > 0 ? informativos.map(info => (
-                           <li key={info.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-50/10">
+                           <li key={info.id} className="p-4 hover:bg-surface-hover transition-colors">
                                <p className="font-semibold text-text-default">{info.titulo}</p>
                                <p className="text-sm text-text-muted mt-1 line-clamp-2">{info.conteudo}</p>
                                <p className="text-xs text-text-muted mt-2">{new Date(info.data_publicacao).toLocaleDateString()}</p>

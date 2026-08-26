@@ -236,33 +236,6 @@
 .menu-open .icon-hamburger { display: none; }
 .menu-open .icon-close { display: block; }
 
-.dark .bg-surface\/80 { background-color: rgba(36, 37, 38, 0.8); }
-.dark .bg-gray-50 { background-color: #3a3b3d; }
-.dark .hover\:bg-gray-50:hover { background-color: #484a4b; }
-.dark .hover\:bg-gray-100:hover { background-color: rgba(255, 255, 255, 0.08); }
-.dark .text-gray-700 { color: var(--color-text-default); }
-.dark .text-gray-900 { color: var(--color-text-default); }
-.dark .text-gray-500 { color: var(--color-text-muted); }
-.dark .text-gray-400 { color: var(--color-text-muted); }
-.dark .text-primary { color: #ff8a80; }
-.dark .text-danger { color: #ff7b86; }
-.dark .text-success { color: #64d394; }
-.dark .hover\:text-primary-dark:hover { color: #ffb4ac; }
-.dark .hover\:text-gray-600:hover { color: var(--color-text-default); }
-.dark #profile-dropdown, .dark .modal-content { background-color: var(--color-surface); }
-.dark input,
-.dark select,
-.dark textarea {
-    background-color: transparent;
-    color: var(--color-text-default);
-}
-.dark input::placeholder { color: var(--color-text-muted); }
-.dark .bg-gray-200 { background-color: #4a4b4c; }
-.dark .hover\:bg-gray-200:hover { background-color: #636465; }
-.dark .hover\:bg-gray-300:hover { background-color: #76787a; }
-.dark .bg-white { background-color: var(--color-surface); }
-.dark .border-gray-300 { border-color: #55585a; }
-
 @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after {
