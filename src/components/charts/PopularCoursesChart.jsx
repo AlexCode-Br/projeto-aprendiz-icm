@@ -5,7 +5,7 @@ const COLORS = ['#ef4444', '#f97316', '#84cc16', '#3b82f6', '#8b5cf6'];
 
 const PopularCoursesChart = ({ data }) => {
   if (!data || data.length === 0) {
-    return <p className="text-center text-gray-500">Não há dados de cursos para exibir.</p>;
+    return <p className="text-center text-text-muted">Não há dados de cursos para exibir.</p>;
   }
 
   return (

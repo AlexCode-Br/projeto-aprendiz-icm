@@ -4,29 +4,46 @@ import ConfirmationModal from '../../components/ConfirmationModal';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 
+import InformativoReadersModal from '../../components/InformativoReadersModal';
+
 const Informativos = () => {
     const { showToast } = useToast();
     const [informativos, setInformativos] = useState([]);
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [isDeleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
     const [isSendConfirmModalOpen, setSendConfirmModalOpen] = useState(false);
+    const [isReadersModalOpen, setReadersModalOpen] = useState(false);
     const [currentInformativo, setCurrentInformativo] = useState(null);
     const [formDataToSave, setFormDataToSave] = useState(null);
+    const [hasProfessors, setHasProfessors] = useState(false);
 
     const fetchInformativos = useCallback(async () => {
         try {
-            const response = await api.get('/api/informativos');
-            setInformativos(response.data);
+            const [infoResponse, profResponse] = await Promise.all([
+                api.get('/api/informativos'),
+                api.get('/professores')
+            ]);
+            setInformativos(infoResponse.data);
+            setHasProfessors(profResponse.data.some(professor => professor.status === 'Ativo'));
         } catch (error) {
-            showToast(error.message || 'Erro ao carregar informativos.', 'error');
+            showToast(error.message || 'Erro ao carregar dados.', 'error');
         }
     }, [showToast]);
 
     useEffect(() => { fetchInformativos(); }, [fetchInformativos]);
 
     const handleOpenFormModal = (info = null) => {
+        if (!info && !hasProfessors) {
+            showToast('Cadastre ao menos um professor antes de criar informativos.', 'warning');
+            return;
+        }
         setCurrentInformativo(info);
         setFormModalOpen(true);
+    };
+
+    const handleOpenReadersModal = (info) => {
+        setCurrentInformativo(info);
+        setReadersModalOpen(true);
     };
 
     const handleOpenDeleteConfirm = (info) => {
@@ -69,7 +86,7 @@ const Informativos = () => {
             showToast(error.message || 'Erro ao remover o informativo.', 'error');
         }
     };
-    
+
     const getCategoryClass = (cat) => ({
         'Geral': 'bg-blue-100 text-blue-800',
         'Inscrições': 'bg-green-100 text-green-800',
@@ -99,10 +116,10 @@ const Informativos = () => {
                             <p className="text-sm text-text-default mt-4">{info.conteudo}</p>
                         </div>
                         <div className="p-4 border-t border-border flex justify-between items-center text-xs text-text-muted">
-                            <div>
+                            <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem leu">
                                 <span>👁️ {info.lido} Leituras</span>
-                                {info.confirmacao && <span className="ml-4">✔️ {info.confirmacoes} Confirmações</span>}
-                            </div>
+                                {info.confirmacao && <span>✔️ {info.confirmacoes} Confirmações</span>}
+                            </button>
                             <div className="flex items-center space-x-2">
                                 <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-blue-600 hover:bg-blue-50 hover:underline dark:hover:bg-blue-950/30">Editar</button>
                                 <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-10 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
@@ -117,6 +134,12 @@ const Informativos = () => {
                 isOpen={isFormModalOpen}
                 onClose={() => setFormModalOpen(false)}
                 onSave={handleSaveAndOpenConfirm}
+                informativo={currentInformativo}
+            />
+
+            <InformativoReadersModal
+                isOpen={isReadersModalOpen}
+                onClose={() => setReadersModalOpen(false)}
                 informativo={currentInformativo}
             />
 

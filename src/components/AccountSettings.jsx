@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import FormCheckbox from './FormCheckbox';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -67,7 +68,7 @@ export default function AccountSettings() {
         ['newStudent', 'Novos alunos', 'Avisar quando um aluno entrar em uma de suas turmas.'], ['newTicket', 'Respostas do suporte', 'Avisar quando houver uma resposta em seus tickets.'], ['courseUpdates', 'Alterações nas turmas', 'Receber mudanças de curso, local ou horário.'], ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
     ];
 
-    return <div className="max-w-5xl mx-auto space-y-6 fade-in-up">
+    return <div className="space-y-6">
         <div><h1 className="page-title">Configurações da conta</h1><p className="page-description">Seus dados são salvos com segurança e usados no acesso ao sistema.</p></div>
         <form onSubmit={saveProfile} className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Dados pessoais</h3>
@@ -82,7 +83,7 @@ export default function AccountSettings() {
         </form>
         <section className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Notificações</h3>
-            <div className="mt-4 divide-y divide-border">{options.map(([key, title, description]) => <label key={key} className="flex items-center justify-between gap-5 py-4 cursor-pointer"><span><span className="block font-medium text-text-default">{title}</span><span className="block text-sm text-text-muted">{description}</span></span><input type="checkbox" checked={Boolean(preferences[key])} onChange={event => setPreferences({ ...preferences, [key]: event.target.checked })} className="h-5 w-5 accent-primary" /></label>)}</div>
+            <div className="mt-4 divide-y divide-border">{options.map(([key, title, description]) => <div key={key} className="py-4"><FormCheckbox checked={Boolean(preferences[key])} onChange={event => setPreferences({ ...preferences, [key]: event.target.checked })} label={title} description={description} className="justify-between flex-row-reverse w-full" /></div>)}</div>
             <div className="mt-4 flex justify-end"><button type="button" onClick={savePreferences} disabled={saving === 'preferences'} className="submit-btn disabled:opacity-60">{saving === 'preferences' ? 'Salvando...' : 'Salvar preferências'}</button></div>
         </section>
     </div>;

@@ -3,15 +3,15 @@ import { Link } from 'react-router-dom';
 
 const RecentActivities = ({ students = [] }) => {
     return (
-        <div className="panel p-4 fade-in-up delay-600 md:p-6">
+        <div className="panel p-4   md:p-6">
             <h3 className="text-lg font-semibold text-text-default">Últimas Inscrições</h3>
             <ul className="mt-4 -mx-2 space-y-1">
                 {students.map((student, index) => (
                     <li key={index}>
-                        <Link to="/gestor/alunos" className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-50/10 transition-colors duration-200">
-                            <img 
-                                className="w-10 h-10 rounded-full" 
-                                src={`https://placehold.co/100x100/b71c1c/FFFFFF?text=${student.nome.charAt(0)}`} 
+                        <Link to="/gestor/alunos" className="flex items-center space-x-3 p-2 rounded-lg hover:bg-surface-hover transition-colors transition-colors duration-200">
+                            <img
+                                className="w-10 h-10 rounded-full"
+                                src={`https://placehold.co/100x100/b71c1c/FFFFFF?text=${student.nome.charAt(0)}`}
                                 alt="Avatar"
                             />
                             <div>

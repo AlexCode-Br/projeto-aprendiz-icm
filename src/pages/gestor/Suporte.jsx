@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import TicketDetailsModal from '../../components/TicketDetailsModal';
+import FormSelect from '../../components/FormSelect';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 
@@ -16,7 +17,7 @@ const StatusDropdown = ({ ticket, onStatusChange }) => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-    
+
     const statusOptions = ['Aberto', 'Pendente', 'Resolvido'];
     const getStatusClass = (status, base = false) => {
         const classes = {
@@ -104,28 +105,27 @@ const Suporte = () => {
             <section className="panel mb-6 p-4" aria-label="Filtros de suporte">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <label><span className="sr-only">Pesquisar tickets</span><input
-                        type="text" 
-                        placeholder="Pesquisar por assunto ou nome..." 
+                        type="text"
+                        placeholder="Pesquisar por assunto ou nome..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         className="form-control" /></label>
-                    <label><span className="sr-only">Filtrar tickets por status</span><select
-                        value={selectedStatus}
-                        onChange={e => setSelectedStatus(e.target.value)}
-                        className="form-control"
-                    >
-                        <option value="">Todos os Status</option>
-                        <option>Aberto</option>
-                        <option>Pendente</option>
-                        <option>Resolvido</option>
-                    </select></label>
+                    <div>
+                        <label className="sr-only">Filtrar tickets por status</label>
+                        <FormSelect
+                            value={selectedStatus}
+                            onChange={e => setSelectedStatus(e.target.value)}
+                            options={['Aberto', 'Pendente', 'Resolvido']}
+                            placeholder="Todos os Status"
+                        />
+                    </div>
                 </div>
             </section>
 
             <div className="panel overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
-                        <thead className="bg-gray-50 dark:bg-surface/30 text-xs uppercase text-text-muted">
+                        <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                             <tr>
                                 <th className="px-6 py-3">ID</th>
                                 <th className="px-6 py-3">Assunto</th>
@@ -137,7 +137,7 @@ const Suporte = () => {
                         </thead>
                         <tbody>
                             {filteredTickets.map(ticket => (
-                                <tr key={ticket.id} className="border-b border-border hover:bg-gray-50 dark:hover:bg-gray-50/10">
+                                <tr key={ticket.id} className="border-b border-border hover:bg-surface-hover transition-colors">
                                     <td className="px-6 py-4 font-mono text-text-muted">#{ticket.id}</td>
                                     <td className="px-6 py-4 font-medium">{ticket.assunto}</td>
                                     <td className="px-6 py-4">{ticket.nome}</td>
@@ -158,7 +158,7 @@ const Suporte = () => {
                 </div>
             </div>
 
-            <TicketDetailsModal 
+            <TicketDetailsModal
                 isOpen={isModalOpen}
                 onClose={() => setModalOpen(false)}
                 ticket={currentTicket}

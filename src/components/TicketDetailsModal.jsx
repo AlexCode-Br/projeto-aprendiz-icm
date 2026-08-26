@@ -34,7 +34,7 @@ const TicketDetailsModal = ({ isOpen, onClose, ticket, onReply }) => {
                 {[['Nome', ticket.nome], ['E-mail', ticket.contato], ['Data', ticket.data]].map(([label, value]) => <div key={label}><dt className="text-sm font-medium text-text-muted">{label}</dt><dd className="mt-1 break-words text-text-default">{value || 'Não informado'}</dd></div>)}
                 <div><dt className="text-sm font-medium text-text-muted">Status</dt><dd className="mt-1"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusClass}`}>{ticket.status}</span></dd></div>
                 <div className="sm:col-span-2"><dt className="text-sm font-medium text-text-muted">Assunto</dt><dd className="mt-1 font-semibold text-text-default">{ticket.assunto}</dd></div>
-                <div className="sm:col-span-2"><dt className="text-sm font-medium text-text-muted">Mensagem</dt><dd className="mt-2 whitespace-pre-wrap rounded-lg border border-border bg-gray-50 p-3 text-text-default dark:bg-white/5">{ticket.mensagem}</dd></div>
+                <div className="sm:col-span-2"><dt className="text-sm font-medium text-text-muted">Mensagem</dt><dd className="mt-2 whitespace-pre-wrap rounded-lg border border-border bg-gray-50 p-3 text-text-default bg-surface-muted">{ticket.mensagem}</dd></div>
             </dl>
             <div className="mt-5 border-t border-border pt-5">
                 <label htmlFor="ticket-response" className="form-label">Responder ao ticket</label>

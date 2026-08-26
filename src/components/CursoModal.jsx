@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import FormSelect from './FormSelect';
+import { validateClassSchedule } from '../../shared/validation.mjs';
 
 const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLocais = [], allCursos = [] }) => {
-    const [formData, setFormData] = useState({ nome: '', local: '', professor: '' });
+    const [formData, setFormData] = useState({ nome: '', local: '', professor: '', weekday: '', start_time: '' });
     const [errors, setErrors] = useState({});
 
     useEffect(() => {
@@ -10,10 +12,12 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
             setFormData({
                 nome: curso.nome || '',
                 local: curso.local || '',
-                professor: curso.professor || ''
+                professor: curso.professor || '',
+                weekday: curso.weekday || '',
+                start_time: curso.start_time || ''
             });
         } else {
-            setFormData({ nome: '', local: '', professor: '' });
+            setFormData({ nome: '', local: '', professor: '', weekday: '', start_time: '' });
         }
         setErrors({});
     }, [curso, isOpen]);
@@ -23,6 +27,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
         if (!formData.nome.trim()) newErrors.nome = 'O nome do curso é obrigatório.';
         if (!formData.local) newErrors.local = 'A igreja é obrigatória.';
         if (!formData.professor) newErrors.professor = 'O professor é obrigatório.';
+        Object.assign(newErrors, validateClassSchedule(formData));
         return newErrors;
     };
 
@@ -48,54 +53,78 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
 
     const modalTitle = curso ? 'Editar Curso' : 'Adicionar Novo Curso';
 
+    const weekdays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="nome" className="form-label">Nome do curso</label>
-                            <select
+                            <FormSelect
                                 name="nome"
                                 id="nome"
                                 value={formData.nome}
                                 onChange={handleChange}
-                                aria-invalid={Boolean(errors.nome)}
-                                className={`form-control ${errors.nome ? 'border-danger' : ''}`}
-                            >
-                                <option value="">Selecione um curso</option>
-                                {allCursos.map(name => <option key={name} value={name}>{name}</option>)}
-                            </select>
+                                options={allCursos}
+                                placeholder="Selecione um curso"
+                                invalid={Boolean(errors.nome)}
+                            />
                             {errors.nome && <p className="text-danger text-xs mt-1">{errors.nome}</p>}
                         </div>
                         <div>
                             <label htmlFor="local" className="form-label">Igreja</label>
-                            <select
+                            <FormSelect
                                 name="local"
                                 id="local"
                                 value={formData.local}
                                 onChange={handleChange}
-                                aria-invalid={Boolean(errors.local)}
-                                className={`form-control ${errors.local ? 'border-danger' : ''}`}
-                            >
-                                <option value="">Selecione uma igreja</option>
-                                {allLocais.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-                            </select>
+                                options={allLocais}
+                                placeholder="Selecione uma igreja"
+                                invalid={Boolean(errors.local)}
+                            />
                             {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
                         </div>
                         <div>
                             <label htmlFor="professor" className="form-label">Professor</label>
-                            <select
+                            <FormSelect
                                 name="professor"
                                 id="professor"
                                 value={formData.professor}
                                 onChange={handleChange}
-                                aria-invalid={Boolean(errors.professor)}
-                                className={`form-control ${errors.professor ? 'border-danger' : ''}`}
-                            >
-                                <option value="">Selecione um professor</option>
-                                {allProfessores.map(prof => <option key={prof} value={prof}>{prof}</option>)}
-                            </select>
+                                options={allProfessores}
+                                placeholder="Selecione um professor"
+                                invalid={Boolean(errors.professor)}
+                            />
                             {errors.professor && <p className="text-danger text-xs mt-1">{errors.professor}</p>}
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="weekday" className="form-label">Dia da semana</label>
+                                <FormSelect
+                                    name="weekday"
+                                    id="weekday"
+                                    value={formData.weekday}
+                                    onChange={handleChange}
+                                    options={weekdays}
+                                    placeholder="A definir"
+                                    invalid={Boolean(errors.weekday)}
+                                />
+                                {errors.weekday && <p className="text-danger text-xs mt-1">{errors.weekday}</p>}
+                            </div>
+                            <div>
+                                <label htmlFor="start_time" className="form-label">Horário</label>
+                                <input
+                                    type="time"
+                                    name="start_time"
+                                    id="start_time"
+                                    value={formData.start_time}
+                                    onChange={handleChange}
+                                    aria-invalid={Boolean(errors.start_time)}
+                                    className={`form-control ${errors.start_time ? 'border-danger' : ''}`}
+                                />
+                                {errors.start_time && <p className="text-danger text-xs mt-1">{errors.start_time}</p>}
+                            </div>
                         </div>
                     </div>
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">

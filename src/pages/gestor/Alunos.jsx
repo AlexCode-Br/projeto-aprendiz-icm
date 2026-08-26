@@ -13,7 +13,7 @@ const Alunos = () => {
     const [alunos, setAlunos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    
+
     // Estados de Paginação
     const [currentPage, setCurrentPage] = useState(1);
     const [totalAlunos, setTotalAlunos] = useState(0);
@@ -54,13 +54,16 @@ const Alunos = () => {
     }, [currentPage, itemsPerPage, searchTerm, showToast]);
 
     useEffect(() => {
-        fetchAlunos();
+        const timer = setTimeout(() => {
+            fetchAlunos();
+        }, 300);
+        return () => clearTimeout(timer);
     }, [fetchAlunos]);
 
     useEffect(() => {
         api.get('/cursos').then(response => setOfferings(response.data.cursos.filter(item => item.status === 'Ativo'))).catch(() => setOfferings([]));
     }, []);
-    
+
     // --- Handlers de Ações ---
     const handleOpenFormModal = (aluno = null) => {
         setSelectedAluno(aluno);

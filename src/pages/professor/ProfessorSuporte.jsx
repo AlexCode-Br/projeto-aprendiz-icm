@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import Modal from '../../components/Modal';
+import FormSelect from '../../components/FormSelect';
 import { requiredTextError } from '../../../shared/validation.mjs';
 
 // --- Ícones SVG ---
@@ -60,11 +61,13 @@ const NewTicketModal = ({ isOpen, onClose, onSave }) => {
                         </div>
                         <div>
                             <label htmlFor="ticket-priority" className="form-label">Prioridade</label>
-                            <select id="ticket-priority" name="prioridade" value={formData.prioridade} onChange={handleChange} className="form-control">
-                                <option>Normal</option>
-                                <option>Alta</option>
-                                <option>Urgente</option>
-                            </select>
+                            <FormSelect
+                                id="ticket-priority"
+                                name="prioridade"
+                                value={formData.prioridade}
+                                onChange={handleChange}
+                                options={['Normal', 'Alta', 'Urgente']}
+                            />
                         </div>
                         <div>
                             <label htmlFor="ticket-message" className="form-label">Descreva o problema</label>
@@ -122,7 +125,7 @@ const ProfessorSuporte = () => {
             showToast(err.message || 'Falha ao criar o ticket.', 'error');
         }
     };
-    
+
     const handleReplyChange = (ticketId, message) => {
         setReplyMessages(prev => ({ ...prev, [ticketId]: message }));
     };
@@ -139,14 +142,25 @@ const ProfessorSuporte = () => {
             showToast(err.message || 'Falha ao responder o ticket.', 'error');
         }
     };
-    
+
     const handleCloseTicket = async (ticketId) => {
+        if (!window.confirm('Tem certeza que deseja marcar este ticket como resolvido?')) return;
         try {
             await api.put(`/api/suporte/${ticketId}/fechar`);
             showToast('Ticket marcado como resolvido.', 'success');
             fetchTickets();
         } catch (err) {
             showToast(err.message || 'Falha ao resolver o ticket.', 'error');
+        }
+    };
+
+    const handleReopenTicket = async (ticketId) => {
+        try {
+            await api.put(`/api/suporte/${ticketId}/reabrir`);
+            showToast('Ticket reaberto.', 'success');
+            fetchTickets();
+        } catch (err) {
+            showToast(err.message || 'Falha ao reabrir o ticket.', 'error');
         }
     };
 
@@ -162,27 +176,27 @@ const ProfessorSuporte = () => {
             default: return 'bg-blue-100 text-blue-800';
         }
     };
-    
+
     if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando tickets...</div>;
     if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchTickets} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
         <>
-            <div className="page-header fade-in-up">
+            <div className="page-header">
                 <div><h1 className="page-title">Suporte</h1><p className="page-description">Abra solicitações e acompanhe as respostas da equipe responsável.</p></div>
                 <button type="button" onClick={() => setIsModalOpen(true)} className="btn btn-primary w-full sm:w-auto">
                     <AddIcon /><span>Abrir novo ticket</span>
                 </button>
             </div>
 
-            <div className="panel overflow-hidden fade-in-up delay-200">
+            <div className="panel overflow-hidden ">
                 <div className="px-6 py-4 border-b border-border">
                     <h3 className="text-lg font-semibold text-text-default">Seus Tickets</h3>
                 </div>
                 <div className="divide-y divide-border">
                     {tickets.length > 0 ? tickets.map(ticket => (
                         <div key={ticket.id} className="ticket-item">
-                            <button type="button" aria-expanded={activeAccordion === ticket.id} aria-controls={`ticket-${ticket.id}-details`} onClick={() => toggleAccordion(ticket.id)} className="flex min-h-20 w-full items-center justify-between p-4 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-50/10 sm:p-6">
+                            <button type="button" aria-expanded={activeAccordion === ticket.id} aria-controls={`ticket-${ticket.id}-details`} onClick={() => toggleAccordion(ticket.id)} className="flex min-h-20 w-full items-center justify-between p-4 text-left transition-colors hover:bg-surface-hover transition-colors sm:p-6">
                                 <div className="flex-1 pr-4">
                                     <p className="font-semibold text-text-default">{ticket.assunto}</p>
                                     <p className="text-sm text-text-muted">Ticket #{ticket.id} - Aberto em {new Date(ticket.data_abertura).toLocaleDateString()}</p>
@@ -193,7 +207,7 @@ const ProfessorSuporte = () => {
                                 </div>
                             </button>
                             <div id={`ticket-${ticket.id}-details`} hidden={activeAccordion !== ticket.id}>
-                                <div className="p-6 border-t border-border bg-gray-50 dark:bg-surface/30">
+                                <div className="p-6 border-t border-border bg-surface-muted">
                                     <div className="space-y-4 mb-6">
                                         <div className="message user">
                                             <p className="text-sm font-semibold text-text-default">Você</p>
@@ -201,11 +215,11 @@ const ProfessorSuporte = () => {
                                         </div>
                                     </div>
 
-                                    {ticket.status !== 'Resolvido' && (
+                                    {ticket.status !== 'Resolvido' ? (
                                         <>
                                             <div className="reply-form">
-                                                <textarea 
-                                                    placeholder="Digite sua resposta..." 
+                                                <textarea
+                                                    placeholder="Digite sua resposta..."
                                                     rows="4"
                                                     value={replyMessages[ticket.id] || ''}
                                                     onChange={(e) => handleReplyChange(ticket.id, e.target.value)}
@@ -218,6 +232,10 @@ const ProfessorSuporte = () => {
                                                 <button type="button" onClick={() => handleReplySubmit(ticket.id)} className="btn btn-primary"><SendIcon /> Enviar</button>
                                             </div>
                                         </>
+                                    ) : (
+                                        <div className="flex justify-end mt-4">
+                                            <button type="button" onClick={() => handleReopenTicket(ticket.id)} className="btn btn-secondary">Reabrir ticket</button>
+                                        </div>
                                     )}
                                 </div>
                             </div>
@@ -229,7 +247,7 @@ const ProfessorSuporte = () => {
                     )}
                 </div>
             </div>
-            
+
             <NewTicketModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSave={handleSaveTicket} />
         </>
     );

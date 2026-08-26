@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
-import CustomSelect from '../../components/CustomSelect';
+import FormSelect from '../../components/FormSelect';
 
 const ProfessorFrequencia = () => {
     // --- Estados ---
@@ -38,12 +38,12 @@ const ProfessorFrequencia = () => {
         try {
             const params = { curso_id: selectedCurso.value, data: dataAula };
             const response = await api.get('/frequencia', { params });
-            
+
             setAlunos(response.data);
 
             // Preenche o estado de frequências com os dados recebidos
             const initialFrequencias = response.data.reduce((acc, aluno) => {
-                acc[aluno.id] = aluno.status || 'presente'; // 'presente' como padrão
+                acc[aluno.id] = aluno.status || ''; // Sem padrão
                 return acc;
             }, {});
             setFrequencias(initialFrequencias);
@@ -70,6 +70,13 @@ const ProfessorFrequencia = () => {
             showToast('Selecione um curso e carregue os alunos primeiro.', 'warning');
             return;
         }
+
+        const unrecorded = Object.values(frequencias).some(status => !status);
+        if (unrecorded) {
+            showToast('Por favor, preencha a frequência de todos os alunos.', 'warning');
+            return;
+        }
+
         setLoading(true);
 
         // Prepara os dados para a API
@@ -81,7 +88,7 @@ const ProfessorFrequencia = () => {
                 status
             }))
         };
-        
+
         try {
             await api.post('/frequencia', payload);
             showToast('Frequência salva com sucesso!', 'success');
@@ -101,13 +108,16 @@ const ProfessorFrequencia = () => {
             {/* Filtros */}
             <section className="panel mb-6 p-4 sm:p-6" aria-label="Seleção da aula">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <CustomSelect
-                        options={cursos}
-                        value={selectedCurso}
-                        onChange={setSelectedCurso}
-                        placeholder="Selecione um curso..."
-                    />
-                    <label><span className="form-label">Data da aula</span><input
+                    <div>
+                        <label htmlFor="curso-select" className="form-label">Curso</label>
+                        <FormSelect
+                            id="curso-select"
+                            options={cursos}
+                            value={selectedCurso?.value}
+                            onChange={(e) => setSelectedCurso(cursos.find(c => String(c.value) === String(e.target.value)) || null)}
+                            placeholder="Selecione um curso..."
+                        />
+                    </div><label><span className="form-label">Data da aula</span><input
                         type="date"
                         value={dataAula}
                         onChange={(e) => setDataAula(e.target.value)}

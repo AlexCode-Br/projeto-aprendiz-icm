@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import FormSelect from './FormSelect';
+import FormCheckbox from './FormCheckbox';
 import { httpsUrlError, requiredTextError } from '../../shared/validation.mjs';
 
 const initialFormState = {
@@ -74,9 +76,9 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
             return;
         }
         // A função onSave (que abre o modal de confirmação) é chamada com os dados
-        onSave(formData); 
+        onSave(formData);
     };
-    
+
     if (!isOpen) return null;
 
     return (
@@ -91,13 +93,14 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                             </div>
                             <div>
                                 <label htmlFor="info-category" className="form-label">Categoria</label>
-                                <select id="info-category" name="categoria" value={formData.categoria} onChange={handleChange} aria-invalid={Boolean(errors.categoria)} className={`form-control ${errors.categoria ? 'border-danger' : ''}`}>
-                                    <option value="">Selecione...</option>
-                                    <option>Geral</option>
-                                    <option>Inscrições</option>
-                                    <option>Eventos</option>
-                                    <option>Urgente</option>
-                                </select>
+                                <FormSelect
+                                    id="info-category"
+                                    name="categoria"
+                                    value={formData.categoria}
+                                    onChange={handleChange}
+                                    options={['Geral', 'Inscrições', 'Eventos', 'Urgente']}
+                                    invalid={Boolean(errors.categoria)}
+                                />
                                 {errors.categoria && <p className="text-danger text-xs mt-1">{errors.categoria}</p>}
                             </div>
                         </div>
@@ -118,9 +121,9 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                             <textarea id="info-content" name="conteudo" maxLength="5000" value={formData.conteudo} onChange={handleChange} rows="5" aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-32 ${errors.conteudo ? 'border-danger' : ''}`}></textarea>
                             {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
-                        <div className="space-y-2">
-                            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} className="h-4 w-4 accent-primary" /> Fixar no topo</label>
-                            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" name="exigirConfirmacao" checked={formData.exigirConfirmacao} onChange={handleChange} className="h-4 w-4 accent-primary" /> Exigir confirmação de leitura</label>
+                        <div className="space-y-3 pt-2">
+                            <FormCheckbox name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} label="Fixar no topo" />
+                            <FormCheckbox name="exigirConfirmacao" checked={formData.exigirConfirmacao} onChange={handleChange} label="Exigir confirmação de leitura" />
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-border">
                             <div>

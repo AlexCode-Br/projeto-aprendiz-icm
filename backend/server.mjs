@@ -18,6 +18,7 @@ import {
   requiredTextError,
   validateStudent,
   validateProfessor,
+  validateClassSchedule,
 } from '../shared/validation.mjs';
 
 const scrypt = promisify(scryptCallback);
@@ -904,9 +905,18 @@ async function api(request, response, url) {
   }
   if (studentMatch && request.method === 'DELETE') {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
-    await db.prepare('UPDATE students SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(Number(studentMatch[1]));
-    await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=?").run(Number(studentMatch[1]));
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_deactivated',ip);
+    const id = Number(studentMatch[1]);
+    const student = await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
+    if (!student) return json(response, 404, { message: 'Aluno ativo não encontrado.' });
+    await db.transaction(async () => {
+      const enrollments = await db.prepare("SELECT class_id FROM enrollments WHERE student_id=? AND status='ativa'").all(id);
+      await db.prepare('UPDATE students SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
+      await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=?").run(id);
+      for (const enrollment of enrollments) {
+        await db.prepare('INSERT INTO dropout_events (student_id,class_id,reason,occurred_at) VALUES (?,?,?,?)').run(id,enrollment.class_id,'Excluído pelo gestor',new Date().toISOString().slice(0,10));
+      }
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_deactivated',ip);
+    });
     return json(response, 200, { success: true });
   }
 
@@ -1039,7 +1049,7 @@ async function api(request, response, url) {
 
   if (request.method === 'GET' && url.pathname === '/cursos') {
     if (!await authorize(request, response, ['gestor'])) return;
-    const rows = await db.prepare(`SELECT classes.id,courses.name AS nome,locations.name AS local,professor_profiles.name AS professor,CASE classes.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,COUNT(CASE WHEN enrollments.status='ativa' AND students.active=1 THEN 1 END) AS alunos FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id GROUP BY classes.id,courses.name,locations.name,professor_profiles.name ORDER BY courses.name,locations.name`).all();
+    const rows = await db.prepare(`SELECT classes.id,courses.name AS nome,locations.name AS local,professor_profiles.name AS professor,classes.weekday,classes.start_time,CASE classes.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,COUNT(CASE WHEN enrollments.status='ativa' AND students.active=1 THEN 1 END) AS alunos FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id GROUP BY classes.id,courses.name,locations.name,professor_profiles.name,classes.weekday,classes.start_time ORDER BY courses.name,locations.name`).all();
     const professores = (await db.prepare('SELECT name FROM professor_profiles WHERE active=1 ORDER BY name').all()).map(row=>row.name);
     const locais = (await db.prepare('SELECT name FROM locations WHERE active=1 ORDER BY name').all()).map(row=>row.name);
     return json(response, 200, { cursos: rows, professores, locais });
@@ -1049,10 +1059,12 @@ async function api(request, response, url) {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const body = await readJson(request);
     const courseName = cleanText(body.nome, 100), locationName = cleanText(body.local, 100), professorName = cleanText(body.professor, 100);
+    const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10);
     const errors = {
       nome: catalogNameError(courseName, 'curso'),
       local: locationName ? '' : 'Selecione uma igreja cadastrada.',
       professor: professorName ? '' : 'Selecione um professor cadastrado.',
+      ...validateClassSchedule({ weekday, start_time: startTime }),
     };
     if (hasValidationErrors(errors)) return invalid(response, errors);
     const professor = await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
@@ -1061,7 +1073,7 @@ async function api(request, response, url) {
     const location = await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
     if (!course || !location) return json(response, 400, { message: 'Selecione somente cursos e locais ativos cadastrados pelo gestor.' });
     try {
-      const result=await db.prepare('INSERT INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(course.id,professor.id,location.id,`${courseName} — ${locationName}`);
+      const result=await db.prepare('INSERT INTO classes (course_id,professor_id,location_id,label,weekday,start_time) VALUES (?,?,?,?,?,?)').run(course.id,professor.id,location.id,`${courseName} — ${locationName}`,weekday||null,startTime||null);
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_created',ip);
       return json(response,201,{id:Number(result.lastInsertRowid)});
     } catch (error) {
@@ -1074,14 +1086,15 @@ async function api(request, response, url) {
     const session=await authorize(request,response,['gestor']); if(!session)return;
     const id=Number(courseMatch[1]),body=await readJson(request);
     const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
-    const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione uma igreja cadastrada.',professor:professorName?'':'Selecione um professor cadastrado.'};
+    const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10);
+    const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione uma igreja cadastrada.',professor:professorName?'':'Selecione um professor cadastrado.',...validateClassSchedule({weekday,start_time:startTime})};
     if(hasValidationErrors(errors))return invalid(response,errors);
     const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
     if(!professor)return json(response,400,{message:'Professor não encontrado.'});
     const course=await db.prepare('SELECT id FROM courses WHERE name=? AND active=1').get(courseName),location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
     if(!course||!location)return json(response,400,{message:'Selecione somente cursos e locais ativos cadastrados pelo gestor.'});
     try{
-      const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=? WHERE id=?').run(course.id,professor.id,location.id,`${courseName} — ${locationName}`,id);
+      const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,weekday=?,start_time=? WHERE id=?').run(course.id,professor.id,location.id,`${courseName} — ${locationName}`,weekday||null,startTime||null,id);
       if(!result.changes)return json(response,404,{message:'Turma não encontrada.'});
     }catch(error){if(duplicateError(error))return json(response,409,{message:'Esta turma já existe.'});throw error;}
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
@@ -1211,8 +1224,15 @@ async function api(request, response, url) {
         await db.prepare('UPDATE professor_profiles SET name=?,email=?,phone=?,home_location_id=? WHERE id=?').run(name,email,phone,location.id,id);
         await db.prepare('UPDATE classes SET active=0 WHERE professor_id=?').run(id);
         for(const course of catalogCourses){
+          const oldClass = await db.prepare('SELECT id FROM classes WHERE course_id=? AND professor_id=? AND active=0 ORDER BY id LIMIT 1').get(course.id, id);
           await db.prepare(`INSERT INTO classes (course_id,professor_id,location_id,label,active) VALUES (?,?,?,?,1)
             ON CONFLICT(course_id,professor_id,location_id) DO UPDATE SET active=1,label=excluded.label`).run(course.id,id,location.id,`${course.name} — ${locationName}`);
+          if (oldClass) {
+            const newClass = await db.prepare('SELECT id FROM classes WHERE course_id=? AND professor_id=? AND location_id=? AND active=1').get(course.id, id, location.id);
+            if (newClass && newClass.id !== oldClass.id) {
+              await db.prepare("UPDATE enrollments SET class_id=? WHERE class_id=? AND status='ativa'").run(newClass.id, oldClass.id);
+            }
+          }
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_updated',ip);
       });
@@ -1309,7 +1329,7 @@ async function api(request, response, url) {
     const classId=Number(url.searchParams.get('curso_id')),date=url.searchParams.get('data');
     const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1`).get(classId,session.user_id);
     if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
-    const rows=await db.prepare(`SELECT students.id,students.name AS nome,COALESCE(attendance_records.status,'presente') AS status FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' LEFT JOIN attendance_sessions ON attendance_sessions.class_id=enrollments.class_id AND attendance_sessions.class_date=? LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE enrollments.class_id=? AND students.active=1 ORDER BY students.name`).all(date,classId);
+    const rows=await db.prepare(`SELECT students.id,students.name AS nome,attendance_records.status AS status FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' LEFT JOIN attendance_sessions ON attendance_sessions.class_id=enrollments.class_id AND attendance_sessions.class_date=? LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE enrollments.class_id=? AND students.active=1 ORDER BY students.name`).all(date,classId);
     return json(response,200,rows);
   }
 
@@ -1334,11 +1354,12 @@ async function api(request, response, url) {
   }
 
   if(request.method==='GET'&&url.pathname==='/api/informativos'){
-    if(!await authorize(request,response,['gestor','professor']))return;
-    const rows=await db.prepare("SELECT announcements.*,COUNT(announcement_reads.user_id) AS read_count,COALESCE(SUM(CASE announcement_reads.confirmed WHEN 1 THEN 1 ELSE 0 END),0) AS confirmation_count FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id WHERE announcements.active=1 GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC").all();
+    const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+    const visibility=session.role==='professor'?' AND announcements.scheduled_at <= CURRENT_TIMESTAMP':'';
+    const rows=await db.prepare(`SELECT announcements.*,COUNT(announcement_reads.user_id) AS read_count,COALESCE(SUM(CASE announcement_reads.confirmed WHEN 1 THEN 1 ELSE 0 END),0) AS confirmation_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read,MAX(CASE WHEN announcement_reads.user_id=? AND announcement_reads.confirmed=1 THEN 1 ELSE 0 END) AS has_confirmed FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id WHERE announcements.active=1${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(session.user_id,session.user_id);
     const mapped=rows.map(row=>{
       const date=new Date(row.scheduled_at);
-      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:row.content,data_publicacao:row.published_at,data:date.toLocaleDateString('pt-BR',{timeZone:'UTC'}),hora:date.toISOString().slice(11,16),lido:row.read_count,confirmacoes:row.confirmation_count,fixado:Boolean(row.pinned),confirmacao:Boolean(row.requires_confirmation),linkUrl:row.action_url||'',linkTexto:row.action_label||''};
+      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:row.content,data_publicacao:row.published_at,data:date.toLocaleDateString('pt-BR',{timeZone:'UTC'}),hora:date.toISOString().slice(11,16),lido:row.read_count,confirmacoes:row.confirmation_count,fixado:Boolean(row.pinned),confirmacao:Boolean(row.requires_confirmation),linkUrl:row.action_url||'',linkTexto:row.action_label||'',hasRead:Boolean(row.has_read),hasConfirmed:Boolean(row.has_confirmed)};
     });
     return json(response,200,mapped);
   }
@@ -1369,6 +1390,31 @@ async function api(request, response, url) {
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_deactivated',ip);
     return json(response,200,{success:true});
   }
+  const readMatch = url.pathname.match(/^\/api\/informativos\/(\d+)\/lida$/);
+  if (readMatch && request.method === 'POST') {
+    const session = await authorize(request, response, ['gestor', 'professor']); if (!session) return;
+    const body = await readJson(request);
+    const announcementId=Number(readMatch[1]);
+    const announcement=await db.prepare('SELECT id FROM announcements WHERE id=? AND active=1 AND scheduled_at<=CURRENT_TIMESTAMP').get(announcementId);
+    if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
+    await db.prepare('INSERT INTO announcement_reads (announcement_id,user_id,confirmed) VALUES (?,?,?) ON CONFLICT(announcement_id,user_id) DO UPDATE SET confirmed=CASE WHEN announcement_reads.confirmed=1 OR excluded.confirmed=1 THEN 1 ELSE 0 END,read_at=CURRENT_TIMESTAMP').run(announcementId,session.user_id,body.confirmado===true?1:0);
+    return json(response, 200, { success: true });
+  }
+
+  const readersMatch = url.pathname.match(/^\/api\/informativos\/(\d+)\/leituras$/);
+  if (readersMatch && request.method === 'GET') {
+    const session = await authorize(request, response, ['gestor']); if (!session) return;
+    const rows = await db.prepare(`
+      SELECT users.name, users.email, professor_profiles.phone, announcement_reads.read_at, announcement_reads.confirmed
+      FROM announcement_reads
+      JOIN users ON users.id = announcement_reads.user_id
+      LEFT JOIN professor_profiles ON professor_profiles.user_id = users.id
+      WHERE announcement_reads.announcement_id = ?
+      ORDER BY announcement_reads.read_at DESC
+    `).all(Number(readersMatch[1]));
+    return json(response, 200, rows);
+  }
+
 
   if(request.method==='GET'&&url.pathname==='/api/suporte'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
@@ -1405,6 +1451,14 @@ async function api(request, response, url) {
     const session=await authorize(request,response,['professor']);if(!session)return;
     const result=await db.prepare("UPDATE support_tickets SET status='Resolvido',updated_at=CURRENT_TIMESTAMP WHERE id=? AND requester_user_id=?").run(Number(closeMatch[1]),session.user_id);
     if(!result.changes)return json(response,404,{message:'Ticket não encontrado.'});
+    return json(response,200,{success:true});
+  }
+  const reabrirMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/reabrir$/);
+  if(reabrirMatch&&request.method==='PUT'){
+    const session=await authorize(request,response,['professor']);if(!session)return;
+    const result=await db.prepare("UPDATE support_tickets SET status='Aberto',updated_at=CURRENT_TIMESTAMP WHERE id=? AND requester_user_id=? AND status='Resolvido'").run(Number(reabrirMatch[1]),session.user_id);
+    if(!result.changes)return json(response,404,{message:'Ticket não encontrado.'});
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'ticket_reopened',ip);
     return json(response,200,{success:true});
   }
   const ticketStatusMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/status$/);
@@ -1453,10 +1507,11 @@ async function api(request, response, url) {
   if(request.method==='GET'&&url.pathname==='/api/relatorios/frequencia'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
     const conditions=["enrollments.status='ativa'","students.active=1","classes.active=1"],whereParams=[],joinParams=[];
-    const filters={curso:url.searchParams.get('curso'),local:url.searchParams.get('local'),professor:url.searchParams.get('professor')};
+    const filters={curso:url.searchParams.get('curso'),local:url.searchParams.get('local'),professor:url.searchParams.get('professor'),classId:url.searchParams.get('curso_id')};
     if(filters.curso){conditions.push('courses.name=?');whereParams.push(filters.curso)}
     if(filters.local){conditions.push('locations.name=?');whereParams.push(filters.local)}
     if(filters.professor){conditions.push('professor_profiles.name=?');whereParams.push(filters.professor)}
+    if(filters.classId){conditions.push('classes.id=?');whereParams.push(Number(filters.classId))}
     if(session.role==='professor'){conditions.push('professor_profiles.user_id=?');whereParams.push(session.user_id)}
     const start=url.searchParams.get('dataInicio'),end=url.searchParams.get('dataFim');
     let dateJoin='';

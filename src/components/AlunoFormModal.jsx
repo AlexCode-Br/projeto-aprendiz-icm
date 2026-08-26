@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import FormSelect from './FormSelect';
+import FormRadio from './FormRadio';
 import { cleanText, validateStudent } from '../../shared/validation.mjs';
 
 const initialFormState = {
@@ -115,37 +117,47 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                              <div>
                                 <label htmlFor="classe" className="form-label">Classe</label>
-                                <select name="classe" id="classe" value={formData.classe} onChange={handleChange} aria-invalid={Boolean(errors.classe)} className={`form-control ${errors.classe ? 'border-danger' : ''}`}>
-                                    <option value="">Selecione...</option>
-                                    <option>Adolescente</option>
-                                    <option>Jovem</option>
-                                    <option>Senhora</option>
-                                    <option>Varão</option>
-                                </select>
+                                <FormSelect
+                                    name="classe"
+                                    id="classe"
+                                    value={formData.classe}
+                                    onChange={handleChange}
+                                    options={['Adolescente', 'Jovem', 'Senhora', 'Varão']}
+                                    invalid={Boolean(errors.classe)}
+                                />
                                  {errors.classe && <p className="text-danger text-xs mt-1">{errors.classe}</p>}
                             </div>
                             <div>
                                 <label htmlFor="curso" className="form-label">Curso de interesse</label>
-                                <select name="curso" id="curso" value={formData.curso} onChange={handleChange} aria-invalid={Boolean(errors.curso)} className={`form-control ${errors.curso ? 'border-danger' : ''}`}>
-                                    <option value="">Selecione...</option>
-                                    {[...new Set(offerings.map(item => item.nome))].map(c => <option key={c} value={c}>{c}</option>)}
-                                </select>
+                                <FormSelect
+                                    name="curso"
+                                    id="curso"
+                                    value={formData.curso}
+                                    onChange={handleChange}
+                                    options={[...new Set(offerings.map(item => item.nome))]}
+                                    invalid={Boolean(errors.curso)}
+                                />
                                 {errors.curso && <p className="text-danger text-xs mt-1">{errors.curso}</p>}
                             </div>
                             <div>
                                 <label htmlFor="local" className="form-label">Igreja da turma</label>
-                                <select name="local" id="local" value={formData.local} onChange={handleChange} disabled={!formData.curso} aria-invalid={Boolean(errors.local)} className={`form-control disabled:bg-gray-100 dark:disabled:bg-gray-600 ${errors.local ? 'border-danger' : ''}`}>
-                                    <option value="">Selecione...</option>
-                                    {availableLocais.map(loc => <option key={loc} value={loc}>{loc}</option>)}
-                                </select>
+                                <FormSelect
+                                    name="local"
+                                    id="local"
+                                    value={formData.local}
+                                    onChange={handleChange}
+                                    isDisabled={!formData.curso}
+                                    options={availableLocais}
+                                    invalid={Boolean(errors.local)}
+                                />
                                 {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
                             </div>
                         </div>
                          <div>
                             <label className="block text-sm font-medium text-text-default mb-1">Possui instrumento?</label>
-                            <div className="flex items-center space-x-4 mt-2">
-                                <label className="flex items-center"><input type="radio" name="instrumento" value="Sim" checked={formData.instrumento === 'Sim'} onChange={handleChange} className="mr-2" /> Sim</label>
-                                <label className="flex items-center"><input type="radio" name="instrumento" value="Não" checked={formData.instrumento === 'Não'} onChange={handleChange} className="mr-2" /> Não</label>
+                            <div className="flex items-center space-x-6 mt-2">
+                                <FormRadio name="instrumento" value="Sim" checked={formData.instrumento === 'Sim'} onChange={handleChange} label="Sim" className="items-center" />
+                                <FormRadio name="instrumento" value="Não" checked={formData.instrumento === 'Não'} onChange={handleChange} label="Não" className="items-center" />
                             </div>
                         </div>
                     </div>

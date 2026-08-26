@@ -81,4 +81,16 @@ export function validateStudent(values) {
   return errors;
 }
 
+export function validateClassSchedule(values) {
+  const errors = {};
+  const weekday = cleanText(values.weekday, 20);
+  const startTime = cleanText(values.start_time, 10);
+  const weekdays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+  if (weekday && !weekdays.includes(weekday)) errors.weekday = 'Selecione um dia da semana válido.';
+  if (startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) errors.start_time = 'Informe um horário válido.';
+  if (weekday && !startTime) errors.start_time = 'Informe o horário da turma.';
+  if (!weekday && startTime) errors.weekday = 'Selecione o dia da semana.';
+  return errors;
+}
+
 export const hasValidationErrors = errors => Object.values(errors).some(Boolean);
