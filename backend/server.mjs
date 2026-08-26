@@ -1696,11 +1696,29 @@ async function api(request, response, url) {
   }
   if(request.method==='GET'&&url.pathname==='/api/informativos/destinatarios'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const [professores,cursos]=await Promise.all([
+    const [professores,cursos,professorCourses]=await Promise.all([
       db.prepare('SELECT id,name AS nome FROM professor_profiles WHERE active=1 ORDER BY name').all(),
       db.prepare('SELECT id,name AS nome FROM courses WHERE active=1 ORDER BY name').all(),
+      db.prepare(`
+        SELECT DISTINCT classes.professor_id,classes.course_id
+        FROM classes
+        JOIN professor_profiles ON professor_profiles.id=classes.professor_id AND professor_profiles.active=1
+        JOIN courses ON courses.id=classes.course_id AND courses.active=1
+        WHERE classes.active=1
+      `).all(),
     ]);
-    return json(response,200,{professores:professores.map(row=>({id:Number(row.id),nome:row.nome})),cursos:cursos.map(row=>({id:Number(row.id),nome:row.nome}))});
+    const coursesByProfessor=new Map();
+    for(const relation of professorCourses){
+      const professorId=Number(relation.professor_id),courseId=Number(relation.course_id);
+      if(!Number.isInteger(professorId)||!Number.isInteger(courseId))continue;
+      const current=coursesByProfessor.get(professorId)||[];
+      current.push(courseId);
+      coursesByProfessor.set(professorId,current);
+    }
+    return json(response,200,{
+      professores:professores.map(row=>({id:Number(row.id),nome:row.nome,cursos:[...new Set(coursesByProfessor.get(Number(row.id))||[])]})),
+      cursos:cursos.map(row=>({id:Number(row.id),nome:row.nome})),
+    });
   }
   const attachmentMatch=url.pathname.match(/^\/api\/informativos\/(\d+)\/anexos\/(\d+)$/);
   if(attachmentMatch&&request.method==='GET'){
