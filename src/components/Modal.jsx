@@ -7,6 +7,11 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) => {
     const backdropRef = useRef(null);
     const dialogRef = useRef(null);
     const closeRef = useRef(null);
+    const onCloseRef = useRef(onClose);
+
+    useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     useEffect(() => {
         if (!isOpen) return undefined;
@@ -16,7 +21,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) => {
         closeRef.current?.focus();
 
         const handleKeyDown = event => {
-            if (event.key === 'Escape') return onClose();
+            if (event.key === 'Escape') return onCloseRef.current();
             if (event.key !== 'Tab') return;
             const focusable = [...dialogRef.current.querySelectorAll(focusableSelector)];
             if (!focusable.length) return;
@@ -37,7 +42,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) => {
             document.removeEventListener('keydown', handleKeyDown);
             previousFocus?.focus?.();
         };
-    }, [isOpen, onClose]);
+    }, [isOpen]);
 
     if (!isOpen) return null;
 
