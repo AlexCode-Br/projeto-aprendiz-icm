@@ -861,7 +861,7 @@ async function api(request, response, url) {
     const errors={
       nome:personNameError(name,'nome completo'),contato:emailError(email),telefone:phoneError(phone),
       igreja:requiredTextError(body.igreja,'A igreja',2,100),classe:['Adolescente','Jovem','Senhora','Varão'].includes(body.classe)?'':'Selecione uma classe válida.',
-      curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione um local.',
+      curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione uma igreja.',
     };
     if(hasValidationErrors(errors))return invalid(response,errors);
     const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,locationName);
@@ -882,7 +882,7 @@ async function api(request, response, url) {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const id = Number(studentMatch[1]), body = await readJson(request);
     const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),courseName=cleanText(Array.isArray(body.curso)?body.curso[0]:body.curso,100),locationName=cleanText(body.local,100);
-    const errors={nome:personNameError(name,'nome completo'),contato:emailError(email),telefone:phoneError(phone),igreja:requiredTextError(body.igreja,'A igreja',2,100),classe:['Adolescente','Jovem','Senhora','Varão'].includes(body.classe)?'':'Selecione uma classe válida.',curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione um local.'};
+    const errors={nome:personNameError(name,'nome completo'),contato:emailError(email),telefone:phoneError(phone),igreja:requiredTextError(body.igreja,'A igreja',2,100),classe:['Adolescente','Jovem','Senhora','Varão'].includes(body.classe)?'':'Selecione uma classe válida.',curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione uma igreja.'};
     if(hasValidationErrors(errors))return invalid(response,errors);
     const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,locationName);
     if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e local selecionados.' });
@@ -922,22 +922,36 @@ async function api(request, response, url) {
     if (!await authorize(request, response, ['gestor'])) return;
     const cursos = await db.prepare(`
       SELECT courses.id,courses.name AS nome,courses.active,
-        COUNT(DISTINCT CASE WHEN classes.active=1 THEN classes.id END) AS turmas_ativas
-      FROM courses LEFT JOIN classes ON classes.course_id=courses.id
+        COUNT(DISTINCT classes.id) AS turmas_total,
+        COUNT(DISTINCT CASE WHEN classes.active=1 THEN classes.id END) AS turmas_ativas,
+        COUNT(DISTINCT enrollments.id) AS matriculas_total,
+        COUNT(DISTINCT attendance_records.id) AS frequencias_total
+      FROM courses
+      LEFT JOIN classes ON classes.course_id=courses.id
+      LEFT JOIN enrollments ON enrollments.class_id=classes.id
+      LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
+      LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
       GROUP BY courses.id,courses.name,courses.active ORDER BY courses.name
     `).all();
     const locais = await db.prepare(`
       SELECT locations.id,locations.name AS nome,locations.active,
+        COUNT(DISTINCT classes.id) AS turmas_total,
         COUNT(DISTINCT CASE WHEN classes.active=1 THEN classes.id END) AS turmas_ativas,
+        COUNT(DISTINCT enrollments.id) AS matriculas_total,
+        COUNT(DISTINCT attendance_records.id) AS frequencias_total,
+        COUNT(DISTINCT professor_profiles.id) AS professores_total,
         COUNT(DISTINCT CASE WHEN professor_profiles.active=1 THEN professor_profiles.id END) AS professores_ativos
       FROM locations
       LEFT JOIN classes ON classes.location_id=locations.id
+      LEFT JOIN enrollments ON enrollments.class_id=classes.id
+      LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
+      LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
       LEFT JOIN professor_profiles ON professor_profiles.home_location_id=locations.id
       GROUP BY locations.id,locations.name,locations.active ORDER BY locations.name
     `).all();
     return json(response, 200, {
-      cursos: cursos.map(row => ({ ...row, ativo: row.active === 1, turmasAtivas: Number(row.turmas_ativas || 0) })),
-      locais: locais.map(row => ({ ...row, ativo: row.active === 1, turmasAtivas: Number(row.turmas_ativas || 0), professoresAtivos: Number(row.professores_ativos || 0) })),
+      cursos: cursos.map(row => ({ ...row, ativo: row.active === 1, turmas: Number(row.turmas_total || 0), turmasAtivas: Number(row.turmas_ativas || 0), matriculas: Number(row.matriculas_total || 0), frequencias: Number(row.frequencias_total || 0) })),
+      locais: locais.map(row => ({ ...row, ativo: row.active === 1, turmas: Number(row.turmas_total || 0), turmasAtivas: Number(row.turmas_ativas || 0), matriculas: Number(row.matriculas_total || 0), frequencias: Number(row.frequencias_total || 0), professores: Number(row.professores_total || 0), professoresAtivos: Number(row.professores_ativos || 0) })),
     });
   }
 
@@ -946,7 +960,7 @@ async function api(request, response, url) {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const [, kind, idText] = catalogMatch;
     const table = kind === 'cursos' ? 'courses' : 'locations';
-    const entity = kind === 'cursos' ? 'curso' : 'local';
+    const entity = kind === 'cursos' ? 'curso' : 'igreja';
     const id = idText ? Number(idText) : null;
     if (request.method === 'POST') {
       const body = await readJson(request);
@@ -981,15 +995,42 @@ async function api(request, response, url) {
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_updated`, ip);
       return json(response, 200, { success: true });
     }
-    const usage = kind === 'cursos'
-      ? await db.prepare('SELECT COUNT(*) AS total FROM classes WHERE course_id=? AND active=1').get(id)
-      : await db.prepare(`SELECT
-          (SELECT COUNT(*) FROM classes WHERE location_id=? AND active=1) +
-          (SELECT COUNT(*) FROM professor_profiles WHERE home_location_id=? AND active=1) AS total`).get(id, id);
-    if (Number(usage?.total || 0) > 0) return json(response, 409, { message: `Não é possível desativar este ${entity} enquanto houver vínculos ativos.` });
-    await db.prepare(`UPDATE ${table} SET active=0 WHERE id=?`).run(id);
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_deactivated`, ip);
-    return json(response, 200, { success: true });
+    const classFilter = kind === 'cursos' ? 'course_id' : 'location_id';
+    const summary = await db.prepare(`SELECT
+      COUNT(DISTINCT classes.id) AS turmas,
+      COUNT(DISTINCT enrollments.id) AS matriculas,
+      COUNT(DISTINCT attendance_records.id) AS frequencias
+      FROM classes
+      LEFT JOIN enrollments ON enrollments.class_id=classes.id
+      LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
+      LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
+      WHERE classes.${classFilter}=?`).get(id);
+    await db.transaction(async()=>{
+      await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
+        SELECT attendance_sessions.id FROM attendance_sessions
+        JOIN classes ON classes.id=attendance_sessions.class_id
+        WHERE classes.${classFilter}=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM attendance_sessions WHERE class_id IN (
+        SELECT id FROM classes WHERE ${classFilter}=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM dropout_events WHERE class_id IN (
+        SELECT id FROM classes WHERE ${classFilter}=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM enrollments WHERE class_id IN (
+        SELECT id FROM classes WHERE ${classFilter}=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM classes WHERE ${classFilter}=?`).run(id);
+      if(kind === 'locais')await db.prepare('UPDATE professor_profiles SET home_location_id=NULL WHERE home_location_id=?').run(id);
+      await db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_permanently_deleted`, ip);
+    });
+    return json(response, 200, {
+      success: true,
+      permanentlyDeleted: true,
+      resumo: { turmas: Number(summary?.turmas || 0), matriculas: Number(summary?.matriculas || 0), frequencias: Number(summary?.frequencias || 0) },
+      message: `${entity[0].toUpperCase()}${entity.slice(1)} e todos os vínculos foram excluídos definitivamente.`,
+    });
   }
 
   if (request.method === 'GET' && url.pathname === '/cursos') {
@@ -1006,7 +1047,7 @@ async function api(request, response, url) {
     const courseName = cleanText(body.nome, 100), locationName = cleanText(body.local, 100), professorName = cleanText(body.professor, 100);
     const errors = {
       nome: catalogNameError(courseName, 'curso'),
-      local: locationName ? '' : 'Selecione um local cadastrado.',
+      local: locationName ? '' : 'Selecione uma igreja cadastrada.',
       professor: professorName ? '' : 'Selecione um professor cadastrado.',
     };
     if (hasValidationErrors(errors)) return invalid(response, errors);
@@ -1029,7 +1070,7 @@ async function api(request, response, url) {
     const session=await authorize(request,response,['gestor']); if(!session)return;
     const id=Number(courseMatch[1]),body=await readJson(request);
     const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
-    const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione um local cadastrado.',professor:professorName?'':'Selecione um professor cadastrado.'};
+    const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione uma igreja cadastrada.',professor:professorName?'':'Selecione um professor cadastrado.'};
     if(hasValidationErrors(errors))return invalid(response,errors);
     const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
     if(!professor)return json(response,400,{message:'Professor não encontrado.'});
@@ -1083,7 +1124,7 @@ async function api(request, response, url) {
     const errors=validateProfessor({...body,nome:name,contato:email,telefone:phone,local:locationName,cursos:courseNames});
     if(hasValidationErrors(errors))return invalid(response,errors);
     const location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
-    if(!location)return invalid(response,{local:'Selecione um local ativo cadastrado em Cursos e locais.'});
+    if(!location)return invalid(response,{local:'Selecione uma igreja ativa cadastrada em Cursos e igrejas.'});
     const catalogCourses=[];
     for(const courseName of courseNames){
       const course=await db.prepare('SELECT id,name FROM courses WHERE name=? AND active=1').get(courseName);
@@ -1154,7 +1195,7 @@ async function api(request, response, url) {
     const current=await db.prepare('SELECT id FROM professor_profiles WHERE id=? AND active=1').get(id);
     if(!current)return json(response,404,{message:'Professor ativo não encontrado.'});
     const location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
-    if(!location)return invalid(response,{local:'Selecione um local ativo cadastrado em Cursos e locais.'});
+    if(!location)return invalid(response,{local:'Selecione uma igreja ativa cadastrada em Cursos e igrejas.'});
     const catalogCourses=[];
     for(const courseName of courseNames){
       const course=await db.prepare('SELECT id,name FROM courses WHERE name=? AND active=1').get(courseName);

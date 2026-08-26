@@ -124,7 +124,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                                 {errors.curso && <p className="text-danger text-xs mt-1">{errors.curso}</p>}
                             </div>
                             <div>
-                                <label htmlFor="local" className="form-label">Local</label>
+                                <label htmlFor="local" className="form-label">Igreja da turma</label>
                                 <select name="local" id="local" value={formData.local} onChange={handleChange} disabled={!formData.curso} aria-invalid={Boolean(errors.local)} className={`form-control disabled:bg-gray-100 dark:disabled:bg-gray-600 ${errors.local ? 'border-danger' : ''}`}>
                                     <option value="">Selecione...</option>
                                     {availableLocais.map(loc => <option key={loc} value={loc}>{loc}</option>)}

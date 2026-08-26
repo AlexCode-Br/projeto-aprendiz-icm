@@ -9,7 +9,7 @@ const StudentDetailsModal = ({ student, isOpen, onClose }) => {
         ['Telefone (WhatsApp)', student.telefone],
         ['Igreja-bairro', student.igreja],
         ['Classe', student.classe],
-        ['Local', student.local],
+        ['Igreja da turma', student.local],
         ['Possui instrumento?', student.instrumento],
     ];
     const courses = Array.isArray(student.curso) ? student.curso : student.curso ? [student.curso] : [];

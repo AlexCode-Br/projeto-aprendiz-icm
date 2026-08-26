@@ -6,7 +6,7 @@ export default function CatalogItemModal({ isOpen, onClose, onSave, item, type }
     const [name, setName] = useState('');
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
-    const label = type === 'cursos' ? 'curso' : 'local';
+    const label = type === 'cursos' ? 'curso' : 'igreja';
 
     useEffect(() => {
         setName(item?.nome || '');

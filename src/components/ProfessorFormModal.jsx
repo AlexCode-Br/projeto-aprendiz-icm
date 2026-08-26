@@ -43,7 +43,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
         if (isSubmitting) return;
         const normalized = { ...formData, nome: cleanText(formData.nome, 100), contato: normalizeEmail(formData.contato), telefone: formatPhone(formData.telefone) };
         const validationErrors = validateProfessor(normalized);
-        if (!locations.includes(normalized.local)) validationErrors.local = 'Selecione um local cadastrado.';
+        if (!locations.includes(normalized.local)) validationErrors.local = 'Selecione uma igreja cadastrada.';
         if (normalized.cursos.some(course => !courses.includes(course))) validationErrors.cursos = 'Selecione somente cursos cadastrados.';
         if (hasValidationErrors(validationErrors)) return setErrors(validationErrors);
         setIsSubmitting(true);
@@ -56,7 +56,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'}>
             <form onSubmit={handleSubmit} noValidate>
-                {!catalogsReady && <div className="alert-warning mb-4" role="alert">Cadastre pelo menos um curso e um local na área “Cursos e locais” antes de adicionar professores.</div>}
+                {!catalogsReady && <div className="alert-warning mb-4" role="alert">Cadastre pelo menos um curso e uma igreja na área “Cursos e igrejas” antes de adicionar professores.</div>}
                 <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div>
@@ -75,9 +75,9 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
                             {errors.telefone && <p className="mt-1 text-xs text-danger">{errors.telefone}</p>}
                         </div>
                         <div>
-                            <label htmlFor="professor-local" className="form-label">Local principal</label>
+                            <label htmlFor="professor-local" className="form-label">Igreja principal</label>
                             <select id="professor-local" name="local" value={formData.local} onChange={event => update('local', event.target.value)} aria-invalid={Boolean(errors.local)} className={`form-control ${errors.local ? 'border-danger' : ''}`}>
-                                <option value="">Selecione um local</option>
+                                <option value="">Selecione uma igreja</option>
                                 {locations.map(location => <option key={location} value={location}>{location}</option>)}
                             </select>
                             {errors.local && <p className="mt-1 text-xs text-danger">{errors.local}</p>}

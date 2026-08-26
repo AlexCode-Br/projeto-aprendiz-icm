@@ -82,7 +82,7 @@ const Relatorios = () => {
     };
 
     const handleExportFrequency = () => {
-        const headers = ["Curso", "Aluno", "Professor", "Local", "Frequência (%)"];
+        const headers = ["Curso", "Aluno", "Professor", "Igreja", "Frequência (%)"];
         const data = generatedFreqData.map(Object.values);
         exportToPdf("Relatório de Frequência", headers, data);
     };
@@ -106,7 +106,7 @@ const Relatorios = () => {
                 <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Filtros aqui */}
                     <label><span className="form-label">Curso</span><select value={freqFilters.curso} onChange={event => setFreqFilters({...freqFilters,curso:event.target.value})} className="form-control"><option value="">Todos os cursos</option>{options.cursos.map(c => <option key={c}>{c}</option>)}</select></label>
-                    <label><span className="form-label">Local</span><select value={freqFilters.local} onChange={event => setFreqFilters({...freqFilters,local:event.target.value})} className="form-control"><option value="">Todos os locais</option>{options.locais.map(l => <option key={l}>{l}</option>)}</select></label>
+                    <label><span className="form-label">Igreja</span><select value={freqFilters.local} onChange={event => setFreqFilters({...freqFilters,local:event.target.value})} className="form-control"><option value="">Todas as igrejas</option>{options.locais.map(l => <option key={l}>{l}</option>)}</select></label>
                     <label><span className="form-label">Professor</span><select value={freqFilters.professor} onChange={event => setFreqFilters({...freqFilters,professor:event.target.value})} className="form-control"><option value="">Todos os professores</option>{options.professores.map(p => <option key={p}>{p}</option>)}</select></label>
                     <label><span className="form-label">Data inicial</span><input type="date" value={freqFilters.dataInicio} onChange={event => setFreqFilters({...freqFilters,dataInicio:event.target.value})} className="form-control" /></label>
                     <label><span className="form-label">Data final</span><input type="date" value={freqFilters.dataFim} onChange={event => setFreqFilters({...freqFilters,dataFim:event.target.value})} className="form-control" /></label>
@@ -120,7 +120,7 @@ const Relatorios = () => {
                             <h4 className="font-semibold">Resultados</h4>
                             <button type="button" onClick={handleExportFrequency} className="btn btn-secondary">Exportar PDF</button>
                         </div>
-                        <ReportTable headers={["Curso", "Aluno", "Professor", "Local", "Frequência (%)"]} data={generatedFreqData} />
+                        <ReportTable headers={["Curso", "Aluno", "Professor", "Igreja", "Frequência (%)"]} data={generatedFreqData} />
                     </div>
                 )}
             </section>

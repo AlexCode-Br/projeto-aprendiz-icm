@@ -18,6 +18,7 @@ const Cursos = () => {
     const [currentCurso, setCurrentCurso] = useState(null);
     const [catalogModal, setCatalogModal] = useState({ open: false, type: 'cursos', item: null });
     const [catalogToDelete, setCatalogToDelete] = useState(null);
+    const [isDeletingCatalog, setDeletingCatalog] = useState(false);
 
     const fetchCursos = useCallback(async () => {
         try {
@@ -85,7 +86,7 @@ const Cursos = () => {
         try {
             if (item) await api.put(`/api/catalogos/${type}/${item.id}`, data);
             else await api.post(`/api/catalogos/${type}`, data);
-            showToast(`${type === 'cursos' ? 'Curso' : 'Local'} salvo com sucesso!`, 'success');
+            showToast(type === 'cursos' ? 'Curso salvo com sucesso!' : 'Igreja salva com sucesso!', 'success');
             setCatalogModal({ open: false, type: 'cursos', item: null });
             await fetchCursos();
         } catch (error) {
@@ -96,13 +97,16 @@ const Cursos = () => {
 
     const handleDeleteCatalog = async () => {
         if (!catalogToDelete) return;
+        setDeletingCatalog(true);
         try {
-            await api.delete(`/api/catalogos/${catalogToDelete.type}/${catalogToDelete.item.id}`);
-            showToast(`${catalogToDelete.type === 'cursos' ? 'Curso' : 'Local'} desativado com sucesso!`, 'success');
+            const response = await api.delete(`/api/catalogos/${catalogToDelete.type}/${catalogToDelete.item.id}`);
+            showToast(response.data.message || `${catalogToDelete.type === 'cursos' ? 'Curso' : 'Igreja'} excluído definitivamente!`, 'success');
             setCatalogToDelete(null);
             await fetchCursos();
         } catch (error) {
-            showToast(error.message || 'Não foi possível desativar o cadastro.', 'error');
+            showToast(error.message || 'Não foi possível excluir o cadastro.', 'error');
+        } finally {
+            setDeletingCatalog(false);
         }
     };
 
@@ -117,22 +121,14 @@ const Cursos = () => {
     return (
         <>
             <div className="page-header">
-                <div><h1 className="page-title">Cursos e locais</h1><p className="page-description">Gerencie o catálogo e monte as turmas usando apenas opções aprovadas.</p></div>
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <button type="button" onClick={() => setCatalogModal({ open: true, type: 'cursos', item: null })} className="btn btn-secondary">Novo curso</button>
-                <button type="button" onClick={() => setCatalogModal({ open: true, type: 'locais', item: null })} className="btn btn-secondary">Novo local</button>
-                <button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary">
-                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                    Nova turma
-                </button>
-                </div>
+                <div><h1 className="page-title">Cursos e igrejas</h1><p className="page-description">Gerencie os catálogos e monte as turmas usando apenas opções aprovadas.</p></div>
             </div>
 
             <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
                 {['cursos', 'locais'].map(type => (
                     <section key={type} className="panel overflow-hidden" aria-labelledby={`${type}-catalog-title`}>
                         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-                            <div><h2 id={`${type}-catalog-title`} className="font-semibold">{type === 'cursos' ? 'Catálogo de cursos' : 'Locais de atendimento'}</h2><p className="text-sm text-text-muted">{type === 'cursos' ? 'Opções disponíveis para professores e turmas.' : 'Unidades que podem receber professores e turmas.'}</p></div>
+                            <div><h2 id={`${type}-catalog-title`} className="font-semibold">{type === 'cursos' ? 'Catálogo de cursos' : 'Igrejas'}</h2><p className="text-sm text-text-muted">{type === 'cursos' ? 'Opções disponíveis para professores e turmas.' : 'Igrejas que podem receber professores e turmas.'}</p></div>
                             <button type="button" onClick={() => setCatalogModal({ open: true, type, item: null })} className="btn btn-secondary">Adicionar</button>
                         </div>
                         <div className="max-h-80 overflow-auto">
@@ -140,9 +136,9 @@ const Cursos = () => {
                                 <thead className="bg-gray-50 text-xs uppercase text-text-muted dark:bg-surface/30"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
                                 <tbody>{catalogos[type].map(item => <tr key={item.id} className="border-t border-border">
                                     <td className="px-5 py-3 font-medium">{item.nome}</td>
-                                    <td className="px-5 py-3 text-center">{item.turmasAtivas}{type === 'locais' ? ` turma(s) · ${item.professoresAtivos} professor(es)` : ' turma(s)'}</td>
+                                    <td className="px-5 py-3 text-center">{item.turmas}{type === 'locais' ? ` turma(s) · ${item.professores} professor(es)` : ' turma(s)'}</td>
                                     <td className="px-5 py-3 text-center"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.ativo ? 'bg-success/10 text-success' : 'bg-gray-100 text-text-muted dark:bg-white/10'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
-                                    <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}>✎</button>{item.ativo && <button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Desativar ${item.nome}`}>×</button>}</td>
+                                    <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}>✎</button><button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Excluir definitivamente ${item.nome}`}>×</button></td>
                                 </tr>)}</tbody>
                             </table>
                             {!catalogos[type].length && <p className="p-8 text-center text-sm text-text-muted">Nenhum cadastro encontrado.</p>}
@@ -151,7 +147,7 @@ const Cursos = () => {
                 ))}
             </div>
 
-            <div className="mb-3"><h2 className="text-lg font-semibold">Turmas</h2><p className="text-sm text-text-muted">Combine um curso, um local e um professor.</p></div>
+            <div className="mb-3 flex items-center justify-between gap-4"><div><h2 className="text-lg font-semibold">Turmas</h2><p className="text-sm text-text-muted">Combine um curso, uma igreja e um professor.</p></div><button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary">Adicionar</button></div>
 
             <section className="panel mb-6 p-4 md:p-6" aria-label="Filtros de cursos">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -167,14 +163,14 @@ const Cursos = () => {
                         />
                     </div>
                     <div>
-                        <label htmlFor="course-location" className="form-label">Filtrar por local</label>
+                        <label htmlFor="course-location" className="form-label">Filtrar por igreja</label>
                         <select
                             id="course-location"
                             value={selectedLocal}
                             onChange={(e) => setSelectedLocal(e.target.value)}
                             className="form-control"
                         >
-                            <option value="">Todos os Locais</option>
+                            <option value="">Todas as Igrejas</option>
                             {locaisDisponiveis.map(loc => <option key={loc} value={loc}>{loc}</option>)}
                         </select>
                     </div>
@@ -187,7 +183,7 @@ const Cursos = () => {
                         <thead className="bg-gray-50 dark:bg-surface/30 text-xs uppercase text-text-muted">
                             <tr>
                                 <th scope="col" className="px-6 py-3">Curso</th>
-                                <th scope="col" className="px-6 py-3">Local</th>
+                                <th scope="col" className="px-6 py-3">Igreja</th>
                                 <th scope="col" className="px-6 py-3">Professor</th>
                                 <th scope="col" className="px-6 py-3 text-center">Alunos</th>
                                 <th scope="col" className="px-6 py-3 text-center">Status</th>
@@ -248,9 +244,10 @@ const Cursos = () => {
                 isOpen={Boolean(catalogToDelete)}
                 onClose={() => setCatalogToDelete(null)}
                 onConfirm={handleDeleteCatalog}
-                title={`Desativar ${catalogToDelete?.type === 'cursos' ? 'curso' : 'local'}?`}
-                message="A opção deixará de aparecer nos novos cadastros. Itens com vínculos ativos precisam ser desvinculados antes."
-                confirmLabel="Desativar"
+                title={`Excluir definitivamente ${catalogToDelete?.type === 'cursos' ? 'curso' : 'igreja'}?`}
+                message={catalogToDelete ? `Esta ação é irreversível. “${catalogToDelete.item.nome}”, ${catalogToDelete.item.turmas} turma(s), ${catalogToDelete.item.matriculas} matrícula(s) e ${catalogToDelete.item.frequencias} frequência(s) vinculadas serão apagadas. Os alunos e professores permanecerão cadastrados.` : ''}
+                confirmLabel="Excluir definitivamente"
+                loading={isDeletingCatalog}
             />
         </>
     );

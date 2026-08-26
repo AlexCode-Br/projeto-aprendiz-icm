@@ -145,8 +145,8 @@ const Professores = () => {
                         <option value="">Todos os Cursos</option>
                         {coursesList.map(c => <option key={c} value={c}>{c}</option>)}
                     </select></label>
-                     <label><span className="sr-only">Filtrar por local</span><select value={selectedLocal} onChange={e => setSelectedLocal(e.target.value)} className="form-control">
-                        <option value="">Todos os Locais</option>
+                     <label><span className="sr-only">Filtrar por igreja</span><select value={selectedLocal} onChange={e => setSelectedLocal(e.target.value)} className="form-control">
+                        <option value="">Todas as Igrejas</option>
                         {locaisList.map(l => <option key={l} value={l}>{l}</option>)}
                     </select></label>
                 </div>
@@ -159,7 +159,7 @@ const Professores = () => {
                             <tr>
                                 <th className="px-6 py-3">Professor</th>
                                 <th className="px-6 py-3">Cursos</th>
-                                <th className="px-6 py-3">Local</th>
+                                <th className="px-6 py-3">Igreja</th>
                                 <th className="px-6 py-3">Acesso</th>
                                 <th className="px-6 py-3 text-center">Ações</th>
                             </tr>
