@@ -34,7 +34,7 @@ function postgresSql(source) {
 const tablesWithId = new Set([
   'users', 'sessions', 'password_resets', 'dev_emails', 'audit_log', 'locations',
   'professor_profiles', 'professor_invites', 'students', 'courses', 'classes',
-  'enrollments', 'attendance_sessions', 'attendance_records', 'announcements',
+  'enrollments', 'attendance_sessions', 'attendance_records', 'announcements', 'announcement_attachments',
   'support_tickets', 'support_messages', 'support_ticket_events', 'dropout_events',
 ]);
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import AnnouncementAttachments from '../../components/AnnouncementAttachments';
 
 const ProfessorInformativos = () => {
     const [informativos, setInformativos] = useState([]);
@@ -63,6 +64,7 @@ const ProfessorInformativos = () => {
                         </div>
                         <h3 className="text-xl font-bold text-text-default mb-2">{info.titulo}</h3>
                         <div className="announcement-content mb-4 max-w-none text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
+                        <AnnouncementAttachments attachments={info.anexos} />
 
                         <div className="flex items-center justify-between pt-4 border-t border-border">
                             <p className="text-xs text-text-muted">
