@@ -183,6 +183,12 @@
     }
 }
 
+.react-select__input:focus,
+.react-select__input:focus-visible {
+    outline: none;
+    box-shadow: none;
+}
+
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(12px); }
     to {

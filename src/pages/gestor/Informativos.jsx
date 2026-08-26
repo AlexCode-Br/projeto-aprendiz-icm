@@ -23,8 +23,11 @@ const Informativos = () => {
                 api.get('/api/informativos'),
                 api.get('/professores')
             ]);
-            setInformativos(infoResponse.data);
-            setHasProfessors(profResponse.data.some(professor => professor.status === 'Ativo'));
+            setInformativos(Array.isArray(infoResponse.data) ? infoResponse.data : []);
+            const professores = Array.isArray(profResponse.data?.professores)
+                ? profResponse.data.professores
+                : [];
+            setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
         } catch (error) {
             showToast(error.message || 'Erro ao carregar dados.', 'error');
         }

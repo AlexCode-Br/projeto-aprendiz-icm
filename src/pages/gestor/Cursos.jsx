@@ -134,7 +134,7 @@ const Cursos = () => {
                         </div>
                         <div className="max-h-80 overflow-auto">
                             <table className="w-full text-left text-sm">
-                                <thead className="bg-gray-50 text-xs uppercase text-text-muted dark:bg-surface/30"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
+                                <thead className="bg-surface-muted text-xs uppercase text-text-muted"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
                                 <tbody>{catalogos[type].map(item => <tr key={item.id} className="border-t border-border">
                                     <td className="px-5 py-3 font-medium">{item.nome}</td>
                                     <td className="px-5 py-3 text-center">{item.turmas}{type === 'locais' ? ` turma(s) · ${item.professores} professor(es)` : ' turma(s)'}</td>
