@@ -146,6 +146,12 @@
         @apply min-h-11 w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm text-text-default placeholder:text-text-muted transition-colors hover:border-gray-400 focus:border-primary focus:ring-primary focus:ring-opacity-30;
     }
 
+    .announcement-content ul { list-style: disc; padding-left: 1.5rem; }
+    .announcement-content ol { list-style: decimal; padding-left: 1.5rem; }
+    .announcement-content li { margin: 0.2rem 0; }
+    .announcement-content a { color: var(--color-primary); text-decoration: underline; }
+    .announcement-content img { display: block; max-width: 100%; height: auto; margin: 0.75rem 0; border-radius: 0.5rem; }
+
     .auth-page {
         @apply flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 via-white to-red-50/40 px-4 py-8 dark:from-[#18191a] dark:via-[#1f2021] dark:to-[#251d1d];
     }

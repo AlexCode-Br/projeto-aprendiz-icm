@@ -16,7 +16,13 @@ const initialFormState = {
 const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
+    const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+    const [linkUrl, setLinkUrl] = useState('');
+    const [linkError, setLinkError] = useState('');
+    const [imageProcessing, setImageProcessing] = useState(false);
     const editorRef = useRef(null);
+    const imageInputRef = useRef(null);
+    const savedSelectionRef = useRef(null);
 
     useEffect(() => {
         if (informativo) {
@@ -37,6 +43,10 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
             if (editorRef.current) editorRef.current.innerHTML = '';
         }
         setErrors({});
+        setLinkDialogOpen(false);
+        setLinkUrl('');
+        setLinkError('');
+        setImageProcessing(false);
     }, [informativo, isOpen]);
 
     const validate = () => {
@@ -66,6 +76,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        if (imageProcessing) return setErrors(prev => ({ ...prev, conteudo: 'Aguarde o processamento da imagem.' }));
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
             setErrors(validationErrors);
@@ -74,20 +85,43 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
         onSave(formData);
     };
 
-    const format = command => { document.execCommand(command, false); editorRef.current?.focus(); };
-    const addLink = () => {
-        const url = window.prompt('Cole uma URL HTTPS para inserir no texto:');
-        if (url && /^https:\/\//i.test(url)) document.execCommand('createLink', false, url);
+    const syncEditor = () => {
+        if (!editorRef.current) return;
+        setFormData(prev => ({ ...prev, conteudo: editorRef.current.innerHTML }));
+        setErrors(prev => ({ ...prev, conteudo: null }));
+    };
+    const saveSelection = () => {
+        const selection = window.getSelection();
+        if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) savedSelectionRef.current = selection.getRangeAt(0).cloneRange();
+    };
+    const restoreSelection = () => {
         editorRef.current?.focus();
+        const selection = window.getSelection();
+        if (savedSelectionRef.current && selection) { selection.removeAllRanges(); selection.addRange(savedSelectionRef.current); }
+    };
+    const format = command => { restoreSelection(); document.execCommand(command, false); syncEditor(); };
+    const openLinkDialog = () => { saveSelection(); setLinkUrl(''); setLinkError(''); setLinkDialogOpen(true); };
+    const applyLink = event => {
+        event.preventDefault();
+        const value = linkUrl.trim();
+        if (!/^https:\/\//i.test(value)) return setLinkError('Use uma URL HTTPS válida.');
+        restoreSelection();
+        const selection = window.getSelection();
+        if (selection?.toString().trim()) document.execCommand('createLink', false, value);
+        else document.execCommand('insertHTML', false, `<a href="${value.replace(/"/g, '&quot;')}" target="_blank" rel="noopener noreferrer">${value}</a>`);
+        syncEditor();
+        setLinkDialogOpen(false);
     };
     const addImage = event => {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
-        if (!['image/png','image/jpeg','image/heic','image/heif'].includes(file.type)) return setErrors(prev => ({ ...prev, conteudo: 'Imagem inválida. Use PNG, JPG/JPEG ou HEIC.' }));
+        const isImage = ['image/png','image/jpeg','image/heic','image/heif'].includes(file.type) || /\.(png|jpe?g|heic|heif)$/i.test(file.name);
+        if (!isImage) return setErrors(prev => ({ ...prev, conteudo: 'Imagem inválida. Use PNG, JPG/JPEG ou HEIC.' }));
         const maxSize = 5 * 1024 * 1024;
+        setImageProcessing(true);
         const reader = new FileReader();
-        reader.onerror = () => setErrors(prev => ({ ...prev, conteudo: 'Não foi possível ler a imagem.' }));
+        reader.onerror = () => { setImageProcessing(false); setErrors(prev => ({ ...prev, conteudo: 'Não foi possível ler a imagem.' })); };
         reader.onload = async () => {
             let result = reader.result;
             if (file.size > maxSize && file.type !== 'image/heic' && file.type !== 'image/heif') {
@@ -103,10 +137,13 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                     let quality = 0.86;
                     result = canvas.toDataURL('image/jpeg', quality);
                     while (result.length > maxSize * 1.37 && quality > 0.35) { quality -= 0.1; result = canvas.toDataURL('image/jpeg', quality); }
-                } catch { return setErrors(prev => ({ ...prev, conteudo: 'Não foi possível comprimir esta imagem.' })); }
+                } catch { setImageProcessing(false); return setErrors(prev => ({ ...prev, conteudo: 'Não foi possível comprimir esta imagem neste navegador.' })); }
             }
-            if (result.length > maxSize * 1.37) return setErrors(prev => ({ ...prev, conteudo: 'A imagem continua maior que 5 MB após a compressão.' }));
-            document.execCommand('insertImage', false, result); editorRef.current?.focus();
+            if (result.length > maxSize * 1.37) { setImageProcessing(false); return setErrors(prev => ({ ...prev, conteudo: 'A imagem continua maior que 5 MB após a compressão.' })); }
+            restoreSelection();
+            document.execCommand('insertImage', false, result);
+            syncEditor();
+            setImageProcessing(false);
         };
         reader.readAsDataURL(file);
     };
@@ -151,22 +188,25 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                         <div>
                             <label htmlFor="info-content" className="form-label">Conteúdo</label>
                                 <div className="mb-2 flex flex-wrap items-center gap-1 rounded-t-lg border border-border bg-surface-muted p-2" role="toolbar" aria-label="Formatação do conteúdo">
-                                    {[['bold','Negrito','B'],['italic','Itálico','I'],['underline','Sublinhado','U']].map(([command,label,icon]) => <button key={command} type="button" onClick={() => format(command)} className="min-h-9 min-w-9 rounded px-2 font-semibold text-text-default hover:bg-surface-hover" aria-label={label}><span className={command}>{icon}</span></button>)}
-                                    <button type="button" onClick={() => format('insertUnorderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista com marcadores">• Lista</button>
-                                    <button type="button" onClick={addLink} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Inserir link">🔗 Link</button>
-                                    <label className="min-h-9 cursor-pointer rounded px-2 py-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Adicionar imagem">🖼 Imagem<input type="file" className="sr-only" accept="image/png,image/jpeg,image/heic,image/heif" onChange={addImage} /></label>
+                                    {[['bold','Negrito','B'],['italic','Itálico','I'],['underline','Sublinhado','U']].map(([command,label,icon]) => <button key={command} type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format(command)} className="min-h-9 min-w-9 rounded px-2 font-semibold text-text-default hover:bg-surface-hover" aria-label={label}><span className={command}>{icon}</span></button>)}
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertUnorderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista com marcadores">• Lista</button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista numerada">1. Lista</button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Inserir link">🔗 Link</button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => imageInputRef.current?.click()} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Adicionar imagem">🖼 Imagem</button>
+                                    <input ref={imageInputRef} type="file" className="sr-only" accept="image/png,image/jpeg,image/heic,image/heif" onChange={addImage} />
                                 </div>
-                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); }} aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
-                                <p className="mt-1 text-xs text-text-muted">Formatação e imagens PNG, JPG/JPEG ou HEIC. Imagens acima de 5 MB serão comprimidas automaticamente.</p>
+                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); }} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
+                                <p className="mt-1 text-xs text-text-muted">Formatação e imagens PNG, JPG/JPEG ou HEIC. Imagens acima de 5 MB serão comprimidas automaticamente{imageProcessing ? '… processando imagem' : '.'}</p>
                                 {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
                         <div className="space-y-3 pt-2">
                             <FormCheckbox name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} label="Fixar no topo" />
                         </div>
                     </div>
+                    {linkDialogOpen && <div className="mt-4 rounded-lg border border-border bg-surface-muted p-3"><div className="flex flex-col gap-2 sm:flex-row sm:items-end"><label className="flex-1"><span className="form-label">URL do link</span><input autoFocus type="url" value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError(''); }} placeholder="https://exemplo.com" className={`form-control ${linkError ? 'border-danger' : ''}`} />{linkError && <span className="mt-1 block text-xs text-danger">{linkError}</span>}</label><button type="button" onClick={applyLink} className="btn btn-primary">Inserir link</button><button type="button" onClick={() => setLinkDialogOpen(false)} className="btn btn-secondary">Cancelar</button></div></div>}
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
                         <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
-                        <button type="submit" className="btn btn-primary">Revisar e publicar</button>
+                        <button type="submit" disabled={imageProcessing} className="btn btn-primary">{imageProcessing ? 'Processando imagem…' : 'Revisar e publicar'}</button>
                     </div>
                 </form>
         </Modal>
