@@ -75,17 +75,17 @@ const FormSelect = forwardRef(({
                     `min-h-11 w-full rounded-lg border bg-surface text-sm transition-colors cursor-pointer ` +
                     (isDisabled ? 'opacity-60 cursor-not-allowed bg-gray-100 dark:bg-gray-800 ' : 'hover:border-gray-400 ') +
                     (invalid ? 'border-danger focus-within:border-danger focus-within:ring-1 focus-within:ring-danger ' : 'border-border ') +
-                    (isFocused && !invalid ? 'border-primary ring-1 ring-primary ' : ''),
+                    (isFocused && !invalid ? 'border-gray-400 ring-1 ring-gray-400/30 dark:border-gray-500 dark:ring-gray-500/30 ' : ''),
                 valueContainer: () => 'px-3.5 py-1.5 gap-1',
                 placeholder: () => 'text-text-muted',
-                input: () => 'text-text-default',
+                input: () => 'text-text-default caret-text-default focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0',
                 singleValue: () => 'text-text-default',
                 multiValue: () => 'bg-primary/10 text-primary rounded-md px-2 py-0.5 text-xs font-semibold mr-1 flex items-center',
                 multiValueLabel: () => 'mr-1',
                 multiValueRemove: () => 'hover:text-danger hover:bg-danger/10 rounded px-0.5',
                 indicatorsContainer: () => 'px-2 text-text-muted',
                 clearIndicator: () => 'hover:text-danger p-1',
-                dropdownIndicator: ({ isFocused }) => `p-1 ${isFocused ? 'text-primary' : 'text-text-muted'}`,
+                dropdownIndicator: ({ isFocused }) => `p-1 ${isFocused ? 'text-text-default' : 'text-text-muted'}`,
                 menu: () => 'mt-1 mb-1 rounded-xl border border-border bg-surface shadow-lg overflow-hidden z-50',
                 menuList: () => 'p-1 max-h-60 overflow-y-auto',
                 option: ({ isFocused, isSelected }) =>
