@@ -1,20 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
-
-// Dados mockados para os selects
-const cursosPorLocal = {
-    'Violão I': ['Pituba', 'Lauro de Freitas', 'Guarani'],
-    'Teclado': ['Brotas', 'Guarani'],
-    'Bateria': ['Lauro de Freitas', 'Vista Alegre (Remoto)'],
-    'Canto Coral': ['Pituba'],
-    'Violino': ['Brotas', 'Boca do Rio'],
-    'Flauta Transversal': ['Boca do Rio'],
-    'Contrabaixo': ['Alto de Coutos'],
-    'Violão II': ['Pituba'],
-    'Teoria Musical': ['Remoto'],
-    'Saxofone': ['Brotas'],
-};
-const allCourses = Object.keys(cursosPorLocal);
+import { emailError, personNameError, phoneError, requiredTextError } from '../../shared/validation.mjs';
 
 const initialFormState = {
     nome: '',
@@ -27,7 +13,7 @@ const initialFormState = {
     instrumento: 'Não',
 };
 
-const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
+const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
     const [availableLocais, setAvailableLocais] = useState([]);
@@ -44,25 +30,22 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
                 local: aluno.local || '',
                 instrumento: aluno.instrumento || 'Não',
             });
-            // Popula locais ao editar
             const cursoSelecionado = Array.isArray(aluno.curso) ? aluno.curso[0] : aluno.curso;
-            if (cursoSelecionado && cursosPorLocal[cursoSelecionado]) {
-                setAvailableLocais(cursosPorLocal[cursoSelecionado]);
-            }
+            setAvailableLocais([...new Set(offerings.filter(item => item.nome === cursoSelecionado).map(item => item.local))]);
         } else {
             setFormData(initialFormState);
             setAvailableLocais([]);
         }
         setErrors({});
-    }, [aluno, isOpen]);
+    }, [aluno, isOpen, offerings]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
 
         if (name === 'curso') {
-            setAvailableLocais(cursosPorLocal[value] || []);
-            setFormData(prev => ({ ...prev, local: '' })); // Reseta o local ao mudar o curso
+            setAvailableLocais([...new Set(offerings.filter(item => item.nome === value).map(item => item.local))]);
+            setFormData(prev => ({ ...prev, local: '' }));
         }
 
         if (errors[name]) {
@@ -72,11 +55,14 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
 
     const validate = () => {
         const newErrors = {};
-        if (!formData.nome.trim()) newErrors.nome = 'O nome é obrigatório.';
-        if (!formData.contato.trim()) newErrors.contato = 'O e-mail é obrigatório.';
-        else if (!/\S+@\S+\.\S+/.test(formData.contato)) newErrors.contato = 'E-mail inválido.';
-        if (!formData.telefone.trim()) newErrors.telefone = 'O telefone é obrigatório.';
-        if (!formData.igreja.trim()) newErrors.igreja = 'A igreja é obrigatória.';
+        const nameMessage = personNameError(formData.nome, 'nome completo');
+        const emailMessage = emailError(formData.contato);
+        const phoneMessage = phoneError(formData.telefone);
+        const churchMessage = requiredTextError(formData.igreja, 'A igreja', 2, 100);
+        if (nameMessage) newErrors.nome = nameMessage;
+        if (emailMessage) newErrors.contato = emailMessage;
+        if (phoneMessage) newErrors.telefone = phoneMessage;
+        if (churchMessage) newErrors.igreja = churchMessage;
         if (!formData.classe) newErrors.classe = 'A classe é obrigatória.';
         if (!formData.curso) newErrors.curso = 'O curso é obrigatório.';
         if (!formData.local) newErrors.local = 'O local é obrigatório.';
@@ -91,7 +77,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
             return;
         }
         // No protótipo, o curso é um array, então ajustamos aqui
-        onSave({ ...formData, curso: [formData.curso] });
+        onSave({ ...formData, curso: [formData.curso] }, aluno?.id);
     };
 
     if (!isOpen) return null;
@@ -133,7 +119,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno }) => {
                                 <label htmlFor="curso" className="form-label">Curso de interesse</label>
                                 <select name="curso" id="curso" value={formData.curso} onChange={handleChange} aria-invalid={Boolean(errors.curso)} className={`form-control ${errors.curso ? 'border-danger' : ''}`}>
                                     <option value="">Selecione...</option>
-                                    {allCourses.map(c => <option key={c} value={c}>{c}</option>)}
+                                    {[...new Set(offerings.map(item => item.nome))].map(c => <option key={c} value={c}>{c}</option>)}
                                 </select>
                                 {errors.curso && <p className="text-danger text-xs mt-1">{errors.curso}</p>}
                             </div>

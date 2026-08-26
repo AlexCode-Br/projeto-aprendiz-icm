@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import CursoModal from '../../components/CursoModal';
+import CatalogItemModal from '../../components/CatalogItemModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
@@ -9,18 +10,22 @@ const Cursos = () => {
     const [cursos, setCursos] = useState([]);
     const [professoresDisponiveis, setProfessoresDisponiveis] = useState([]);
     const [locaisDisponiveis, setLocaisDisponiveis] = useState([]);
+    const [catalogos, setCatalogos] = useState({ cursos: [], locais: [] });
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLocal, setSelectedLocal] = useState('');
     const [isCursoModalOpen, setIsCursoModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [currentCurso, setCurrentCurso] = useState(null);
+    const [catalogModal, setCatalogModal] = useState({ open: false, type: 'cursos', item: null });
+    const [catalogToDelete, setCatalogToDelete] = useState(null);
 
     const fetchCursos = useCallback(async () => {
         try {
-            const response = await api.get('/cursos');
-            setCursos(response.data.cursos);
-            setProfessoresDisponiveis(response.data.professores);
-            setLocaisDisponiveis(response.data.locais);
+            const [classesResponse, catalogsResponse] = await Promise.all([api.get('/cursos'), api.get('/api/catalogos')]);
+            setCursos(classesResponse.data.cursos);
+            setProfessoresDisponiveis(classesResponse.data.professores);
+            setCatalogos(catalogsResponse.data);
+            setLocaisDisponiveis(catalogsResponse.data.locais.filter(item => item.ativo).map(item => item.nome));
         } catch (error) {
             showToast(error.message || 'Erro ao carregar os cursos.', 'error');
         }
@@ -75,6 +80,32 @@ const Cursos = () => {
         }
     };
 
+    const handleSaveCatalog = async data => {
+        const { type, item } = catalogModal;
+        try {
+            if (item) await api.put(`/api/catalogos/${type}/${item.id}`, data);
+            else await api.post(`/api/catalogos/${type}`, data);
+            showToast(`${type === 'cursos' ? 'Curso' : 'Local'} salvo com sucesso!`, 'success');
+            setCatalogModal({ open: false, type: 'cursos', item: null });
+            await fetchCursos();
+        } catch (error) {
+            showToast(error.message || 'Erro ao salvar o cadastro.', 'error');
+            throw error;
+        }
+    };
+
+    const handleDeleteCatalog = async () => {
+        if (!catalogToDelete) return;
+        try {
+            await api.delete(`/api/catalogos/${catalogToDelete.type}/${catalogToDelete.item.id}`);
+            showToast(`${catalogToDelete.type === 'cursos' ? 'Curso' : 'Local'} desativado com sucesso!`, 'success');
+            setCatalogToDelete(null);
+            await fetchCursos();
+        } catch (error) {
+            showToast(error.message || 'Não foi possível desativar o cadastro.', 'error');
+        }
+    };
+
     const filteredCursos = useMemo(() => {
         return cursos.filter(curso => {
             const matchesSearch = curso.nome.toLowerCase().includes(searchTerm.toLowerCase());
@@ -86,12 +117,41 @@ const Cursos = () => {
     return (
         <>
             <div className="page-header">
-                <div><h1 className="page-title">Cursos</h1><p className="page-description">Cadastre turmas e acompanhe professores, locais, alunos e status.</p></div>
-                <button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary w-full sm:w-auto">
+                <div><h1 className="page-title">Cursos e locais</h1><p className="page-description">Gerencie o catálogo e monte as turmas usando apenas opções aprovadas.</p></div>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <button type="button" onClick={() => setCatalogModal({ open: true, type: 'cursos', item: null })} className="btn btn-secondary">Novo curso</button>
+                <button type="button" onClick={() => setCatalogModal({ open: true, type: 'locais', item: null })} className="btn btn-secondary">Novo local</button>
+                <button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary">
                     <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-                    Novo Curso
+                    Nova turma
                 </button>
+                </div>
             </div>
+
+            <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+                {['cursos', 'locais'].map(type => (
+                    <section key={type} className="panel overflow-hidden" aria-labelledby={`${type}-catalog-title`}>
+                        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                            <div><h2 id={`${type}-catalog-title`} className="font-semibold">{type === 'cursos' ? 'Catálogo de cursos' : 'Locais de atendimento'}</h2><p className="text-sm text-text-muted">{type === 'cursos' ? 'Opções disponíveis para professores e turmas.' : 'Unidades que podem receber professores e turmas.'}</p></div>
+                            <button type="button" onClick={() => setCatalogModal({ open: true, type, item: null })} className="btn btn-secondary">Adicionar</button>
+                        </div>
+                        <div className="max-h-80 overflow-auto">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-gray-50 text-xs uppercase text-text-muted dark:bg-surface/30"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
+                                <tbody>{catalogos[type].map(item => <tr key={item.id} className="border-t border-border">
+                                    <td className="px-5 py-3 font-medium">{item.nome}</td>
+                                    <td className="px-5 py-3 text-center">{item.turmasAtivas}{type === 'locais' ? ` turma(s) · ${item.professoresAtivos} professor(es)` : ' turma(s)'}</td>
+                                    <td className="px-5 py-3 text-center"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.ativo ? 'bg-success/10 text-success' : 'bg-gray-100 text-text-muted dark:bg-white/10'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
+                                    <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}>✎</button>{item.ativo && <button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Desativar ${item.nome}`}>×</button>}</td>
+                                </tr>)}</tbody>
+                            </table>
+                            {!catalogos[type].length && <p className="p-8 text-center text-sm text-text-muted">Nenhum cadastro encontrado.</p>}
+                        </div>
+                    </section>
+                ))}
+            </div>
+
+            <div className="mb-3"><h2 className="text-lg font-semibold">Turmas</h2><p className="text-sm text-text-muted">Combine um curso, um local e um professor.</p></div>
 
             <section className="panel mb-6 p-4 md:p-6" aria-label="Filtros de cursos">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -171,7 +231,10 @@ const Cursos = () => {
                 curso={currentCurso}
                 allProfessores={professoresDisponiveis}
                 allLocais={locaisDisponiveis}
+                allCursos={catalogos.cursos.filter(item => item.ativo).map(item => item.nome)}
             />
+
+            <CatalogItemModal isOpen={catalogModal.open} onClose={() => setCatalogModal({ open: false, type: 'cursos', item: null })} onSave={handleSaveCatalog} item={catalogModal.item} type={catalogModal.type} />
 
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}
@@ -179,6 +242,14 @@ const Cursos = () => {
                 onConfirm={handleDeleteCurso}
                 title="Desativar curso?"
                 message="O curso deixará de aparecer como ativo. Você poderá manter o histórico já registrado."
+                confirmLabel="Desativar"
+            />
+            <ConfirmationModal
+                isOpen={Boolean(catalogToDelete)}
+                onClose={() => setCatalogToDelete(null)}
+                onConfirm={handleDeleteCatalog}
+                title={`Desativar ${catalogToDelete?.type === 'cursos' ? 'curso' : 'local'}?`}
+                message="A opção deixará de aparecer nos novos cadastros. Itens com vínculos ativos precisam ser desvinculados antes."
                 confirmLabel="Desativar"
             />
         </>

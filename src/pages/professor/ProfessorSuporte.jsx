@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import Modal from '../../components/Modal';
+import { requiredTextError } from '../../../shared/validation.mjs';
 
 // --- Ícones SVG ---
 const AddIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>;
@@ -31,8 +32,10 @@ const NewTicketModal = ({ isOpen, onClose, onSave }) => {
 
     const validateForm = () => {
         const newErrors = {};
-        if (!formData.assunto.trim()) newErrors.assunto = 'O assunto é obrigatório.';
-        if (!formData.mensagem.trim()) newErrors.mensagem = 'A mensagem é obrigatória.';
+        const subjectError = requiredTextError(formData.assunto, 'O assunto', 5, 120);
+        const messageError = requiredTextError(formData.mensagem, 'A mensagem', 10, 4000);
+        if (subjectError) newErrors.assunto = subjectError;
+        if (messageError) newErrors.mensagem = messageError;
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -52,7 +55,7 @@ const NewTicketModal = ({ isOpen, onClose, onSave }) => {
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="ticket-subject" className="form-label">Assunto</label>
-                            <input type="text" id="ticket-subject" name="assunto" value={formData.assunto} onChange={handleChange} aria-invalid={Boolean(errors.assunto)} aria-describedby={errors.assunto ? 'ticket-subject-error' : undefined} className={`form-control ${errors.assunto ? 'border-danger' : ''}`} />
+                            <input type="text" id="ticket-subject" name="assunto" maxLength="120" value={formData.assunto} onChange={handleChange} aria-invalid={Boolean(errors.assunto)} aria-describedby={errors.assunto ? 'ticket-subject-error' : undefined} className={`form-control ${errors.assunto ? 'border-danger' : ''}`} />
                             {errors.assunto && <p id="ticket-subject-error" className="text-danger text-xs mt-1">{errors.assunto}</p>}
                         </div>
                         <div>
@@ -65,7 +68,7 @@ const NewTicketModal = ({ isOpen, onClose, onSave }) => {
                         </div>
                         <div>
                             <label htmlFor="ticket-message" className="form-label">Descreva o problema</label>
-                            <textarea id="ticket-message" name="mensagem" rows="6" value={formData.mensagem} onChange={handleChange} aria-invalid={Boolean(errors.mensagem)} aria-describedby={errors.mensagem ? 'ticket-message-error' : undefined} className={`form-control min-h-32 ${errors.mensagem ? 'border-danger' : ''}`}></textarea>
+                            <textarea id="ticket-message" name="mensagem" rows="6" maxLength="4000" value={formData.mensagem} onChange={handleChange} aria-invalid={Boolean(errors.mensagem)} aria-describedby={errors.mensagem ? 'ticket-message-error' : undefined} className={`form-control min-h-32 ${errors.mensagem ? 'border-danger' : ''}`}></textarea>
                             {errors.mensagem && <p id="ticket-message-error" className="text-danger text-xs mt-1">{errors.mensagem}</p>}
                         </div>
                     </div>

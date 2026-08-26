@@ -6,6 +6,18 @@ import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { createDatabase } from './database.mjs';
+import {
+  catalogNameError,
+  cleanText,
+  emailError,
+  hasValidationErrors,
+  httpsUrlError,
+  normalizeEmail,
+  personNameError,
+  phoneError,
+  requiredTextError,
+  validateProfessor,
+} from '../shared/validation.mjs';
 
 const scrypt = promisify(scryptCallback);
 const here = dirname(fileURLToPath(import.meta.url));
@@ -222,9 +234,17 @@ if (db.dialect === 'sqlite') {
 }
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
-const cleanEmail = value => String(value || '').trim().toLowerCase();
+const cleanEmail = normalizeEmail;
 const publicUser = user => ({ id: user.id, nome: user.name, email: user.email, role: user.role });
 const strongPassword = value => typeof value === 'string' && value.length >= 10 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value);
+
+function invalid(response, errors, fallback = 'Revise os campos informados.') {
+  return json(response, 400, { message: Object.values(errors).find(Boolean) || fallback, errors });
+}
+
+function duplicateError(error) {
+  return error?.code === '23505' || String(error).includes('UNIQUE');
+}
 
 async function hashPassword(password) {
   const salt = randomBytes(16);
@@ -774,8 +794,9 @@ async function api(request, response, url) {
   }
   if(request.method==='PUT'&&url.pathname==='/api/account/profile'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
-    const body=await readJson(request),name=String(body.nome||'').trim(),email=cleanEmail(body.email);
-    if(!name||!email||!email.includes('@'))return json(response,400,{message:'Informe nome e e-mail válidos.'});
+    const body=await readJson(request),name=cleanText(body.nome,100),email=cleanEmail(body.email);
+    const errors={nome:personNameError(name,'nome completo'),email:emailError(email)};
+    if(hasValidationErrors(errors))return invalid(response,errors);
     try{
       await db.transaction(async () => {
         await db.prepare('UPDATE users SET name=?,email=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(name,email,session.user_id);
@@ -816,13 +837,18 @@ async function api(request, response, url) {
   if (request.method === 'POST' && url.pathname === '/alunos') {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const body = await readJson(request);
-    const name = String(body.nome || '').trim(), email = cleanEmail(body.contato || body.email);
-    if (!name || !email || !String(body.telefone || '').trim()) return json(response, 400, { message: 'Nome, e-mail e telefone são obrigatórios.' });
-    const courseName = Array.isArray(body.curso) ? body.curso[0] : body.curso;
-    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,body.local);
+    const name = cleanText(body.nome,100), email = cleanEmail(body.contato || body.email), phone=cleanText(body.telefone,30);
+    const courseName = cleanText(Array.isArray(body.curso) ? body.curso[0] : body.curso,100),locationName=cleanText(body.local,100);
+    const errors={
+      nome:personNameError(name,'nome completo'),contato:emailError(email),telefone:phoneError(phone),
+      igreja:requiredTextError(body.igreja,'A igreja',2,100),classe:['Adolescente','Jovem','Senhora','Varão'].includes(body.classe)?'':'Selecione uma classe válida.',
+      curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione um local.',
+    };
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,locationName);
     if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e local selecionados.' });
     try {
-      const result = await db.prepare('INSERT INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)').run(name,email,body.telefone,body.igreja || '',body.classe || '',body.instrumento === 'Sim' ? 1 : 0);
+      const result = await db.prepare('INSERT INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)').run(name,email,phone,cleanText(body.igreja,100),body.classe,body.instrumento === 'Sim' ? 1 : 0);
       await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_created',ip);
       return json(response, 201, { id: Number(result.lastInsertRowid) });
@@ -836,12 +862,14 @@ async function api(request, response, url) {
   if (studentMatch && request.method === 'PUT') {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const id = Number(studentMatch[1]), body = await readJson(request);
-    const courseName = Array.isArray(body.curso) ? body.curso[0] : body.curso;
-    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,body.local);
+    const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),courseName=cleanText(Array.isArray(body.curso)?body.curso[0]:body.curso,100),locationName=cleanText(body.local,100);
+    const errors={nome:personNameError(name,'nome completo'),contato:emailError(email),telefone:phoneError(phone),igreja:requiredTextError(body.igreja,'A igreja',2,100),classe:['Adolescente','Jovem','Senhora','Varão'].includes(body.classe)?'':'Selecione uma classe válida.',curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione um local.'};
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,locationName);
     if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e local selecionados.' });
     try {
       await db.prepare(`UPDATE students SET name=?,email=?,phone=?,church=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
-        .run(String(body.nome||'').trim(),cleanEmail(body.contato||body.email),body.telefone||'',body.igreja||'',body.classe||'',body.instrumento==='Sim'?1:0,id);
+        .run(name,email,phone,cleanText(body.igreja,100),body.classe,body.instrumento==='Sim'?1:0,id);
       await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND status='ativa'").run(id);
       await db.prepare(`INSERT INTO enrollments (student_id,class_id,status) VALUES (?,?,'ativa') ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa'`).run(id,classRow.id);
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
@@ -871,6 +899,80 @@ async function api(request, response, url) {
     return json(response, 200, { alunos: rows.map(studentView), total });
   }
 
+  if (request.method === 'GET' && url.pathname === '/api/catalogos') {
+    if (!await authorize(request, response, ['gestor'])) return;
+    const cursos = await db.prepare(`
+      SELECT courses.id,courses.name AS nome,courses.active,
+        COUNT(DISTINCT CASE WHEN classes.active=1 THEN classes.id END) AS turmas_ativas
+      FROM courses LEFT JOIN classes ON classes.course_id=courses.id
+      GROUP BY courses.id,courses.name,courses.active ORDER BY courses.name
+    `).all();
+    const locais = await db.prepare(`
+      SELECT locations.id,locations.name AS nome,locations.active,
+        COUNT(DISTINCT CASE WHEN classes.active=1 THEN classes.id END) AS turmas_ativas,
+        COUNT(DISTINCT CASE WHEN professor_profiles.active=1 THEN professor_profiles.id END) AS professores_ativos
+      FROM locations
+      LEFT JOIN classes ON classes.location_id=locations.id
+      LEFT JOIN professor_profiles ON professor_profiles.home_location_id=locations.id
+      GROUP BY locations.id,locations.name,locations.active ORDER BY locations.name
+    `).all();
+    return json(response, 200, {
+      cursos: cursos.map(row => ({ ...row, ativo: row.active === 1, turmasAtivas: Number(row.turmas_ativas || 0) })),
+      locais: locais.map(row => ({ ...row, ativo: row.active === 1, turmasAtivas: Number(row.turmas_ativas || 0), professoresAtivos: Number(row.professores_ativos || 0) })),
+    });
+  }
+
+  const catalogMatch = url.pathname.match(/^\/api\/catalogos\/(cursos|locais)(?:\/(\d+))?$/);
+  if (catalogMatch && ['POST', 'PUT', 'DELETE'].includes(request.method)) {
+    const session = await authorize(request, response, ['gestor']); if (!session) return;
+    const [, kind, idText] = catalogMatch;
+    const table = kind === 'cursos' ? 'courses' : 'locations';
+    const entity = kind === 'cursos' ? 'curso' : 'local';
+    const id = idText ? Number(idText) : null;
+    if (request.method === 'POST') {
+      const body = await readJson(request);
+      const name = cleanText(body.nome, 100);
+      const errorMessage = catalogNameError(name, entity);
+      if (errorMessage) return invalid(response, { nome: errorMessage });
+      const existing = await db.prepare(`SELECT id,active FROM ${table} WHERE LOWER(name)=LOWER(?)`).get(name);
+      if (existing?.active === 1) return json(response, 409, { message: `Este ${entity} já está cadastrado.` });
+      if (existing) {
+        await db.prepare(`UPDATE ${table} SET name=?,active=1 WHERE id=?`).run(name, existing.id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_reactivated`, ip);
+        return json(response, 200, { id: existing.id, message: `${entity[0].toUpperCase()}${entity.slice(1)} reativado com sucesso.` });
+      }
+      const result = await db.prepare(`INSERT INTO ${table} (name) VALUES (?)`).run(name);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_created`, ip);
+      return json(response, 201, { id: Number(result.lastInsertRowid) });
+    }
+    if (!id) return json(response, 404, { message: 'Cadastro não encontrado.' });
+    const current = await db.prepare(`SELECT id,active FROM ${table} WHERE id=?`).get(id);
+    if (!current) return json(response, 404, { message: `${entity[0].toUpperCase()}${entity.slice(1)} não encontrado.` });
+    if (request.method === 'PUT') {
+      const body = await readJson(request);
+      const name = cleanText(body.nome, 100);
+      const errorMessage = catalogNameError(name, entity);
+      if (errorMessage) return invalid(response, { nome: errorMessage });
+      try {
+        await db.prepare(`UPDATE ${table} SET name=? WHERE id=?`).run(name, id);
+      } catch (error) {
+        if (duplicateError(error)) return json(response, 409, { message: `Já existe outro ${entity} com este nome.` });
+        throw error;
+      }
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_updated`, ip);
+      return json(response, 200, { success: true });
+    }
+    const usage = kind === 'cursos'
+      ? await db.prepare('SELECT COUNT(*) AS total FROM classes WHERE course_id=? AND active=1').get(id)
+      : await db.prepare(`SELECT
+          (SELECT COUNT(*) FROM classes WHERE location_id=? AND active=1) +
+          (SELECT COUNT(*) FROM professor_profiles WHERE home_location_id=? AND active=1) AS total`).get(id, id);
+    if (Number(usage?.total || 0) > 0) return json(response, 409, { message: `Não é possível desativar este ${entity} enquanto houver vínculos ativos.` });
+    await db.prepare(`UPDATE ${table} SET active=0 WHERE id=?`).run(id);
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_deactivated`, ip);
+    return json(response, 200, { success: true });
+  }
+
   if (request.method === 'GET' && url.pathname === '/cursos') {
     if (!await authorize(request, response, ['gestor'])) return;
     const rows = await db.prepare(`SELECT classes.id,courses.name AS nome,locations.name AS local,professor_profiles.name AS professor,CASE classes.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,COUNT(CASE WHEN enrollments.status='ativa' AND students.active=1 THEN 1 END) AS alunos FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id GROUP BY classes.id,courses.name,locations.name,professor_profiles.name ORDER BY courses.name,locations.name`).all();
@@ -882,13 +984,20 @@ async function api(request, response, url) {
   if (request.method === 'POST' && url.pathname === '/cursos') {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const body = await readJson(request);
-    const professor = await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(body.professor);
+    const courseName = cleanText(body.nome, 100), locationName = cleanText(body.local, 100), professorName = cleanText(body.professor, 100);
+    const errors = {
+      nome: catalogNameError(courseName, 'curso'),
+      local: locationName ? '' : 'Selecione um local cadastrado.',
+      professor: professorName ? '' : 'Selecione um professor cadastrado.',
+    };
+    if (hasValidationErrors(errors)) return invalid(response, errors);
+    const professor = await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
     if (!professor) return json(response, 400, { message: 'Professor não encontrado.' });
-    await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(String(body.nome||'').trim());
-    await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(String(body.local||'').trim());
-    const courseId=(await db.prepare('SELECT id FROM courses WHERE name=?').get(body.nome)).id, locationId=(await db.prepare('SELECT id FROM locations WHERE name=?').get(body.local)).id;
+    const course = await db.prepare('SELECT id FROM courses WHERE name=? AND active=1').get(courseName);
+    const location = await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
+    if (!course || !location) return json(response, 400, { message: 'Selecione somente cursos e locais ativos cadastrados pelo gestor.' });
     try {
-      const result=await db.prepare('INSERT INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(courseId,professor.id,locationId,`${body.nome} — ${body.local}`);
+      const result=await db.prepare('INSERT INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(course.id,professor.id,location.id,`${courseName} — ${locationName}`);
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_created',ip);
       return json(response,201,{id:Number(result.lastInsertRowid)});
     } catch (error) {
@@ -900,12 +1009,17 @@ async function api(request, response, url) {
   if (courseMatch && request.method==='PUT') {
     const session=await authorize(request,response,['gestor']); if(!session)return;
     const id=Number(courseMatch[1]),body=await readJson(request);
-    const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(body.professor);
+    const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
+    const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione um local cadastrado.',professor:professorName?'':'Selecione um professor cadastrado.'};
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
     if(!professor)return json(response,400,{message:'Professor não encontrado.'});
-    await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(body.nome);
-    await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(body.local);
-    const courseId=(await db.prepare('SELECT id FROM courses WHERE name=?').get(body.nome)).id,locationId=(await db.prepare('SELECT id FROM locations WHERE name=?').get(body.local)).id;
-    await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=? WHERE id=?').run(courseId,professor.id,locationId,`${body.nome} — ${body.local}`,id);
+    const course=await db.prepare('SELECT id FROM courses WHERE name=? AND active=1').get(courseName),location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
+    if(!course||!location)return json(response,400,{message:'Selecione somente cursos e locais ativos cadastrados pelo gestor.'});
+    try{
+      const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=? WHERE id=?').run(course.id,professor.id,location.id,`${courseName} — ${locationName}`,id);
+      if(!result.changes)return json(response,404,{message:'Turma não encontrada.'});
+    }catch(error){if(duplicateError(error))return json(response,409,{message:'Esta turma já existe.'});throw error;}
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
     return json(response,200,{success:true});
   }
@@ -945,27 +1059,32 @@ async function api(request, response, url) {
 
   if(request.method==='POST'&&url.pathname==='/professores'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request),name=String(body.nome||'').trim(),email=cleanEmail(body.contato);
-    const locationName=String(body.local||'').trim(),courseNames=[...new Set((Array.isArray(body.cursos)?body.cursos:[]).map(value=>String(value).trim()).filter(Boolean))];
-    if(!name||!email.includes('@')||!locationName||!courseNames.length)return json(response,400,{message:'Nome, e-mail, local e ao menos um curso são obrigatórios.'});
+    const body=await readJson(request),name=cleanText(body.nome,100),email=cleanEmail(body.contato),phone=cleanText(body.telefone,30);
+    const locationName=cleanText(body.local,100),courseNames=[...new Set((Array.isArray(body.cursos)?body.cursos:[]).map(value=>cleanText(value,100)).filter(Boolean))];
+    const errors=validateProfessor({...body,nome:name,contato:email,telefone:phone,local:locationName,cursos:courseNames});
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    const location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
+    if(!location)return invalid(response,{local:'Selecione um local ativo cadastrado em Cursos e locais.'});
+    const catalogCourses=[];
+    for(const courseName of courseNames){
+      const course=await db.prepare('SELECT id,name FROM courses WHERE name=? AND active=1').get(courseName);
+      if(!course)return invalid(response,{cursos:`O curso “${courseName}” não está cadastrado ou está inativo.`});
+      catalogCourses.push(course);
+    }
     const existing=await db.prepare('SELECT id,user_id,active FROM professor_profiles WHERE email=?').get(email);
     if(existing?.active!==undefined&&existing.active!==1)return json(response,409,{message:'Este professor está desativado. Reative o cadastro existente em vez de criar outro.'});
     if(existing?.user_id)return json(response,409,{message:'Este professor já possui uma conta ativa.'});
     try{
       const professorId=await db.transaction(async()=>{
-        await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(locationName);
-        const locationId=(await db.prepare('SELECT id FROM locations WHERE name=?').get(locationName)).id;
         let targetProfessorId=existing?.id;
         if(targetProfessorId){
-          await db.prepare('UPDATE professor_profiles SET name=?,phone=?,home_location_id=?,active=1 WHERE id=?').run(name,body.telefone||'',locationId,targetProfessorId);
+          await db.prepare('UPDATE professor_profiles SET name=?,phone=?,home_location_id=?,active=1 WHERE id=?').run(name,phone,location.id,targetProfessorId);
         }else{
-          const result=await db.prepare('INSERT INTO professor_profiles (name,email,phone,home_location_id) VALUES (?,?,?,?)').run(name,email,body.telefone||'',locationId);
+          const result=await db.prepare('INSERT INTO professor_profiles (name,email,phone,home_location_id) VALUES (?,?,?,?)').run(name,email,phone,location.id);
           targetProfessorId=Number(result.lastInsertRowid);
         }
-        for(const courseName of courseNames){
-          await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(courseName);
-          const courseId=(await db.prepare('SELECT id FROM courses WHERE name=?').get(courseName)).id;
-          await db.prepare('INSERT OR IGNORE INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(courseId,targetProfessorId,locationId,`${courseName} — ${locationName}`);
+        for(const course of catalogCourses){
+          await db.prepare('INSERT OR IGNORE INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(course.id,targetProfessorId,location.id,`${course.name} — ${locationName}`);
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,existing?'professor_registration_resumed':'professor_created',ip);
         return targetProfessorId;
@@ -1009,19 +1128,33 @@ async function api(request, response, url) {
   if(professorMatch&&request.method==='PUT'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
     const id=Number(professorMatch[1]),body=await readJson(request);
-    await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(body.local);
-    const locationId=(await db.prepare('SELECT id FROM locations WHERE name=?').get(body.local)).id;
+    const name=cleanText(body.nome,100),email=cleanEmail(body.contato),phone=cleanText(body.telefone,30),locationName=cleanText(body.local,100);
+    const courseNames=[...new Set((Array.isArray(body.cursos)?body.cursos:[]).map(value=>cleanText(value,100)).filter(Boolean))];
+    const errors=validateProfessor({...body,nome:name,contato:email,telefone:phone,local:locationName,cursos:courseNames});
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    const current=await db.prepare('SELECT id FROM professor_profiles WHERE id=? AND active=1').get(id);
+    if(!current)return json(response,404,{message:'Professor ativo não encontrado.'});
+    const location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
+    if(!location)return invalid(response,{local:'Selecione um local ativo cadastrado em Cursos e locais.'});
+    const catalogCourses=[];
+    for(const courseName of courseNames){
+      const course=await db.prepare('SELECT id,name FROM courses WHERE name=? AND active=1').get(courseName);
+      if(!course)return invalid(response,{cursos:`O curso “${courseName}” não está cadastrado ou está inativo.`});
+      catalogCourses.push(course);
+    }
     try{
-      await db.prepare('UPDATE professor_profiles SET name=?,email=?,phone=?,home_location_id=? WHERE id=?').run(String(body.nome||'').trim(),cleanEmail(body.contato),body.telefone||'',locationId,id);
-      for(const courseName of body.cursos||[]){
-        await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(courseName);
-        const courseId=(await db.prepare('SELECT id FROM courses WHERE name=?').get(courseName)).id;
-        await db.prepare('INSERT OR IGNORE INTO classes (course_id,professor_id,location_id,label) VALUES (?,?,?,?)').run(courseId,id,locationId,`${courseName} — ${body.local}`);
-      }
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_updated',ip);
+      await db.transaction(async()=>{
+        await db.prepare('UPDATE professor_profiles SET name=?,email=?,phone=?,home_location_id=? WHERE id=?').run(name,email,phone,location.id,id);
+        await db.prepare('UPDATE classes SET active=0 WHERE professor_id=?').run(id);
+        for(const course of catalogCourses){
+          await db.prepare(`INSERT INTO classes (course_id,professor_id,location_id,label,active) VALUES (?,?,?,?,1)
+            ON CONFLICT(course_id,professor_id,location_id) DO UPDATE SET active=1,label=excluded.label`).run(course.id,id,location.id,`${course.name} — ${locationName}`);
+        }
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_updated',ip);
+      });
       return json(response,200,{success:true});
     }catch(error){
-      if(error.code === '23505' || String(error).includes('UNIQUE'))return json(response,409,{message:'Já existe um professor com este e-mail.'});
+      if(duplicateError(error))return json(response,409,{message:'Já existe um professor com este e-mail.'});
       throw error;
     }
   }
@@ -1079,6 +1212,8 @@ async function api(request, response, url) {
   if(request.method==='POST'&&url.pathname==='/frequencia'){
     const session=await authorize(request,response,['professor']);if(!session)return;
     const body=await readJson(request),classId=Number(body.curso_id),date=String(body.data_aula||'');
+    if(!Number.isInteger(classId)||classId<1||!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(`${date}T00:00:00Z`)))return json(response,400,{message:'Selecione uma turma e uma data válidas.'});
+    if(!Array.isArray(body.frequencias))return json(response,400,{message:'A lista de frequência é inválida.'});
     const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1`).get(classId,session.user_id);
     if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
     await db.prepare(`INSERT INTO attendance_sessions (class_id,class_date,recorded_by) VALUES (?,?,?) ON CONFLICT(class_id,class_date) DO UPDATE SET recorded_by=excluded.recorded_by,updated_at=CURRENT_TIMESTAMP`).run(classId,date,session.user_id);
@@ -1105,17 +1240,22 @@ async function api(request, response, url) {
   }
   if(request.method==='POST'&&url.pathname==='/api/informativos'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request),scheduled=body.dataAgendamento+'T'+body.horaAgendamento+':00Z';
-    if(!body.titulo||!body.categoria||!body.conteudo||!body.dataAgendamento||!body.horaAgendamento)return json(response,400,{message:'Preencha todos os campos obrigatórios.'});
-    const result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned,requires_confirmation,action_url,action_label) VALUES (?,?,?,?,?,?,?,?,?,?)").run(session.user_id,body.titulo,body.categoria,body.conteudo,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0,body.exigirConfirmacao?1:0,body.linkAcao||null,body.textoLink||null);
+    const body=await readJson(request),title=cleanText(body.titulo,120),content=String(body.conteudo||'').trim().slice(0,5000),actionUrl=cleanText(body.linkAcao,2048),actionLabel=cleanText(body.textoLink,80);
+    const scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
+    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content,'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',linkAcao:httpsUrlError(actionUrl),textoLink:actionUrl&&!actionLabel?'Informe o texto do link.':!actionUrl&&actionLabel?'Informe a URL do link.':''};
+    if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
+    const result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned,requires_confirmation,action_url,action_label) VALUES (?,?,?,?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0,body.exigirConfirmacao?1:0,actionUrl||null,actionLabel||null);
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
     return json(response,201,{id:Number(result.lastInsertRowid)});
   }
   const announcementMatch=url.pathname.match(/^\/api\/informativos\/(\d+)$/);
   if(announcementMatch&&request.method==='PUT'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request),scheduled=body.dataAgendamento+'T'+body.horaAgendamento+':00Z';
-    await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,requires_confirmation=?,action_url=?,action_label=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(body.titulo,body.categoria,body.conteudo,scheduled,body.fixarNoTopo?1:0,body.exigirConfirmacao?1:0,body.linkAcao||null,body.textoLink||null,Number(announcementMatch[1]));
+    const body=await readJson(request),title=cleanText(body.titulo,120),content=String(body.conteudo||'').trim().slice(0,5000),actionUrl=cleanText(body.linkAcao,2048),actionLabel=cleanText(body.textoLink,80),scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
+    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content,'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',linkAcao:httpsUrlError(actionUrl),textoLink:actionUrl&&!actionLabel?'Informe o texto do link.':!actionUrl&&actionLabel?'Informe a URL do link.':''};
+    if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
+    const result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,requires_confirmation=?,action_url=?,action_label=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,body.fixarNoTopo?1:0,body.exigirConfirmacao?1:0,actionUrl||null,actionLabel||null,Number(announcementMatch[1]));
+    if(!result.changes)return json(response,404,{message:'Informativo não encontrado.'});
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
     return json(response,200,{success:true});
   }
@@ -1136,10 +1276,11 @@ async function api(request, response, url) {
   }
   if(request.method==='POST'&&url.pathname==='/api/suporte'){
     const session=await authorize(request,response,['professor']);if(!session)return;
-    const body=await readJson(request);
-    if(!body.assunto||!body.mensagem)return json(response,400,{message:'Assunto e mensagem são obrigatórios.'});
-    const result=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,priority) VALUES (?,?,?)').run(session.user_id,body.assunto,['Normal','Alta','Urgente'].includes(body.prioridade)?body.prioridade:'Normal');
-    await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body) VALUES (?,?,?)').run(result.lastInsertRowid,session.user_id,body.mensagem);
+    const body=await readJson(request),subject=cleanText(body.assunto,120),message=String(body.mensagem||'').trim().slice(0,4000),priority=body.prioridade;
+    const errors={assunto:requiredTextError(subject,'O assunto',5,120),mensagem:requiredTextError(message,'A mensagem',10,4000),prioridade:['Normal','Alta','Urgente'].includes(priority)?'':'Selecione uma prioridade válida.'};
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    const result=await db.prepare('INSERT INTO support_tickets (requester_user_id,subject,priority) VALUES (?,?,?)').run(session.user_id,subject,priority);
+    await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body) VALUES (?,?,?)').run(result.lastInsertRowid,session.user_id,message);
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'ticket_created',ip);
     return json(response,201,{id:Number(result.lastInsertRowid)});
   }
@@ -1149,8 +1290,8 @@ async function api(request, response, url) {
     const id=Number(replyMatch[1]),ticket=await db.prepare('SELECT * FROM support_tickets WHERE id=?').get(id);
     if(!ticket||(session.role==='professor'&&ticket.requester_user_id!==session.user_id))return json(response,404,{message:'Ticket não encontrado.'});
     if(ticket.status==='Resolvido')return json(response,409,{message:'Reabra o ticket antes de responder.'});
-    const body=await readJson(request);if(!String(body.mensagem||'').trim())return json(response,400,{message:'A resposta não pode estar vazia.'});
-    await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body) VALUES (?,?,?)').run(id,session.user_id,body.mensagem);
+    const body=await readJson(request),message=String(body.mensagem||'').trim().slice(0,4000),messageError=requiredTextError(message,'A resposta',2,4000);if(messageError)return invalid(response,{mensagem:messageError});
+    await db.prepare('INSERT INTO support_messages (ticket_id,author_user_id,body) VALUES (?,?,?)').run(id,session.user_id,message);
     await db.prepare("UPDATE support_tickets SET status='Pendente',updated_at=CURRENT_TIMESTAMP WHERE id=?").run(id);
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'ticket_replied',ip);
     return json(response,200,{success:true});

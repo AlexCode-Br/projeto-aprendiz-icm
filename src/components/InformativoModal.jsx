@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { httpsUrlError, requiredTextError } from '../../shared/validation.mjs';
 
 const initialFormState = {
     titulo: '',
@@ -39,11 +40,15 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
 
     const validate = () => {
         const newErrors = {};
-        if (!formData.titulo.trim()) newErrors.titulo = 'O título é obrigatório.';
+        const titleError = requiredTextError(formData.titulo, 'O título', 3, 120);
+        const contentError = requiredTextError(formData.conteudo, 'O conteúdo', 10, 5000);
+        if (titleError) newErrors.titulo = titleError;
         if (!formData.categoria) newErrors.categoria = 'A categoria é obrigatória.';
         if (!formData.dataAgendamento) newErrors.dataAgendamento = 'A data é obrigatória.';
         if (!formData.horaAgendamento) newErrors.horaAgendamento = 'A hora é obrigatória.';
-        if (!formData.conteudo.trim()) newErrors.conteudo = 'O conteúdo é obrigatório.';
+        if (contentError) newErrors.conteudo = contentError;
+        const urlError = httpsUrlError(formData.linkAcao);
+        if (urlError) newErrors.linkAcao = urlError;
         if (formData.linkAcao && !formData.textoLink) newErrors.textoLink = 'O texto para o link é obrigatório.';
         if (formData.textoLink && !formData.linkAcao) newErrors.linkAcao = 'A URL do link é obrigatória.';
 
@@ -81,7 +86,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="sm:col-span-2">
                                 <label htmlFor="info-title" className="form-label">Título</label>
-                                <input id="info-title" name="titulo" value={formData.titulo} onChange={handleChange} aria-invalid={Boolean(errors.titulo)} className={`form-control ${errors.titulo ? 'border-danger' : ''}`} />
+                                <input id="info-title" name="titulo" maxLength="120" value={formData.titulo} onChange={handleChange} aria-invalid={Boolean(errors.titulo)} className={`form-control ${errors.titulo ? 'border-danger' : ''}`} />
                                 {errors.titulo && <p className="text-danger text-xs mt-1">{errors.titulo}</p>}
                             </div>
                             <div>
@@ -110,7 +115,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                         </div>
                         <div>
                             <label htmlFor="info-content" className="form-label">Conteúdo</label>
-                            <textarea id="info-content" name="conteudo" value={formData.conteudo} onChange={handleChange} rows="5" aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-32 ${errors.conteudo ? 'border-danger' : ''}`}></textarea>
+                            <textarea id="info-content" name="conteudo" maxLength="5000" value={formData.conteudo} onChange={handleChange} rows="5" aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-32 ${errors.conteudo ? 'border-danger' : ''}`}></textarea>
                             {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
                         <div className="space-y-2">
@@ -125,7 +130,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                             </div>
                             <div>
                                 <label htmlFor="info-link-label" className="form-label">Texto do link</label>
-                                <input id="info-link-label" name="textoLink" placeholder="Ex.: Inscreva-se aqui" value={formData.textoLink} onChange={handleChange} aria-invalid={Boolean(errors.textoLink)} className={`form-control ${errors.textoLink ? 'border-danger' : ''}`} />
+                                <input id="info-link-label" name="textoLink" maxLength="80" placeholder="Ex.: Inscreva-se aqui" value={formData.textoLink} onChange={handleChange} aria-invalid={Boolean(errors.textoLink)} className={`form-control ${errors.textoLink ? 'border-danger' : ''}`} />
                                 {errors.textoLink && <p className="text-danger text-xs mt-1">{errors.textoLink}</p>}
                             </div>
                         </div>

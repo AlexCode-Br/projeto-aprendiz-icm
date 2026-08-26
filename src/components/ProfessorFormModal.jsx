@@ -1,173 +1,102 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
+import { cleanText, hasValidationErrors, normalizeEmail, phoneDigits, validateProfessor } from '../../shared/validation.mjs';
 
-// Mock data
-const allCoursesList = ["Violão I", "Teclado", "Bateria", "Canto Coral", "Violino", "Flauta Transversal", "Saxofone", "Contrabaixo", "Violão II", "Teoria Musical"];
+const initialFormState = { nome: '', contato: '', telefone: '', local: '', cursos: [] };
 
-const initialFormState = {
-    nome: '',
-    contato: '',
-    telefone: '',
-    local: '',
-    cursos: [],
+const formatPhone = value => {
+    const digits = phoneDigits(value).slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
-const ProfessorFormModal = ({ isOpen, onClose, onSave, professor }) => {
+const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], locations = [] }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
-    const [courseInput, setCourseInput] = useState('');
-    const [suggestions, setSuggestions] = useState([]);
-    const [isSuggestionsVisible, setIsSuggestionsVisible] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const inputRef = useRef(null);
-
     useEffect(() => {
-        if (professor) {
-            setFormData({
-                nome: professor.nome || '',
-                contato: professor.contato || '',
-                telefone: professor.telefone || '',
-                local: professor.local || '',
-                cursos: professor.cursos || [],
-            });
-        } else {
-            setFormData(initialFormState);
-        }
+        setFormData(professor ? {
+            nome: professor.nome || '',
+            contato: professor.contato || '',
+            telefone: professor.telefone || '',
+            local: professor.local || '',
+            cursos: (professor.cursos || []).filter(course => courses.includes(course)),
+        } : initialFormState);
         setErrors({});
         setIsSubmitting(false);
-    }, [professor, isOpen]);
+    }, [professor, isOpen, courses]);
 
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
-        if (errors[name]) {
-            setErrors(prev => ({ ...prev, [name]: null }));
-        }
-    };
-    
-    const handleCourseInputChange = (e) => {
-        const value = e.target.value;
-        setCourseInput(value);
-        if (value) {
-            const filtered = allCoursesList.filter(
-                course => !formData.cursos.includes(course) && course.toLowerCase().includes(value.toLowerCase())
-            );
-            setSuggestions(filtered);
-            setIsSuggestionsVisible(true);
-        } else {
-            setSuggestions([]);
-            setIsSuggestionsVisible(false);
-        }
+    const update = (name, value) => {
+        setFormData(previous => ({ ...previous, [name]: value }));
+        if (errors[name]) setErrors(previous => ({ ...previous, [name]: '' }));
     };
 
-    const addCourse = (course) => {
-        setFormData(prev => ({ ...prev, cursos: [...prev.cursos, course] }));
-        setCourseInput('');
-        setSuggestions([]);
-        setIsSuggestionsVisible(false);
-        inputRef.current?.focus();
-    };
+    const toggleCourse = course => update('cursos', formData.cursos.includes(course)
+        ? formData.cursos.filter(item => item !== course)
+        : [...formData.cursos, course]);
 
-    const removeCourse = (courseToRemove) => {
-        setFormData(prev => ({
-            ...prev,
-            cursos: prev.cursos.filter(course => course !== courseToRemove),
-        }));
-    };
-
-    const validate = () => {
-        const newErrors = {};
-        if (!formData.nome.trim()) newErrors.nome = 'O nome é obrigatório.';
-        if (!formData.contato.trim()) newErrors.contato = 'O e-mail é obrigatório.';
-        if (!formData.telefone.trim()) newErrors.telefone = 'O telefone é obrigatório.';
-        if (!formData.local.trim()) newErrors.local = 'O local é obrigatório.';
-        if (formData.cursos.length === 0) newErrors.cursos = 'Pelo menos um curso deve ser selecionado.';
-        return newErrors;
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleSubmit = async event => {
+        event.preventDefault();
         if (isSubmitting) return;
-        const validationErrors = validate();
-        if (Object.keys(validationErrors).length > 0) {
-            setErrors(validationErrors);
-            return;
-        }
+        const normalized = { ...formData, nome: cleanText(formData.nome, 100), contato: normalizeEmail(formData.contato), telefone: formatPhone(formData.telefone) };
+        const validationErrors = validateProfessor(normalized);
+        if (!locations.includes(normalized.local)) validationErrors.local = 'Selecione um local cadastrado.';
+        if (normalized.cursos.some(course => !courses.includes(course))) validationErrors.cursos = 'Selecione somente cursos cadastrados.';
+        if (hasValidationErrors(validationErrors)) return setErrors(validationErrors);
         setIsSubmitting(true);
-        try {
-            await onSave(formData);
-        } finally {
-            setIsSubmitting(false);
-        }
+        try { await onSave(normalized); } finally { setIsSubmitting(false); }
     };
 
     if (!isOpen) return null;
+    const catalogsReady = courses.length > 0 && locations.length > 0;
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'}>
-                <form onSubmit={handleSubmit} noValidate>
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="professor-nome" className="form-label">Nome completo</label>
-                                <input id="professor-nome" name="nome" value={formData.nome} onChange={handleChange} aria-invalid={Boolean(errors.nome)} className={`form-control ${errors.nome ? 'border-danger' : ''}`} />
-                                {errors.nome && <p className="text-danger text-xs mt-1">{errors.nome}</p>}
-                            </div>
-                            <div>
-                                <label htmlFor="professor-email" className="form-label">E-mail</label>
-                                <input id="professor-email" name="contato" type="email" value={formData.contato} onChange={handleChange} aria-invalid={Boolean(errors.contato)} className={`form-control ${errors.contato ? 'border-danger' : ''}`} />
-                                {errors.contato && <p className="text-danger text-xs mt-1">{errors.contato}</p>}
-                            </div>
-                            <div>
-                                <label htmlFor="professor-telefone" className="form-label">Telefone</label>
-                                <input id="professor-telefone" name="telefone" value={formData.telefone} onChange={handleChange} aria-invalid={Boolean(errors.telefone)} className={`form-control ${errors.telefone ? 'border-danger' : ''}`} />
-                                {errors.telefone && <p className="text-danger text-xs mt-1">{errors.telefone}</p>}
-                            </div>
-                             <div>
-                                <label htmlFor="professor-local" className="form-label">Local principal</label>
-                                <input id="professor-local" name="local" value={formData.local} onChange={handleChange} aria-invalid={Boolean(errors.local)} className={`form-control ${errors.local ? 'border-danger' : ''}`} />
-                                {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
-                            </div>
+            <form onSubmit={handleSubmit} noValidate>
+                {!catalogsReady && <div className="alert-warning mb-4" role="alert">Cadastre pelo menos um curso e um local na área “Cursos e locais” antes de adicionar professores.</div>}
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label htmlFor="professor-nome" className="form-label">Nome completo</label>
+                            <input id="professor-nome" name="nome" autoComplete="name" maxLength="100" value={formData.nome} onChange={event => update('nome', event.target.value)} aria-invalid={Boolean(errors.nome)} className={`form-control ${errors.nome ? 'border-danger' : ''}`} />
+                            {errors.nome && <p className="mt-1 text-xs text-danger">{errors.nome}</p>}
                         </div>
-                        <div className="relative">
-                            <label htmlFor="professor-cursos" className="form-label">Cursos</label>
-                            <div className={`course-input-container w-full border rounded-lg flex flex-wrap items-center p-2 gap-2 ${errors.cursos ? 'border-danger' : 'border-border'}`}>
-                                {formData.cursos.map(course => (
-                                    <span key={course} className="course-tag bg-primary text-white text-xs font-semibold px-2 py-1 rounded-full flex items-center">
-                                        {course}
-                                        <button type="button" aria-label={`Remover ${course}`} onClick={() => removeCourse(course)} className="ml-1 rounded-full px-1 text-white hover:bg-white/20">&times;</button>
-                                    </span>
-                                ))}
-                                <input
-                                    ref={inputRef}
-                                    id="professor-cursos"
-                                    type="text"
-                                    value={courseInput}
-                                    onChange={handleCourseInputChange}
-                                    onFocus={() => setIsSuggestionsVisible(true)}
-                                    onBlur={() => setTimeout(() => setIsSuggestionsVisible(false), 150)}
-                                    className="flex-grow bg-transparent focus:outline-none"
-                                    placeholder="Digite para adicionar um curso"
-                                />
-                            </div>
-                             {isSuggestionsVisible && suggestions.length > 0 && (
-                                <ul className="absolute z-10 w-full bg-white dark:bg-surface border border-border mt-1 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                                    {suggestions.map(suggestion => (
-                                        <li key={suggestion} onMouseDown={() => addCourse(suggestion)} className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer">
-                                            {suggestion}
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                            {errors.cursos && <p className="text-danger text-xs mt-1">{errors.cursos}</p>}
+                        <div>
+                            <label htmlFor="professor-email" className="form-label">E-mail</label>
+                            <input id="professor-email" name="contato" type="email" autoComplete="email" inputMode="email" maxLength="254" value={formData.contato} onChange={event => update('contato', event.target.value)} aria-invalid={Boolean(errors.contato)} className={`form-control ${errors.contato ? 'border-danger' : ''}`} />
+                            {errors.contato && <p className="mt-1 text-xs text-danger">{errors.contato}</p>}
+                        </div>
+                        <div>
+                            <label htmlFor="professor-telefone" className="form-label">Telefone com DDD</label>
+                            <input id="professor-telefone" name="telefone" type="tel" autoComplete="tel" inputMode="tel" maxLength="15" placeholder="(71) 99999-9999" value={formData.telefone} onChange={event => update('telefone', formatPhone(event.target.value))} aria-invalid={Boolean(errors.telefone)} className={`form-control ${errors.telefone ? 'border-danger' : ''}`} />
+                            {errors.telefone && <p className="mt-1 text-xs text-danger">{errors.telefone}</p>}
+                        </div>
+                        <div>
+                            <label htmlFor="professor-local" className="form-label">Local principal</label>
+                            <select id="professor-local" name="local" value={formData.local} onChange={event => update('local', event.target.value)} aria-invalid={Boolean(errors.local)} className={`form-control ${errors.local ? 'border-danger' : ''}`}>
+                                <option value="">Selecione um local</option>
+                                {locations.map(location => <option key={location} value={location}>{location}</option>)}
+                            </select>
+                            {errors.local && <p className="mt-1 text-xs text-danger">{errors.local}</p>}
                         </div>
                     </div>
-                    <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                        <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
-                        <button type="submit" disabled={isSubmitting} className="btn btn-primary">{isSubmitting ? 'Salvando...' : 'Salvar'}</button>
-                    </div>
-                </form>
+                    <fieldset>
+                        <legend className="form-label">Cursos que o professor ministrará</legend>
+                        <div className={`grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2 ${errors.cursos ? 'border-danger' : 'border-border'}`}>
+                            {courses.map(course => <label key={course} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-white/5"><input type="checkbox" checked={formData.cursos.includes(course)} onChange={() => toggleCourse(course)} className="h-4 w-4 accent-primary" /><span className="text-sm">{course}</span></label>)}
+                            {!courses.length && <p className="col-span-full py-4 text-center text-sm text-text-muted">Nenhum curso ativo cadastrado.</p>}
+                        </div>
+                        {errors.cursos && <p className="mt-1 text-xs text-danger">{errors.cursos}</p>}
+                    </fieldset>
+                </div>
+                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
+                    <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
+                    <button type="submit" disabled={isSubmitting || !catalogsReady} className="btn btn-primary">{isSubmitting ? 'Salvando...' : 'Salvar e enviar convite'}</button>
+                </div>
+            </form>
         </Modal>
     );
 };
