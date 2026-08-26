@@ -20,7 +20,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
 
     useEffect(() => {
         if (informativo) {
-            setFormData({
+            const nextForm = {
                 titulo: informativo.titulo || '',
                 categoria: informativo.categoria || '',
                 // Formata a data para o input type="date" (YYYY-MM-DD)
@@ -29,9 +29,12 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                 conteudo: informativo.conteudo || '',
                 fixarNoTopo: informativo.fixado || false,
                 
-            });
+            };
+            setFormData(nextForm);
+            if (editorRef.current) editorRef.current.innerHTML = nextForm.conteudo;
         } else {
             setFormData(initialFormState);
+            if (editorRef.current) editorRef.current.innerHTML = '';
         }
         setErrors({});
     }, [informativo, isOpen]);
@@ -82,9 +85,29 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
         event.target.value = '';
         if (!file) return;
         if (!['image/png','image/jpeg','image/heic','image/heif'].includes(file.type)) return setErrors(prev => ({ ...prev, conteudo: 'Imagem inválida. Use PNG, JPG/JPEG ou HEIC.' }));
-        if (file.size > 2 * 1024 * 1024) return setErrors(prev => ({ ...prev, conteudo: 'A imagem deve ter no máximo 2 MB.' }));
+        const maxSize = 5 * 1024 * 1024;
         const reader = new FileReader();
-        reader.onload = () => { document.execCommand('insertImage', false, reader.result); editorRef.current?.focus(); };
+        reader.onerror = () => setErrors(prev => ({ ...prev, conteudo: 'Não foi possível ler a imagem.' }));
+        reader.onload = async () => {
+            let result = reader.result;
+            if (file.size > maxSize && file.type !== 'image/heic' && file.type !== 'image/heif') {
+                try {
+                    const image = new Image();
+                    image.src = result;
+                    await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
+                    const scale = Math.min(1, Math.sqrt(maxSize / file.size));
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+                    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+                    canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+                    let quality = 0.86;
+                    result = canvas.toDataURL('image/jpeg', quality);
+                    while (result.length > maxSize * 1.37 && quality > 0.35) { quality -= 0.1; result = canvas.toDataURL('image/jpeg', quality); }
+                } catch { return setErrors(prev => ({ ...prev, conteudo: 'Não foi possível comprimir esta imagem.' })); }
+            }
+            if (result.length > maxSize * 1.37) return setErrors(prev => ({ ...prev, conteudo: 'A imagem continua maior que 5 MB após a compressão.' }));
+            document.execCommand('insertImage', false, result); editorRef.current?.focus();
+        };
         reader.readAsDataURL(file);
     };
 
@@ -133,8 +156,8 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo }) => {
                                     <button type="button" onClick={addLink} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Inserir link">🔗 Link</button>
                                     <label className="min-h-9 cursor-pointer rounded px-2 py-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Adicionar imagem">🖼 Imagem<input type="file" className="sr-only" accept="image/png,image/jpeg,image/heic,image/heif" onChange={addImage} /></label>
                                 </div>
-                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); }} dangerouslySetInnerHTML={{ __html: formData.conteudo }} aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
-                                <p className="mt-1 text-xs text-text-muted">Formatação e imagens PNG, JPG/JPEG ou HEIC, até 2 MB.</p>
+                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); }} aria-invalid={Boolean(errors.conteudo)} className={`form-control min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
+                                <p className="mt-1 text-xs text-text-muted">Formatação e imagens PNG, JPG/JPEG ou HEIC. Imagens acima de 5 MB serão comprimidas automaticamente.</p>
                                 {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
                         <div className="space-y-3 pt-2">
