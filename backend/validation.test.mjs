@@ -41,10 +41,20 @@ test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () =
     contato: 'maria@example.com',
     telefone: '(71) 99999-1234',
     classe: 'Jovem',
-    curso: 'Violão I',
+    turmas: [11, 22, 33],
     local: 'Guarani',
     instrumento: 'Não',
   }), {});
+
+  assert.equal(validateStudent({
+    nome: 'Maria de Souza',
+    contato: 'maria@example.com',
+    telefone: '(71) 99999-1234',
+    classe: 'Jovem',
+    turmas: [11, 22, 33, 44],
+    local: 'Guarani',
+    instrumento: 'Não',
+  }).curso, 'Selecione no máximo três cursos.');
 
   const errors = validateStudent({
     nome: 'Teste',

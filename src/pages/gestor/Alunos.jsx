@@ -19,6 +19,7 @@ const Alunos = () => {
     const [totalAlunos, setTotalAlunos] = useState(0);
     const [itemsPerPage] = useState(10);
     const [offerings, setOfferings] = useState([]);
+    const [churches, setChurches] = useState([]);
 
     // Estados dos Modais
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -61,7 +62,13 @@ const Alunos = () => {
     }, [fetchAlunos]);
 
     useEffect(() => {
-        api.get('/cursos').then(response => setOfferings(response.data.cursos.filter(item => item.status === 'Ativo'))).catch(() => setOfferings([]));
+        api.get('/cursos').then(response => {
+            setOfferings(response.data.cursos.filter(item => item.status === 'Ativo'));
+            setChurches(response.data.locais || []);
+        }).catch(() => {
+            setOfferings([]);
+            setChurches([]);
+        });
     }, []);
 
     // --- Handlers de Ações ---
@@ -200,6 +207,7 @@ const Alunos = () => {
                 onSave={handleSaveAluno}
                 aluno={selectedAluno}
                 offerings={offerings}
+                churches={churches}
             />
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}
