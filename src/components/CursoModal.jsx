@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 
-const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores, allLocais }) => {
+const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLocais = [], allCursos = [] }) => {
     const [formData, setFormData] = useState({ nome: '', local: '', professor: '' });
     const [errors, setErrors] = useState({});
 
@@ -54,15 +54,17 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores, allLocais 
                     <div className="space-y-4">
                         <div>
                             <label htmlFor="nome" className="form-label">Nome do curso</label>
-                            <input
-                                type="text"
+                            <select
                                 name="nome"
                                 id="nome"
                                 value={formData.nome}
                                 onChange={handleChange}
                                 aria-invalid={Boolean(errors.nome)}
                                 className={`form-control ${errors.nome ? 'border-danger' : ''}`}
-                            />
+                            >
+                                <option value="">Selecione um curso</option>
+                                {allCursos.map(name => <option key={name} value={name}>{name}</option>)}
+                            </select>
                             {errors.nome && <p className="text-danger text-xs mt-1">{errors.nome}</p>}
                         </div>
                         <div>

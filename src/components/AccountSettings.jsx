@@ -3,6 +3,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { friendlyAuthError, supabase } from '../services/supabase';
+import { emailError, personNameError } from '../../shared/validation.mjs';
 
 const fieldClass = 'form-control mt-1';
 
@@ -24,7 +25,10 @@ export default function AccountSettings() {
     const passwordValid = useMemo(() => password.newPassword.length >= 10 && /[A-Z]/.test(password.newPassword) && /[a-z]/.test(password.newPassword) && /\d/.test(password.newPassword) && /[^A-Za-z0-9]/.test(password.newPassword), [password.newPassword]);
 
     const saveProfile = async event => {
-        event.preventDefault(); setSaving('profile');
+        event.preventDefault();
+        const profileError = personNameError(profile.nome, 'nome completo') || emailError(profile.email);
+        if (profileError) return showToast(profileError, 'warning');
+        setSaving('profile');
         try {
             const nextProfile = usesSupabaseAuth ? { ...profile, email: user.email } : profile;
             await api.put('/api/account/profile', nextProfile);
@@ -67,7 +71,7 @@ export default function AccountSettings() {
         <div><h1 className="page-title">Configurações da conta</h1><p className="page-description">Seus dados são salvos com segurança e usados no acesso ao sistema.</p></div>
         <form onSubmit={saveProfile} className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Dados pessoais</h3>
-            <div className="grid md:grid-cols-2 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Nome completo<input required value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">E-mail de acesso<input required readOnly={usesSupabaseAuth} type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} className={`${fieldClass} ${usesSupabaseAuth ? 'opacity-70 cursor-not-allowed' : ''}`} />{usesSupabaseAuth && <span className="block mt-1 text-xs text-text-muted">Para trocar o e-mail de acesso, fale com o Gestor.</span>}</label></div>
+            <div className="grid md:grid-cols-2 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Nome completo<input required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">E-mail de acesso<input required maxLength="254" autoComplete="email" readOnly={usesSupabaseAuth} type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} className={`${fieldClass} ${usesSupabaseAuth ? 'opacity-70 cursor-not-allowed' : ''}`} />{usesSupabaseAuth && <span className="block mt-1 text-xs text-text-muted">Para trocar o e-mail de acesso, fale com o Gestor.</span>}</label></div>
             <div className="mt-5 flex justify-end"><button disabled={saving === 'profile'} className="submit-btn disabled:opacity-60">{saving === 'profile' ? 'Salvando...' : 'Salvar dados'}</button></div>
         </form>
         <form onSubmit={changePassword} className="panel p-5 md:p-7">

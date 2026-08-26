@@ -18,6 +18,7 @@ const Alunos = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalAlunos, setTotalAlunos] = useState(0);
     const [itemsPerPage] = useState(10);
+    const [offerings, setOfferings] = useState([]);
 
     // Estados dos Modais
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -55,6 +56,10 @@ const Alunos = () => {
     useEffect(() => {
         fetchAlunos();
     }, [fetchAlunos]);
+
+    useEffect(() => {
+        api.get('/cursos').then(response => setOfferings(response.data.cursos.filter(item => item.status === 'Ativo'))).catch(() => setOfferings([]));
+    }, []);
     
     // --- Handlers de Ações ---
     const handleOpenFormModal = (aluno = null) => {
@@ -76,25 +81,18 @@ const Alunos = () => {
     const handleSaveAluno = async (formData, alunoId) => {
         try {
             if (alunoId) {
-                // Atualização
-                await api.put(`/alunos/${alunoId}`, formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
+                await api.put(`/alunos/${alunoId}`, formData);
                 showToast('Aluno atualizado com sucesso!', 'success');
             } else {
-                // Criação
-                await api.post('/alunos', formData, {
-                     headers: { 'Content-Type': 'multipart/form-data' }
-                });
+                await api.post('/alunos', formData);
                 showToast('Aluno adicionado com sucesso!', 'success');
             }
-            fetchAlunos(); // Recarrega a lista
+            handleCloseModals();
+            await fetchAlunos();
         } catch (error) {
             const errorMessage = error.response?.data?.message || 'Erro ao salvar aluno.';
             showToast(errorMessage, 'error');
             console.error("Erro ao salvar aluno:", error);
-        } finally {
-            handleCloseModals();
         }
     };
 
@@ -198,6 +196,7 @@ const Alunos = () => {
                 onClose={handleCloseModals}
                 onSave={handleSaveAluno}
                 aluno={selectedAluno}
+                offerings={offerings}
             />
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}

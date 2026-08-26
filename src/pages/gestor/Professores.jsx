@@ -205,7 +205,7 @@ const Professores = () => {
                 </div>
             </div>
             
-            <ProfessorFormModal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} onSave={handleSaveProfessor} professor={currentProfessor} />
+            <ProfessorFormModal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} onSave={handleSaveProfessor} professor={currentProfessor} courses={coursesList} locations={locaisList} />
             <ProfessorDetailsModal isOpen={isDetailsModalOpen} onClose={() => setDetailsModalOpen(false)} professor={currentProfessor} />
             <ProfessorDeletionImpactModal isOpen={isImpactModalOpen} onClose={() => setImpactModalOpen(false)} onContinue={handleContinueDelete} impact={deletionImpact} loading={isLoadingImpact} />
             <ConfirmationModal

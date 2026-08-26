@@ -33,6 +33,7 @@ const isRealRoute = url => (
   url.startsWith('/api/account') ||
   url.startsWith('/api/invitations') ||
   url.startsWith('/api/dashboard') ||
+  url.startsWith('/api/catalogos') ||
   ['/alunos', '/cursos', '/professores', '/frequencia'].some(prefix => url === prefix || url.startsWith(`${prefix}/`))
 );
 
