@@ -204,6 +204,16 @@ if (db.dialect === 'sqlite') await db.exec(`
     read_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(announcement_id,user_id)
   );
+  CREATE TABLE IF NOT EXISTS announcement_attachments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png','image/jpeg','image/heic','image/heif')),
+    size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 5242880),
+    data_url TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS announcement_attachments_announcement_id_idx ON announcement_attachments(announcement_id);
   CREATE TABLE IF NOT EXISTS support_tickets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     requester_user_id INTEGER NOT NULL REFERENCES users(id),
@@ -514,11 +524,11 @@ function json(response, status, data, extra = {}) {
   response.end(JSON.stringify(data));
 }
 
-async function readJson(request) {
+async function readJson(request, maxBytes = 32768) {
   let body = '';
   for await (const chunk of request) {
     body += chunk;
-    if (body.length > 32768) throw new Error('PAYLOAD_TOO_LARGE');
+    if (body.length > maxBytes) throw new Error('PAYLOAD_TOO_LARGE');
   }
   return body ? JSON.parse(body) : {};
 }
@@ -755,6 +765,41 @@ function sanitizeAnnouncementContent(value) {
     .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"')
     .slice(0, 12000000);
+}
+
+const ANNOUNCEMENT_ATTACHMENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+const ANNOUNCEMENT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const ANNOUNCEMENT_ATTACHMENT_MAX_COUNT = 3;
+
+function normalizeAnnouncementAttachments(value, existingAttachments = new Map()) {
+  const source = value == null ? [] : value;
+  if (!Array.isArray(source)) return { error: 'Os anexos precisam ser uma lista de imagens.' };
+  if (source.length > ANNOUNCEMENT_ATTACHMENT_MAX_COUNT) return { error: `Adicione no máximo ${ANNOUNCEMENT_ATTACHMENT_MAX_COUNT} imagens por informativo.` };
+  const items = [];
+  for (const item of source) {
+    const mime = String(item?.tipo || '').trim().toLowerCase();
+    const dataUrl = String(item?.dataUrl || '').trim();
+    if (!dataUrl && item?.id != null) {
+      const existing = existingAttachments.get(Number(item.id));
+      if (existing) {
+        items.push({ filename: existing.filename, mime_type: existing.mime_type, size_bytes: Number(existing.size_bytes), data_url: existing.data_url });
+        continue;
+      }
+    }
+    const match = dataUrl.match(/^data:(image\/(?:png|jpeg|heic|heif));base64,([a-z0-9+/=\s]+)$/i);
+    if (!ANNOUNCEMENT_ATTACHMENT_TYPES.has(mime) || !match || match[1].toLowerCase() !== mime) {
+      return { error: 'Cada anexo precisa ser uma imagem PNG, JPG/JPEG ou HEIC válida.' };
+    }
+    const base64 = match[2].replace(/\s/g, '');
+    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+    const sizeBytes = Math.max(0, Math.floor(base64.length * 3 / 4) - padding);
+    if (!sizeBytes || sizeBytes > ANNOUNCEMENT_ATTACHMENT_MAX_BYTES) {
+      return { error: 'Cada imagem deve ter no máximo 5 MB.' };
+    }
+    const filename = cleanText(item?.nome || 'imagem', 180).replace(/[\\/:*?"<>|]/g, '_').trim() || 'imagem';
+    items.push({ filename, mime_type: mime, size_bytes: sizeBytes, data_url: dataUrl });
+  }
+  return { items };
 }
 
 function scheduleIsPast(date, time) {
@@ -1563,33 +1608,67 @@ async function api(request, response, url) {
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
     const visibility=session.role==='professor'?' AND announcements.scheduled_at <= CURRENT_TIMESTAMP':'';
     const rows=await db.prepare(`SELECT announcements.*,COUNT(announcement_reads.user_id) AS read_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id WHERE announcements.active=1${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(session.user_id);
+    const attachmentsByAnnouncement = new Map();
+    if (rows.length) {
+      const ids = rows.map(row => Number(row.id));
+      const placeholders = ids.map(() => '?').join(',');
+      const attachmentRows = await db.prepare(`SELECT id,announcement_id,filename,mime_type,size_bytes FROM announcement_attachments WHERE announcement_id IN (${placeholders}) ORDER BY id`).all(...ids);
+      for (const attachment of attachmentRows) {
+        const list = attachmentsByAnnouncement.get(Number(attachment.announcement_id)) || [];
+        list.push({ id: Number(attachment.id), nome: attachment.filename, tipo: attachment.mime_type, tamanho: Number(attachment.size_bytes), url: `/api/informativos/${Number(attachment.announcement_id)}/anexos/${Number(attachment.id)}` });
+        attachmentsByAnnouncement.set(Number(attachment.announcement_id), list);
+      }
+    }
     const mapped=rows.map(row=>{
       const date=new Date(row.scheduled_at);
-      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:row.content,data_publicacao:row.published_at,data:date.toLocaleDateString('pt-BR',{timeZone:'UTC'}),hora:date.toISOString().slice(11,16),lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read)};
+      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:row.content,data_publicacao:row.published_at,data:date.toLocaleDateString('pt-BR',{timeZone:'UTC'}),hora:date.toISOString().slice(11,16),lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read),anexos:attachmentsByAnnouncement.get(Number(row.id)) || []};
     });
     return json(response,200,mapped);
   }
+  const attachmentMatch=url.pathname.match(/^\/api\/informativos\/(\d+)\/anexos\/(\d+)$/);
+  if(attachmentMatch&&request.method==='GET'){
+    const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+    const visibility=session.role==='professor'?' AND announcements.scheduled_at <= CURRENT_TIMESTAMP':'';
+    const attachment=await db.prepare(`SELECT announcement_attachments.filename,announcement_attachments.mime_type,announcement_attachments.data_url FROM announcement_attachments JOIN announcements ON announcements.id=announcement_attachments.announcement_id WHERE announcement_attachments.id=? AND announcement_attachments.announcement_id=? AND announcements.active=1${visibility}`).get(Number(attachmentMatch[2]),Number(attachmentMatch[1]));
+    if(!attachment)return json(response,404,{message:'Anexo não encontrado.'});
+    const base64=attachment.data_url.split(',')[1] || '';
+    const buffer=Buffer.from(base64,'base64');
+    response.writeHead(200,{...securityHeaders(attachment.mime_type),'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`});
+    return response.end(buffer);
+  }
   if(request.method==='POST'&&url.pathname==='/api/informativos'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo);
+    const body=await readJson(request, 32 * 1024 * 1024),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),attachmentResult=normalizeAnnouncementAttachments(body.anexos);
     const scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
-    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.'};
+    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',anexos:attachmentResult.error || ''};
     if(scheduleIsPast(body.dataAgendamento, body.horaAgendamento))errors.dataAgendamento='A data e hora devem ser futuras.';
     if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
-    const result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0);
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
+    let result;
+    await db.transaction(async () => {
+      result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0);
+      for (const attachment of attachmentResult.items) await db.prepare('INSERT INTO announcement_attachments (announcement_id,filename,mime_type,size_bytes,data_url) VALUES (?,?,?,?,?)').run(result.lastInsertRowid,attachment.filename,attachment.mime_type,attachment.size_bytes,attachment.data_url);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
+    });
     return json(response,201,{id:Number(result.lastInsertRowid)});
   }
   const announcementMatch=url.pathname.match(/^\/api\/informativos\/(\d+)$/);
   if(announcementMatch&&request.method==='PUT'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    const body=await readJson(request),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
-    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.'};
+    const announcementId=Number(announcementMatch[1]);
+    const existingAttachments=new Map((await db.prepare('SELECT id,filename,mime_type,size_bytes,data_url FROM announcement_attachments WHERE announcement_id=?').all(announcementId)).map(row => [Number(row.id), row]));
+    const body=await readJson(request, 32 * 1024 * 1024),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`,attachmentResult=normalizeAnnouncementAttachments(body.anexos, existingAttachments);
+    const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',anexos:attachmentResult.error || ''};
     if(scheduleIsPast(body.dataAgendamento, body.horaAgendamento))errors.dataAgendamento='A data e hora devem ser futuras.';
     if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
-    const result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,body.fixarNoTopo?1:0,Number(announcementMatch[1]));
+    let result;
+    await db.transaction(async () => {
+      result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,body.fixarNoTopo?1:0,announcementId);
+      if(!result.changes)return;
+      await db.prepare('DELETE FROM announcement_attachments WHERE announcement_id=?').run(announcementId);
+      for (const attachment of attachmentResult.items) await db.prepare('INSERT INTO announcement_attachments (announcement_id,filename,mime_type,size_bytes,data_url) VALUES (?,?,?,?,?)').run(announcementId,attachment.filename,attachment.mime_type,attachment.size_bytes,attachment.data_url);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
+    });
     if(!result.changes)return json(response,404,{message:'Informativo não encontrado.'});
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
     return json(response,200,{success:true});
   }
   if(announcementMatch&&request.method==='DELETE'){
