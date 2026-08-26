@@ -96,7 +96,7 @@ const Professores = () => {
         setDeleting(true);
         try {
             const response = await api.delete(`/professores/${currentProfessor.id}`);
-            showToast(response.data.message || 'Professor excluído com sucesso!', response.data.authAccountRemoved === false ? 'warning' : 'success', 6000);
+            showToast(response.data.message || 'Professor excluído definitivamente!', 'success', 6000);
             setConfirmModalOpen(false);
             setDeletionImpact(null);
             await fetchProfessores();
@@ -213,8 +213,8 @@ const Professores = () => {
                 onClose={() => setConfirmModalOpen(false)}
                 onConfirm={handleDeleteProfessor}
                 title="Confirmar exclusão do professor?"
-                message={deletionImpact ? `${deletionImpact.professor.nome} perderá o acesso e ${deletionImpact.resumo.turmasAtivas} turma(s) serão desativadas. Os ${deletionImpact.resumo.alunosAtivos} aluno(s) e todo o histórico serão preservados.` : 'O acesso será revogado e o histórico será preservado.'}
-                confirmLabel="Excluir professor"
+                message={deletionImpact ? `Esta ação é irreversível. ${deletionImpact.professor.nome}, sua conta, ${deletionImpact.resumo.turmas} turma(s), matrículas, frequências, convites e demais dados vinculados serão apagados definitivamente. Os cadastros dos alunos permanecerão sem esse vínculo.` : 'Esta ação apagará definitivamente a conta e todos os dados vinculados ao professor.'}
+                confirmLabel="Excluir definitivamente"
                 loading={isDeleting}
             />
         </>

@@ -24,6 +24,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(here, '..');
 const distRoot = join(projectRoot, 'dist');
 const dataRoot = join(here, 'data');
+const sqlitePath = process.env.SQLITE_PATH || join(dataRoot, 'projeto-aprendiz.db');
 const port = Number(process.env.PORT || 4180);
 const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
 const baseUrl = process.env.APP_URL || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : `http://127.0.0.1:${port}`);
@@ -50,7 +51,7 @@ const supabaseAdmin = usesSupabaseAuth && supabaseSecretKey
   : null;
 
 await mkdir(dataRoot, { recursive: true });
-const db = await createDatabase({ sqlitePath: join(dataRoot, 'projeto-aprendiz.db') });
+const db = await createDatabase({ sqlitePath });
 if (db.dialect === 'sqlite') await db.exec(`
   PRAGMA journal_mode = WAL;
   PRAGMA foreign_keys = ON;
@@ -561,22 +562,35 @@ async function professorDeletionImpact(professorId) {
 
   const classes = await db.prepare(`
     SELECT classes.id,courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time,
-      COUNT(DISTINCT CASE WHEN enrollments.status='ativa' AND students.active=1 THEN students.id END) AS alunos
+      classes.active,
+      COUNT(DISTINCT CASE WHEN students.active=1 THEN students.id END) AS alunos,
+      COUNT(DISTINCT enrollments.id) AS matriculas
     FROM classes
     JOIN courses ON courses.id=classes.course_id
     JOIN locations ON locations.id=classes.location_id
     LEFT JOIN enrollments ON enrollments.class_id=classes.id
     LEFT JOIN students ON students.id=enrollments.student_id
-    WHERE classes.professor_id=? AND classes.active=1
-    GROUP BY classes.id,courses.name,locations.name,classes.weekday,classes.start_time
+    WHERE classes.professor_id=?
+    GROUP BY classes.id,courses.name,locations.name,classes.weekday,classes.start_time,classes.active
     ORDER BY courses.name,locations.name
   `).all(professorId);
   const studentSummary = await db.prepare(`
     SELECT COUNT(DISTINCT students.id) AS total
     FROM students
-    JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa'
-    JOIN classes ON classes.id=enrollments.class_id AND classes.active=1
+    JOIN enrollments ON enrollments.student_id=students.id
+    JOIN classes ON classes.id=enrollments.class_id
     WHERE classes.professor_id=? AND students.active=1
+  `).get(professorId);
+  const enrollmentSummary = await db.prepare(`
+    SELECT COUNT(*) AS total FROM enrollments
+    JOIN classes ON classes.id=enrollments.class_id
+    WHERE classes.professor_id=?
+  `).get(professorId);
+  const attendanceSummary = await db.prepare(`
+    SELECT COUNT(*) AS total FROM attendance_records
+    JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id
+    JOIN classes ON classes.id=attendance_sessions.class_id
+    WHERE classes.professor_id=?
   `).get(professorId);
 
   return {
@@ -587,15 +601,20 @@ async function professorDeletionImpact(professorId) {
       possuiAcesso: Boolean(professor.user_id),
     },
     resumo: {
-      turmasAtivas: classes.length,
+      turmas: classes.length,
+      turmasAtivas: classes.filter(row => row.active === 1).length,
       locais: new Set(classes.map(row => row.local)).size,
       alunosAtivos: Number(studentSummary?.total || 0),
+      matriculas: Number(enrollmentSummary?.total || 0),
+      frequencias: Number(attendanceSummary?.total || 0),
     },
     turmas: classes.map(row => ({
       id: row.id,
       curso: row.curso,
       local: row.local,
       alunos: Number(row.alunos || 0),
+      matriculas: Number(row.matriculas || 0),
+      ativa: row.active === 1,
       horario: [row.weekday, row.start_time].filter(Boolean).join(' · ') || 'Horário não informado',
     })),
   };
@@ -1164,33 +1183,73 @@ async function api(request, response, url) {
     const professor=await db.prepare(`
       SELECT professor_profiles.id,professor_profiles.user_id,users.auth_user_id
       FROM professor_profiles LEFT JOIN users ON users.id=professor_profiles.user_id
-      WHERE professor_profiles.id=? AND professor_profiles.active=1
+      WHERE professor_profiles.id=?
     `).get(id);
-    if(!professor)return json(response,404,{message:'Professor ativo não encontrado.'});
+    if(!professor)return json(response,404,{message:'Professor não encontrado.'});
     const impact=await professorDeletionImpact(id);
-    await db.transaction(async()=>{
-      await db.prepare('UPDATE classes SET active=0 WHERE professor_id=? AND active=1').run(id);
-      await db.prepare('UPDATE professor_profiles SET active=0 WHERE id=?').run(id);
-      if(professor.user_id){
-        await db.prepare('UPDATE users SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(professor.user_id);
-        await db.prepare('DELETE FROM sessions WHERE user_id=?').run(professor.user_id);
-      }
-      await db.prepare('UPDATE professor_invites SET expires_at=CURRENT_TIMESTAMP WHERE professor_profile_id=? AND accepted_at IS NULL').run(id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_deactivated_with_dependencies',ip);
-    });
-    let authAccountRemoved=!professor.auth_user_id;
-    if(professor.auth_user_id&&supabaseAdmin){
-      const { error }=await supabaseAdmin.auth.admin.deleteUser(professor.auth_user_id);
-      authAccountRemoved=!error;
-      if(error)console.error('Não foi possível remover o usuário desativado do Supabase:',error.message);
+
+    if(professor.auth_user_id&&usesSupabaseAuth&&!supabaseAdmin){
+      return json(response,503,{message:'A exclusão definitiva não está disponível porque a chave administrativa do Supabase não foi configurada.'});
     }
+    if(professor.auth_user_id&&supabaseAdmin){
+      const { error }=await supabaseAdmin.auth.admin.deleteUser(professor.auth_user_id,false);
+      const authAlreadyAbsent=error&&(error.status===404||/not found|does not exist/i.test(error.message || ''));
+      if(error&&!authAlreadyAbsent){
+        console.error('Não foi possível excluir definitivamente o usuário do Supabase:',error.message);
+        return json(response,502,{message:'Não foi possível apagar a conta de autenticação. Nenhum dado local foi excluído; tente novamente.'});
+      }
+    }
+
+    await db.transaction(async()=>{
+      if(professor.user_id){
+        await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
+          SELECT attendance_sessions.id FROM attendance_sessions
+          LEFT JOIN classes ON classes.id=attendance_sessions.class_id
+          WHERE classes.professor_id=? OR attendance_sessions.recorded_by=?
+        )`).run(id,professor.user_id);
+        await db.prepare(`DELETE FROM attendance_sessions WHERE class_id IN (
+          SELECT id FROM classes WHERE professor_id=?
+        ) OR recorded_by=?`).run(id,professor.user_id);
+        await db.prepare(`DELETE FROM announcement_reads WHERE announcement_id IN (
+          SELECT id FROM announcements WHERE author_user_id=?
+        ) OR user_id=?`).run(professor.user_id,professor.user_id);
+        await db.prepare('DELETE FROM announcements WHERE author_user_id=?').run(professor.user_id);
+        await db.prepare(`DELETE FROM support_messages WHERE ticket_id IN (
+          SELECT id FROM support_tickets WHERE requester_user_id=?
+        ) OR author_user_id=?`).run(professor.user_id,professor.user_id);
+        await db.prepare('DELETE FROM support_tickets WHERE requester_user_id=?').run(professor.user_id);
+        await db.prepare('DELETE FROM sessions WHERE user_id=?').run(professor.user_id);
+        await db.prepare('DELETE FROM password_resets WHERE user_id=?').run(professor.user_id);
+        await db.prepare('DELETE FROM user_settings WHERE user_id=?').run(professor.user_id);
+        await db.prepare('DELETE FROM audit_log WHERE user_id=?').run(professor.user_id);
+      }
+      await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
+        SELECT attendance_sessions.id FROM attendance_sessions
+        JOIN classes ON classes.id=attendance_sessions.class_id
+        WHERE classes.professor_id=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM attendance_sessions WHERE class_id IN (
+        SELECT id FROM classes WHERE professor_id=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM dropout_events WHERE class_id IN (
+        SELECT id FROM classes WHERE professor_id=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM enrollments WHERE class_id IN (
+        SELECT id FROM classes WHERE professor_id=?
+      )`).run(id);
+      await db.prepare('DELETE FROM classes WHERE professor_id=?').run(id);
+      await db.prepare('DELETE FROM professor_invites WHERE professor_profile_id=?').run(id);
+      await db.prepare('DELETE FROM dev_emails WHERE recipient=(SELECT email FROM professor_profiles WHERE id=?)').run(id);
+      await db.prepare('DELETE FROM professor_profiles WHERE id=?').run(id);
+      if(professor.user_id)await db.prepare('DELETE FROM users WHERE id=?').run(professor.user_id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_permanently_deleted',ip);
+    });
     return json(response,200,{
       success:true,
-      authAccountRemoved,
+      permanentlyDeleted:true,
+      authAccountRemoved:true,
       resumo:impact?.resumo,
-      message:authAccountRemoved
-        ? 'Professor excluído. Turmas desativadas e histórico preservado.'
-        : 'Professor excluído e acesso ao sistema revogado. A limpeza da conta de autenticação ficou pendente.',
+      message:'Professor e todos os dados vinculados foram excluídos definitivamente.',
     });
   }
 

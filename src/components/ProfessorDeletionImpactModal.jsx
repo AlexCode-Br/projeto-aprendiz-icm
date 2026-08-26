@@ -20,9 +20,9 @@ const ProfessorDeletionImpactModal = ({ isOpen, onClose, onContinue, impact, loa
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Resumo dos vínculos">
-                    <SummaryCard label="Turmas ativas" value={impact.resumo.turmasAtivas} />
+                    <SummaryCard label="Turmas cadastradas" value={impact.resumo.turmas} />
                     <SummaryCard label="Locais" value={impact.resumo.locais} />
-                    <SummaryCard label="Alunos ativos" value={impact.resumo.alunosAtivos} />
+                    <SummaryCard label="Alunos vinculados" value={impact.resumo.alunosAtivos} />
                 </div>
 
                 <div>
@@ -37,19 +37,19 @@ const ProfessorDeletionImpactModal = ({ isOpen, onClose, onContinue, impact, loa
                                             <p className="mt-1 text-sm text-text-muted">{turma.local} · {turma.horario}</p>
                                         </div>
                                         <span className="w-fit rounded-full bg-red-50 px-3 py-1 text-xs font-semibold text-danger dark:bg-red-950/30">
-                                            {turma.alunos} {turma.alunos === 1 ? 'aluno' : 'alunos'}
+                                            {turma.alunos} {turma.alunos === 1 ? 'aluno' : 'alunos'} · {turma.ativa ? 'Ativa' : 'Inativa'}
                                         </span>
                                     </div>
                                 </article>
                             ))}
                         </div>
                     ) : (
-                        <p className="mt-3 rounded-xl border border-border bg-gray-50 p-4 text-sm text-text-muted dark:bg-white/5">Este professor não possui turmas ativas.</p>
+                        <p className="mt-3 rounded-xl border border-border bg-gray-50 p-4 text-sm text-text-muted dark:bg-white/5">Este professor não possui turmas cadastradas.</p>
                     )}
                 </div>
 
                 <div className="alert-warning" role="note">
-                    Ao continuar, o acesso será revogado e as turmas listadas serão desativadas. Matrículas, frequências e demais registros históricos serão preservados.
+                    Exclusão definitiva: a conta, o perfil, as turmas, {impact.resumo.matriculas} matrícula(s), {impact.resumo.frequencias} registro(s) de frequência, convites, publicações e atendimentos vinculados serão apagados. Os cadastros dos alunos permanecerão, sem vínculo com este professor.
                 </div>
             </div>
         ) : null}
