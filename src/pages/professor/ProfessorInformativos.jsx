@@ -1,9 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../services/api';
-import AnnouncementAttachments from '../../components/AnnouncementAttachments';
+import AnnouncementDetailModal from '../../components/AnnouncementDetailModal';
+
+const plainText = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
 const ProfessorInformativos = () => {
     const [informativos, setInformativos] = useState([]);
+    const [selected, setSelected] = useState(null);
+    const [filter, setFilter] = useState('todos');
+    const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
@@ -11,77 +16,86 @@ const ProfessorInformativos = () => {
         setLoading(true);
         try {
             const response = await api.get('/api/informativos');
-            // Ordena para que os mais recentes apareçam primeiro
-            const sorted = response.data.sort((a, b) => new Date(b.data_publicacao) - new Date(a.data_publicacao));
-            setInformativos(sorted);
-            await Promise.allSettled(sorted.filter(info => !info.hasRead).map(info => api.post(`/api/informativos/${info.id}/lida`)));
+            setInformativos(Array.isArray(response.data) ? response.data : []);
             setError(null);
         } catch (err) {
-            setError("Falha ao carregar os informativos. Tente novamente mais tarde.");
+            setError('Falha ao carregar os informativos. Tente novamente mais tarde.');
             console.error(err);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => {
-        fetchInformativos();
-    }, [fetchInformativos]);
+    useEffect(() => { fetchInformativos(); }, [fetchInformativos]);
 
-    const getCardClassByType = (type) => {
-        switch (type) {
-            case 'Urgente':
-                return 'border-l-4 border-danger';
-            case 'Evento':
-                return 'border-l-4 border-yellow-500';
-            default:
-                return 'border-l-4 border-primary';
+    const openAnnouncement = async info => {
+        setSelected(info);
+        if (info.hasRead) return;
+        try {
+            await api.post(`/api/informativos/${info.id}/lida`);
+            setInformativos(current => current.map(item => item.id === info.id ? { ...item, hasRead: true } : item));
+            setSelected(current => current?.id === info.id ? { ...current, hasRead: true } : current);
+            window.dispatchEvent(new Event('announcements:updated'));
+        } catch (markError) {
+            console.error('Não foi possível registrar a visualização:', markError);
         }
     };
+
+    const visible = useMemo(() => {
+        const term = search.trim().toLocaleLowerCase('pt-BR');
+        return informativos.filter(info => {
+            if (filter === 'nao-lidos' && info.hasRead) return false;
+            if (filter === 'lidos' && !info.hasRead) return false;
+            if (filter === 'fixados' && !info.fixado) return false;
+            return !term || `${info.titulo} ${plainText(info.conteudo)} ${info.categoria}`.toLocaleLowerCase('pt-BR').includes(term);
+        });
+    }, [filter, informativos, search]);
+
+    const unread = informativos.filter(info => !info.hasRead).length;
 
     if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando informativos...</div>;
     if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchInformativos} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
-        <div className="">
+        <>
             <div className="page-header">
                 <div>
                     <h1 className="page-title">Informativos e avisos</h1>
-                    <p className="page-description">Fique por dentro das últimas novidades e comunicados.</p>
+                    <p className="page-description">Fique por dentro das últimas novidades e comunicados{unread ? ` · ${unread} não ${unread === 1 ? 'lido' : 'lidos'}` : ''}.</p>
                 </div>
             </div>
 
-            <div className="space-y-6">
-                {informativos.length > 0 ? informativos.map((info, index) => (
-                    <div
-                        key={info.id}
-                        className={`info-card panel p-5 transition-opacity duration-500 ease-out sm:p-6 ${getCardClassByType(info.tipo)}`}
-                        style={{ animation: 'fadeInUp 0.5s ease-out forwards', animationDelay: `${index * 100}ms`, opacity: 0 }}
-                    >
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-semibold text-primary uppercase">{info.tipo}</span>
-                            {info.fixado && <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Fixado</span>}
-                        </div>
-                        <h3 className="text-xl font-bold text-text-default mb-2">{info.titulo}</h3>
-                        <div className="announcement-content mb-4 max-w-none text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
-                        <AnnouncementAttachments attachments={info.anexos} />
-
-                        <div className="flex items-center justify-between pt-4 border-t border-border">
-                            <p className="text-xs text-text-muted">
-                                Publicado em {new Date(info.data_publicacao).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                            </p>
-
-                        </div>
-                    </div>
-                )) : (
-                     <div className="text-center py-16 text-text-muted">
-                        <svg className="mx-auto w-12 h-12 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-                        <h3 className="mt-2 text-sm font-medium text-text-default">Nenhum informativo por aqui</h3>
-                        <p className="mt-1 text-sm">Quando um novo informativo for publicado, ele aparecerá aqui.</p>
-                    </div>
-                )}
+            <div className="panel mb-6 grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+                <label className="sr-only" htmlFor="announcement-search">Pesquisar informativos</label>
+                <input id="announcement-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Pesquisar por título ou conteúdo..." className="form-control" />
+                <div className="flex flex-wrap gap-2" aria-label="Filtrar informativos">
+                    {[['todos','Todos'],['nao-lidos','Não lidos'],['lidos','Lidos'],['fixados','Fixados']].map(([value,label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={`btn ${filter === value ? 'btn-primary' : 'btn-secondary'}`}>{label}</button>)}
+                </div>
             </div>
-        </div>
+
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                {visible.map(info => (
+                    <article key={info.id} className={`panel flex min-w-0 flex-col p-5 sm:p-6 ${!info.hasRead ? 'border-l-4 border-l-primary' : ''}`}>
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                            <span className="text-xs font-semibold uppercase text-primary">{info.tipo}</span>
+                            <span className="flex items-center gap-2">
+                                {!info.hasRead && <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary"><span className="h-2 w-2 rounded-full bg-primary" />Novo</span>}
+                                {info.fixado && <span title="Fixado">📌</span>}
+                            </span>
+                        </div>
+                        <h2 className="text-lg font-bold text-text-default">{info.titulo}</h2>
+                        <p className="mt-2 line-clamp-3 flex-1 text-sm leading-relaxed text-text-muted">{plainText(info.conteudo)}</p>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+                            <span className="text-xs text-text-muted">{new Date(info.data_publicacao).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short', year: 'numeric' })}{info.anexos?.length ? ` · ${info.anexos.length} anexo${info.anexos.length === 1 ? '' : 's'}` : ''}</span>
+                            <button type="button" onClick={() => openAnnouncement(info)} className="btn btn-secondary">Abrir informativo</button>
+                        </div>
+                    </article>
+                ))}
+                {!visible.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">{informativos.length ? 'Nenhum informativo encontrado.' : 'Nenhum informativo disponível no momento.'}</div>}
+            </div>
+
+            <AnnouncementDetailModal isOpen={Boolean(selected)} onClose={() => setSelected(null)} announcement={selected} />
+        </>
     );
 };
 

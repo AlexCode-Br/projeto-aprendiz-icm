@@ -12,20 +12,20 @@ const AnnouncementAttachments = ({ attachments = [] }) => {
     return (
         <div className="mt-4 border-t border-border pt-3" aria-label="Anexos do informativo">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Anexos</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
                 {attachments.map((attachment, index) => {
-                    const label = `${attachment.nome || 'Imagem'} (${formatFileSize(attachment.tamanho)})`;
-                    const content = <><span aria-hidden="true">🖼️</span><span className="max-w-[18rem] truncate" title={attachment.nome}>{attachment.nome || 'Imagem'}</span><span className="shrink-0 text-xs text-text-muted">({formatFileSize(attachment.tamanho)})</span></>;
-                    const downloadUrl = attachment.url || attachment.dataUrl;
-                    return downloadUrl ? (
-                        <a key={attachment.id || `${attachment.nome}-${index}`} href={downloadUrl} download={attachment.nome || 'imagem'} className="flex max-w-full items-center gap-2 rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-text-default transition-colors hover:bg-surface-hover" aria-label={`Baixar anexo ${label}`}>
-                            {content}
-                        </a>
-                    ) : (
-                        <span key={attachment.id || `${attachment.nome}-${index}`} className="flex max-w-full items-center gap-2 rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-text-default">
-                            {content}
-                        </span>
-                    );
+                    const fileUrl = attachment.url || attachment.dataUrl;
+                    const isImage = String(attachment.tipo || '').startsWith('image/');
+                    const name = attachment.nome || (isImage ? 'Imagem' : 'Documento');
+                    const downloadUrl = attachment.url ? `${attachment.url}${attachment.url.includes('?') ? '&' : '?'}download=1` : attachment.dataUrl;
+                    return <div key={attachment.id || `${name}-${index}`} className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-surface-muted p-2 text-sm text-text-default">
+                        {isImage && fileUrl ? <a href={fileUrl} target="_blank" rel="noreferrer" className="shrink-0" aria-label={`Visualizar imagem ${name}`}><img src={fileUrl} alt="" loading="lazy" className="h-12 w-12 rounded object-cover" /></a> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-surface text-xl" aria-hidden="true">📄</span>}
+                        <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={name}>{name}</span><span className="text-xs text-text-muted">{isImage ? 'Imagem' : 'PDF'} · {formatFileSize(attachment.tamanho)}</span></span>
+                        {fileUrl && <span className="flex shrink-0 gap-1">
+                            <a href={fileUrl} target="_blank" rel="noreferrer" className="rounded px-2 py-2 text-xs font-semibold text-primary hover:bg-surface-hover" aria-label={`Visualizar ${name}`}>Abrir</a>
+                            <a href={downloadUrl} download={name} className="rounded px-2 py-2 text-xs font-semibold text-text-muted hover:bg-surface-hover" aria-label={`Baixar ${name}`}>Baixar</a>
+                        </span>}
+                    </div>;
                 })}
             </div>
         </div>

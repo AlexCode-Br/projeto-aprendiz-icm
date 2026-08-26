@@ -23,7 +23,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
             })
             .catch(err => {
                 if (isMounted) {
-                    setError('Falha ao carregar lista de leituras.');
+                    setError('Falha ao carregar a lista de visualizações.');
                     setLoading(false);
                     console.error(err);
                 }
@@ -37,7 +37,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Quem visualizou" maxWidth="max-w-2xl">
             {loading ? (
-                <div className="py-8 text-center text-text-muted">Carregando leituras...</div>
+                <div className="py-8 text-center text-text-muted">Carregando visualizações...</div>
             ) : error ? (
                 <div className="py-8 text-center text-danger">{error}</div>
             ) : (
@@ -64,7 +64,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
                             ) : (
                                 <tr>
                                     <td colSpan={3} className="px-4 py-8 text-center text-text-muted">
-                                        Ninguém leu este informativo ainda.
+                                        Nenhum professor visualizou este informativo ainda.
                                     </td>
                                 </tr>
                             )}

@@ -15,9 +15,13 @@ const initialFormState = {
     destinatarios: { todos: true, professores: [], cursos: [] },
 };
 
-const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024;
-const MAX_ATTACHMENT_COUNT = 3;
-const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/heic', 'image/heif']);
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_PDF_SIZE = 10 * 1024 * 1024;
+const MAX_TOTAL_SIZE = 20 * 1024 * 1024;
+const MAX_ATTACHMENT_COUNT = 5;
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif']);
+const FILE_TYPES = new Set([...IMAGE_TYPES, 'application/pdf']);
+const EXTENSION_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf' };
 
 const formatFileSize = bytes => {
     const size = Number(bytes) || 0;
@@ -40,6 +44,13 @@ const escapeHtml = value => String(value || '')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+const todayForInput = () => {
+    const parts = Object.fromEntries(new globalThis.Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(new Date()).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
 const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
@@ -47,9 +58,11 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
     const [linkText, setLinkText] = useState('');
     const [linkUrl, setLinkUrl] = useState('');
     const [linkError, setLinkError] = useState('');
-    const [imageProcessing, setImageProcessing] = useState(false);
+    const [fileProcessing, setFileProcessing] = useState(false);
+    const [dragActive, setDragActive] = useState(false);
+    const [uploadMessage, setUploadMessage] = useState('');
     const editorRef = useRef(null);
-    const imageInputRef = useRef(null);
+    const fileInputRef = useRef(null);
     const savedSelectionRef = useRef(null);
 
     useEffect(() => {
@@ -66,8 +79,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
             const nextForm = {
                 titulo: informativo.titulo || '',
                 categoria: informativo.categoria || '',
-                // Formata a data para o input type="date" (YYYY-MM-DD)
-                dataAgendamento: informativo.data ? new Date(informativo.data.split('/').reverse().join('-')).toISOString().split('T')[0] : '',
+                dataAgendamento: informativo.data ? informativo.data.split('/').reverse().join('-') : '',
                 horaAgendamento: informativo.hora || '',
                 conteudo: informativo.conteudo || '',
                 fixarNoTopo: informativo.fixado || false,
@@ -85,7 +97,9 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         setLinkText('');
         setLinkUrl('');
         setLinkError('');
-        setImageProcessing(false);
+        setFileProcessing(false);
+        setDragActive(false);
+        setUploadMessage('');
     }, [draft, informativo, isOpen]);
 
     const validate = () => {
@@ -97,7 +111,10 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         if (!formData.dataAgendamento) newErrors.dataAgendamento = 'A data é obrigatória.';
         if (!formData.horaAgendamento) newErrors.horaAgendamento = 'A hora é obrigatória.';
         const scheduled = new Date(`${formData.dataAgendamento}T${formData.horaAgendamento}:00`);
-        if (formData.dataAgendamento && formData.horaAgendamento && scheduled.getTime() < Date.now()) newErrors.dataAgendamento = 'A data e hora devem ser futuras.';
+        const unchangedPublishedSchedule = informativo?.status === 'Publicado'
+            && formData.dataAgendamento === informativo.data?.split('/').reverse().join('-')
+            && formData.horaAgendamento === informativo.hora;
+        if (formData.dataAgendamento && formData.horaAgendamento && scheduled.getTime() < Date.now() && !unchangedPublishedSchedule) newErrors.dataAgendamento = 'A data e hora devem ser futuras.';
         if (contentError) newErrors.conteudo = contentError;
         return newErrors;
     };
@@ -115,7 +132,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (imageProcessing) return setErrors(prev => ({ ...prev, conteudo: 'Aguarde o processamento da imagem.' }));
+        if (fileProcessing) return setErrors(prev => ({ ...prev, anexos: 'Aguarde o processamento dos arquivos.' }));
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
             setErrors(validationErrors);
@@ -170,62 +187,77 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         setLinkText('');
         setLinkUrl('');
     };
-    const addImage = event => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (!file) return;
-        const extension = file.name.split('.').pop()?.toLowerCase();
-        const extensionType = extension === 'png' ? 'image/png' : ['jpg', 'jpeg'].includes(extension) ? 'image/jpeg' : ['heic', 'heif'].includes(extension) ? `image/${extension}` : '';
-        const inputType = IMAGE_TYPES.has(file.type) ? file.type : extensionType;
-        const isImage = Boolean(inputType);
-        if (!isImage) return setErrors(prev => ({ ...prev, conteudo: 'Imagem inválida. Use PNG, JPG/JPEG ou HEIC.' }));
-        if ((formData.anexos || []).length >= MAX_ATTACHMENT_COUNT) return setErrors(prev => ({ ...prev, anexos: `Adicione no máximo ${MAX_ATTACHMENT_COUNT} imagens por informativo.` }));
-        setImageProcessing(true);
+    const readAsDataUrl = file => new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onerror = () => { setImageProcessing(false); setErrors(prev => ({ ...prev, conteudo: 'Não foi possível ler a imagem.' })); };
-        reader.onload = async () => {
-            let result = reader.result;
-            let outputType = inputType;
-            if (file.size > MAX_ATTACHMENT_SIZE && !['image/heic', 'image/heif'].includes(inputType)) {
-                try {
-                    const image = new Image();
-                    image.src = result;
-                    await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
-                    let scale = Math.min(1, Math.sqrt(MAX_ATTACHMENT_SIZE / file.size));
-                    let compressed = '';
-                    for (let attempt = 0; attempt < 6; attempt += 1) {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-                        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-                        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-                        let quality = 0.86;
-                        compressed = canvas.toDataURL('image/jpeg', quality);
-                        while (dataUrlByteSize(compressed) > MAX_ATTACHMENT_SIZE && quality > 0.35) {
-                            quality -= 0.1;
-                            compressed = canvas.toDataURL('image/jpeg', quality);
-                        }
-                        if (dataUrlByteSize(compressed) <= MAX_ATTACHMENT_SIZE) break;
-                        scale *= 0.72;
-                    }
-                    result = compressed;
-                    outputType = 'image/jpeg';
-                } catch { setImageProcessing(false); return setErrors(prev => ({ ...prev, conteudo: 'Não foi possível comprimir esta imagem neste navegador.' })); }
-            }
-            if (dataUrlByteSize(result) > MAX_ATTACHMENT_SIZE) {
-                setImageProcessing(false);
-                return setErrors(prev => ({ ...prev, conteudo: ['image/heic', 'image/heif'].includes(inputType)
-                    ? 'Imagens HEIC acima de 5 MB não podem ser comprimidas neste navegador. Converta para JPG e tente novamente.'
-                    : 'A imagem continua maior que 5 MB após a compressão.' }));
-            }
-            const outputName = outputType === 'image/jpeg' && !/\.(jpe?g)$/i.test(file.name)
-                ? `${file.name.replace(/\.[^.]+$/, '')}.jpg`
-                : file.name;
-            const attachment = { id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`, nome: outputName, tipo: outputType, tamanho: dataUrlByteSize(result), dataUrl: result };
-            setFormData(prev => ({ ...prev, anexos: [...(prev.anexos || []), attachment] }));
-            setErrors(prev => ({ ...prev, conteudo: null, anexos: null }));
-            setImageProcessing(false);
-        };
+        reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
+        reader.onload = () => resolve(reader.result);
         reader.readAsDataURL(file);
+    });
+
+    const compressImage = async (file, dataUrl, inputType) => {
+        if (file.size <= MAX_IMAGE_SIZE) return { dataUrl, mime: inputType, name: file.name };
+        if (['image/heic', 'image/heif'].includes(inputType)) throw new Error('Imagens HEIC/HEIF acima de 5 MB não podem ser comprimidas neste navegador. Converta para JPG e tente novamente.');
+        const image = new Image();
+        image.src = dataUrl;
+        await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error('Não foi possível abrir a imagem para compressão.')); });
+        let scale = Math.min(1, Math.sqrt(MAX_IMAGE_SIZE / file.size));
+        let compressed = '';
+        for (let attempt = 0; attempt < 7; attempt += 1) {
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+            canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            let quality = 0.88;
+            compressed = canvas.toDataURL('image/jpeg', quality);
+            while (dataUrlByteSize(compressed) > MAX_IMAGE_SIZE && quality > 0.35) {
+                quality -= 0.08;
+                compressed = canvas.toDataURL('image/jpeg', quality);
+            }
+            if (dataUrlByteSize(compressed) <= MAX_IMAGE_SIZE) break;
+            scale *= 0.72;
+        }
+        if (dataUrlByteSize(compressed) > MAX_IMAGE_SIZE) throw new Error('A imagem continua maior que 5 MB após a compressão.');
+        return { dataUrl: compressed, mime: 'image/jpeg', name: `${file.name.replace(/\.[^.]+$/, '')}.jpg` };
+    };
+
+    const addFiles = async selectedFiles => {
+        const files = [...(selectedFiles || [])];
+        if (!files.length) return;
+        const current = formData.anexos || [];
+        if (current.length + files.length > MAX_ATTACHMENT_COUNT) return setErrors(prev => ({ ...prev, anexos: `Adicione no máximo ${MAX_ATTACHMENT_COUNT} arquivos por informativo.` }));
+        setFileProcessing(true);
+        setUploadMessage(`Processando ${files.length === 1 ? 'arquivo' : `${files.length} arquivos`}…`);
+        try {
+            const additions = [];
+            for (const file of files) {
+                const extension = file.name.split('.').pop()?.toLowerCase() || '';
+                const extensionType = EXTENSION_MIME[extension] || '';
+                const inputType = FILE_TYPES.has(file.type) ? file.type : extensionType;
+                if (!inputType || extensionType !== inputType) throw new Error(`“${file.name}” não é PNG, JPG/JPEG, WEBP, HEIC/HEIF ou PDF válido.`);
+                if (inputType === 'application/pdf' && file.size > MAX_PDF_SIZE) throw new Error(`“${file.name}” excede o limite de 10 MB para PDF.`);
+                const duplicate = [...current, ...additions].some(item => item.nome === file.name && Number(item.tamanho) === file.size);
+                if (duplicate) throw new Error(`“${file.name}” já foi adicionado.`);
+                const rawDataUrl = await readAsDataUrl(file);
+                const processed = IMAGE_TYPES.has(inputType) ? await compressImage(file, rawDataUrl, inputType) : { dataUrl: rawDataUrl, mime: inputType, name: file.name };
+                additions.push({ id: `local-${Date.now()}-${Math.random().toString(36).slice(2)}`, nome: processed.name, tipo: processed.mime, tamanho: dataUrlByteSize(processed.dataUrl), dataUrl: processed.dataUrl });
+            }
+            const totalSize = [...current, ...additions].reduce((sum, item) => sum + Number(item.tamanho || 0), 0);
+            if (totalSize > MAX_TOTAL_SIZE) throw new Error('O total dos anexos deve ter no máximo 20 MB.');
+            setFormData(prev => ({ ...prev, anexos: [...(prev.anexos || []), ...additions] }));
+            setErrors(prev => ({ ...prev, anexos: null }));
+            setUploadMessage(`${additions.length === 1 ? 'Arquivo anexado' : 'Arquivos anexados'} com sucesso.`);
+        } catch (error) {
+            setErrors(prev => ({ ...prev, anexos: error.message || 'Não foi possível processar o arquivo.' }));
+            setUploadMessage('');
+        } finally {
+            setFileProcessing(false);
+        }
+    };
+
+    const handleFileInput = event => {
+        const files = event.target.files;
+        event.target.value = '';
+        addFiles(files);
     };
 
     if (!isOpen) return null;
@@ -256,7 +288,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="info-date" className="form-label">Data de agendamento</label>
-                                <input id="info-date" name="dataAgendamento" type="date" min={new Date().toISOString().slice(0, 10)} value={formData.dataAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.dataAgendamento)} className={`form-control ${errors.dataAgendamento ? 'border-danger' : ''}`} />
+                                <input id="info-date" name="dataAgendamento" type="date" min={informativo?.status === 'Publicado' ? undefined : todayForInput()} value={formData.dataAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.dataAgendamento)} className={`form-control ${errors.dataAgendamento ? 'border-danger' : ''}`} />
                                 {errors.dataAgendamento && <p className="text-danger text-xs mt-1">{errors.dataAgendamento}</p>}
                             </div>
                             <div>
@@ -272,12 +304,37 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                     <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertUnorderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista com marcadores">• Lista</button>
                                     <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista numerada">1. Lista</button>
                                     <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Inserir link">🔗 Link</button>
-                                    <button type="button" onClick={() => imageInputRef.current?.click()} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Anexar imagem">🖼 Anexar imagem</button>
-                                    <input ref={imageInputRef} type="file" className="hidden" accept="image/png,image/jpeg,image/heic,image/heif" onChange={addImage} />
                                 </div>
                                 <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); }} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
-                                <p className="mt-1 text-xs text-text-muted">Anexe imagens PNG, JPG/JPEG ou HEIC (até 5 MB cada). Acima desse limite, PNG/JPG serão comprimidas automaticamente{imageProcessing ? '… processando imagem' : '.'}</p>
-                                {formData.anexos?.length > 0 && <div className="mt-3 rounded-lg border border-border bg-surface-muted p-3" aria-label="Anexos adicionados"><p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Anexos</p><div className="flex flex-wrap gap-2">{formData.anexos.map((attachment, index) => <div key={attachment.id || `${attachment.nome}-${index}`} className="flex max-w-full items-center gap-2 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-default"><span aria-hidden="true">🖼️</span><span className="max-w-[14rem] truncate" title={attachment.nome}>{attachment.nome}</span><span className="shrink-0 text-xs text-text-muted">({formatFileSize(attachment.tamanho)})</span><button type="button" onClick={() => { setFormData(prev => ({ ...prev, anexos: prev.anexos.filter((_, itemIndex) => itemIndex !== index) })); setErrors(prev => ({ ...prev, anexos: null })); }} className="ml-1 rounded p-1 text-text-muted hover:bg-surface-hover hover:text-danger" aria-label={`Remover anexo ${attachment.nome}`}>×</button></div>)}</div></div>}
+                                <div className="mt-4">
+                                    <p className="form-label">Anexos</p>
+                                    <button
+                                        type="button"
+                                        disabled={fileProcessing}
+                                        onClick={() => fileInputRef.current?.click()}
+                                        onDragEnter={event => { event.preventDefault(); setDragActive(true); }}
+                                        onDragOver={event => event.preventDefault()}
+                                        onDragLeave={() => setDragActive(false)}
+                                        onDrop={event => { event.preventDefault(); setDragActive(false); addFiles(event.dataTransfer.files); }}
+                                        className={`flex min-h-24 w-full flex-col items-center justify-center rounded-lg border border-dashed px-4 py-4 text-center transition-colors ${dragActive ? 'border-primary bg-primary/10' : 'border-border bg-surface-muted hover:bg-surface-hover'}`}
+                                    >
+                                        <span className="font-semibold text-text-default">+ Adicionar arquivos</span>
+                                        <span className="mt-1 text-xs text-text-muted">Arraste aqui ou selecione até 5 arquivos</span>
+                                    </button>
+                                    <input ref={fileInputRef} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.pdf" onChange={handleFileInput} />
+                                    <p className="mt-1 text-xs text-text-muted">PNG, JPG/JPEG, WEBP ou HEIC/HEIF: até 5 MB. PDF: até 10 MB. Total: 20 MB. Imagens maiores serão comprimidas quando o navegador permitir.</p>
+                                    {fileProcessing && <p className="mt-2 text-sm text-text-muted" role="status">Processando arquivos…</p>}
+                                    {!fileProcessing && uploadMessage && <p className="mt-2 text-sm text-success" role="status">{uploadMessage}</p>}
+                                </div>
+                                {formData.anexos?.length > 0 && <div className="mt-3 space-y-2 rounded-lg border border-border bg-surface-muted p-3" aria-label="Anexos adicionados">{formData.anexos.map((attachment, index) => {
+                                    const isImage = String(attachment.tipo || '').startsWith('image/');
+                                    const previewUrl = attachment.dataUrl || attachment.url;
+                                    return <div key={attachment.id || `${attachment.nome}-${index}`} className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-surface p-2 text-sm text-text-default">
+                                        {isImage && previewUrl ? <a href={previewUrl} target="_blank" rel="noreferrer" className="shrink-0"><img src={previewUrl} alt="" className="h-12 w-12 rounded object-cover" /></a> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-surface-muted text-xl" aria-hidden="true">📄</span>}
+                                        <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={attachment.nome}>{attachment.nome}</span><span className="text-xs text-text-muted">{isImage ? 'Imagem' : 'Documento PDF'} · {formatFileSize(attachment.tamanho)}</span></span>
+                                        <button type="button" onClick={() => { setFormData(prev => ({ ...prev, anexos: prev.anexos.filter((_, itemIndex) => itemIndex !== index) })); setErrors(prev => ({ ...prev, anexos: null })); setUploadMessage(''); }} className="shrink-0 rounded p-2 text-text-muted hover:bg-surface-hover hover:text-danger" aria-label={`Remover anexo ${attachment.nome}`}>×</button>
+                                    </div>;
+                                })}</div>}
                                 {errors.anexos && <p className="text-danger text-xs mt-1">{errors.anexos}</p>}
                                 {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
@@ -288,7 +345,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                     {linkDialogOpen && <div className="mt-4 rounded-lg border border-border bg-surface-muted p-3"><div className="grid gap-3 sm:grid-cols-2"><label><span className="form-label">Texto do link</span><input autoFocus type="text" value={linkText} onChange={event => { setLinkText(event.target.value); setLinkError(''); }} placeholder="Texto visível (opcional)" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label><label><span className="form-label">Link</span><input type="text" value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError(''); }} placeholder="google.com" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label></div><p className="mt-2 text-xs text-text-muted">Você pode digitar google.com; o endereço será convertido para HTTPS automaticamente.</p>{linkError && <p className="mt-2 text-xs text-danger">{linkError}</p>}<div className="mt-3 flex flex-wrap justify-end gap-2"><button type="button" onClick={applyLink} className="btn btn-primary">Aplicar</button><button type="button" onClick={() => setLinkDialogOpen(false)} className="btn btn-secondary">Cancelar</button></div></div>}
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
                         <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
-                        <button type="submit" disabled={imageProcessing} className="btn btn-primary">{imageProcessing ? 'Processando imagem…' : 'Revisar e publicar'}</button>
+                        <button type="submit" disabled={fileProcessing} className="btn btn-primary">{fileProcessing ? 'Processando arquivos…' : 'Revisar e publicar'}</button>
                     </div>
                 </form>
         </Modal>

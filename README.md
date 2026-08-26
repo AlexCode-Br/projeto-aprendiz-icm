@@ -8,7 +8,7 @@ Aplicação web com frontend React e backend Node.js para a gestão do Projeto A
 - Papéis de Gestor e Professor autorizados no backend, sem confiar em metadados editáveis do usuário.
 - Convites com tokens temporários, de uso único e armazenados somente como hash.
 - E-mails reais via Resend em produção e caixa local em `/dev-mail` durante o desenvolvimento.
-- Gestão de alunos, professores, cursos, turmas, matrículas, frequência, informativos, suporte e relatórios.
+- Gestão de alunos, professores, cursos, turmas, matrículas, frequência, informativos com imagens/PDFs privados, suporte e relatórios.
 - PostgreSQL do Supabase em um schema privado e isolado das tabelas antigas do projeto.
 - Migrações automáticas, endpoint de saúde e encerramento seguro do servidor.
 
@@ -42,11 +42,11 @@ O arquivo `render.yaml` descreve o serviço web gratuito no Render. O banco e a 
 1. Crie e confirme o primeiro usuário em **Supabase Auth**.
 2. No Supabase, configure a URL pública do Render em **Auth → URL Configuration** e conecte um SMTP próprio para e-mails de produção.
 3. Crie um **Blueprint** no Render e conecte este repositório.
-4. Informe a conexão **Supavisor Session** (porta 5432) em `DATABASE_URL`, a chave pública em `SUPABASE_PUBLISHABLE_KEY` e `VITE_SUPABASE_PUBLISHABLE_KEY`, e o e-mail do primeiro Gestor em `BOOTSTRAP_ADMIN_EMAIL`.
+4. Informe a conexão **Supavisor Session** (porta 5432) em `DATABASE_URL`, a chave pública em `SUPABASE_PUBLISHABLE_KEY` e `VITE_SUPABASE_PUBLISHABLE_KEY`, a chave secreta somente no backend em `SUPABASE_SECRET_KEY` e o e-mail do primeiro Gestor em `BOOTSTRAP_ADMIN_EMAIL`.
 5. Informe `RESEND_API_KEY` e `EMAIL_FROM` para os convites de professores.
 6. Aplique o Blueprint. O build, as migrações privadas e `/api/health` já estão configurados.
 
-O backend usa a conexão Supavisor compatível com IPv4. As tabelas da nova aplicação ficam fora do schema público e não são acessadas diretamente pelo navegador.
+O backend usa a conexão Supavisor compatível com IPv4. As tabelas da nova aplicação ficam fora do schema público e não são acessadas diretamente pelo navegador. O bucket privado `announcement-attachments` é criado sob demanda pelo backend; os professores acessam os arquivos apenas pela rota autenticada e autorizada da aplicação.
 
 ## Variáveis de produção
 
@@ -56,10 +56,13 @@ O backend usa a conexão Supavisor compatível com IPv4. As tabelas da nova apli
 | `AUTH_PROVIDER` | Deve ser `supabase` na web. |
 | `SUPABASE_URL` / `VITE_SUPABASE_URL` | URL pública do projeto Supabase. |
 | `SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` | Chave pública; nunca use `service_role` ou chave secreta no frontend. |
+| `SUPABASE_SECRET_KEY` | Chave secreta disponível somente no backend para Auth administrativo e Storage privado. |
+| `SUPABASE_ANNOUNCEMENT_BUCKET` | Bucket privado de anexos; padrão `announcement-attachments`. |
 | `BOOTSTRAP_ADMIN_EMAIL` | E-mail confirmado no Supabase Auth que receberá o papel Gestor. |
 | `RESEND_API_KEY` | Credencial para recuperação de senha e convites. |
 | `EMAIL_FROM` | Remetente validado, como `Projeto Aprendiz <acesso@dominio.com>`. |
 | `APP_URL` | Opcional; URL pública usada nos links. No Render ela é detectada automaticamente. |
+| `APP_TIMEZONE` | Fuso usado no agendamento; padrão `America/Sao_Paulo`. |
 | `DATABASE_SSL` | `true` para a conexão segura com o Supabase. |
 
 ## Validação

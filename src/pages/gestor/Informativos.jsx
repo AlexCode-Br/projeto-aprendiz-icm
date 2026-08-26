@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import InformativoModal from '../../components/InformativoModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { useToast } from '../../contexts/ToastContext';
@@ -20,8 +20,12 @@ const Informativos = () => {
     const [currentInformativo, setCurrentInformativo] = useState(null);
     const [formDataToSave, setFormDataToSave] = useState(null);
     const [hasProfessors, setHasProfessors] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('Todos');
 
     const fetchInformativos = useCallback(async () => {
+        setLoading(true);
         try {
             const [infoResponse, profResponse] = await Promise.all([
                 api.get('/api/informativos'),
@@ -34,7 +38,7 @@ const Informativos = () => {
             setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
         } catch (error) {
             showToast(error.message || 'Erro ao carregar dados.', 'error');
-        }
+        } finally { setLoading(false); }
     }, [showToast]);
 
     useEffect(() => { fetchInformativos(); }, [fetchInformativos]);
@@ -116,6 +120,15 @@ const Informativos = () => {
         'Urgente': 'bg-red-100 text-red-800',
     }[cat] || 'bg-gray-100 text-gray-800');
 
+    const visibleInformativos = useMemo(() => {
+        const term = search.trim().toLocaleLowerCase('pt-BR');
+        return informativos.filter(info => {
+            if (statusFilter !== 'Todos' && info.status !== statusFilter) return false;
+            const searchable = `${info.titulo} ${String(info.conteudo || '').replace(/<[^>]+>/g, ' ')} ${info.anexos?.map(item => item.nome).join(' ') || ''}`.toLocaleLowerCase('pt-BR');
+            return !term || searchable.includes(term);
+        });
+    }, [informativos, search, statusFilter]);
+
     return (
         <>
             <div className="page-header">
@@ -125,13 +138,22 @@ const Informativos = () => {
                 </button>
             </div>
 
+            <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_14rem]">
+                <label className="sr-only" htmlFor="manager-announcement-search">Pesquisar informativos</label>
+                <input id="manager-announcement-search" type="search" value={search} onChange={event => setSearch(event.target.value)} className="form-control" placeholder="Pesquisar por título, conteúdo ou anexo..." />
+                <label className="sr-only" htmlFor="manager-announcement-status">Filtrar por estado</label>
+                <select id="manager-announcement-status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="form-control">
+                    <option>Todos</option><option value="Publicado">Publicados</option><option value="Agendado">Agendados</option>
+                </select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {informativos.map(info => (
+                {visibleInformativos.map(info => (
                     <article key={info.id} className="panel flex flex-col overflow-hidden">
                         <div className="p-4 flex-grow">
                             <div className="flex justify-between items-start mb-2">
                                 <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${getCategoryClass(info.categoria)}`}>{info.categoria}</span>
-                                {info.fixado && <span title="Fixado no topo">📌</span>}
+                                <span className="flex items-center gap-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${info.status === 'Agendado' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200' : 'bg-success/10 text-success'}`}>{info.status}</span>{info.fixado && <span title="Fixado no topo">📌</span>}</span>
                             </div>
                             <h3 className="font-bold text-lg text-text-default">{info.titulo}</h3>
                             <p className="text-sm text-text-muted mt-1">{info.data} às {info.hora}</p>
@@ -139,7 +161,7 @@ const Informativos = () => {
                             <AnnouncementAttachments attachments={info.anexos} />
                         </div>
                         <div className="p-4 border-t border-border flex justify-between items-center text-xs text-text-muted">
-                            <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem leu">
+                            <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem visualizou">
                                 <span>👁️ {info.lido} visualizações</span>
                             </button>
                             <div className="flex items-center space-x-2">
@@ -149,7 +171,8 @@ const Informativos = () => {
                         </div>
                     </article>
                 ))}
-                {!informativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">Nenhum informativo publicado.</div>}
+                {loading && <div className="panel col-span-full px-6 py-14 text-center text-text-muted" role="status">Carregando informativos...</div>}
+                {!loading && !visibleInformativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">{informativos.length ? 'Nenhum informativo encontrado.' : <><p>Nenhum informativo criado ainda.</p><button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary mt-4">Criar informativo</button></>}</div>}
             </div>
 
             <InformativoModal

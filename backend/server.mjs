@@ -2,7 +2,7 @@ import http from 'node:http';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { createDatabase } from './database.mjs';
@@ -210,12 +210,15 @@ if (db.dialect === 'sqlite') await db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
-    mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png','image/jpeg','image/heic','image/heif')),
-    size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 5242880),
-    data_url TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png','image/jpeg','image/webp','image/heic','image/heif','application/pdf')),
+    size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 10485760),
+    data_url TEXT,
+    storage_path TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CHECK(data_url IS NOT NULL OR storage_path IS NOT NULL)
   );
   CREATE INDEX IF NOT EXISTS announcement_attachments_announcement_id_idx ON announcement_attachments(announcement_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS announcement_attachments_storage_path_unique ON announcement_attachments(storage_path) WHERE storage_path IS NOT NULL;
   CREATE TABLE IF NOT EXISTS announcement_recipients (
     announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
     recipient_type TEXT NOT NULL CHECK(recipient_type IN ('professor','curso')),
@@ -285,6 +288,30 @@ if (db.dialect === 'sqlite') {
     CREATE UNIQUE INDEX IF NOT EXISTS support_messages_author_client_message_unique ON support_messages(author_user_id,client_message_id) WHERE client_message_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS support_messages_ticket_activity_idx ON support_messages(ticket_id,created_at,id);
   `);
+  const attachmentTable = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='announcement_attachments'").get();
+  if (!String(attachmentTable?.sql || '').includes('application/pdf')) {
+    await db.exec(`
+      DROP INDEX IF EXISTS announcement_attachments_announcement_id_idx;
+      DROP INDEX IF EXISTS announcement_attachments_storage_path_unique;
+      ALTER TABLE announcement_attachments RENAME TO announcement_attachments_legacy;
+      CREATE TABLE announcement_attachments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        announcement_id INTEGER NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png','image/jpeg','image/webp','image/heic','image/heif','application/pdf')),
+        size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 10485760),
+        data_url TEXT,
+        storage_path TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CHECK(data_url IS NOT NULL OR storage_path IS NOT NULL)
+      );
+      INSERT INTO announcement_attachments (id,announcement_id,filename,mime_type,size_bytes,data_url,created_at)
+        SELECT id,announcement_id,filename,mime_type,size_bytes,data_url,created_at FROM announcement_attachments_legacy;
+      DROP TABLE announcement_attachments_legacy;
+      CREATE INDEX announcement_attachments_announcement_id_idx ON announcement_attachments(announcement_id);
+      CREATE UNIQUE INDEX announcement_attachments_storage_path_unique ON announcement_attachments(storage_path) WHERE storage_path IS NOT NULL;
+    `);
+  }
 }
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -769,46 +796,165 @@ function supportTicketView(row) {
 }
 
 function sanitizeAnnouncementContent(value) {
+  const allowed = new Set(['p', 'div', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a']);
   return String(value || '')
-    .replace(/<\/?(?:script|style|iframe|object|embed|form)[^>]*>/gi, '')
-    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style|iframe|object|embed|form|svg|math)[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (source, rawTag) => {
+      const tag = rawTag.toLowerCase();
+      if (!allowed.has(tag)) return '';
+      if (source.startsWith('</')) return tag === 'br' ? '' : `</${tag}>`;
+      if (tag !== 'a') return tag === 'br' ? '<br>' : `<${tag}>`;
+      const hrefMatch = source.match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+      const href = String(hrefMatch?.[1] || hrefMatch?.[2] || '').trim();
+      try {
+        const parsed = new URL(href);
+        if (parsed.protocol !== 'https:') return '<a>';
+        return `<a href="${escapeHtml(parsed.toString())}" target="_blank" rel="noopener noreferrer">`;
+      } catch { return '<a>'; }
+    })
+    .replace(/<\/a>/gi, '</a>')
     .slice(0, 12000000);
 }
 
-const ANNOUNCEMENT_ATTACHMENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/heic', 'image/heif']);
-const ANNOUNCEMENT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
-const ANNOUNCEMENT_ATTACHMENT_MAX_COUNT = 3;
+const ANNOUNCEMENT_ATTACHMENT_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif', 'application/pdf']);
+const ANNOUNCEMENT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const ANNOUNCEMENT_PDF_MAX_BYTES = 10 * 1024 * 1024;
+const ANNOUNCEMENT_ATTACHMENT_TOTAL_BYTES = 20 * 1024 * 1024;
+const ANNOUNCEMENT_ATTACHMENT_MAX_COUNT = 5;
+const announcementStorageBucket = process.env.SUPABASE_ANNOUNCEMENT_BUCKET || 'announcement-attachments';
+const useSupabaseAttachmentStorage = Boolean(supabaseAdmin) && process.env.ANNOUNCEMENT_STORAGE_PROVIDER !== 'database';
+let announcementBucketPromise;
+
+const attachmentExtensions = {
+  'image/png': new Set(['.png']),
+  'image/jpeg': new Set(['.jpg', '.jpeg']),
+  'image/webp': new Set(['.webp']),
+  'image/heic': new Set(['.heic']),
+  'image/heif': new Set(['.heif']),
+  'application/pdf': new Set(['.pdf']),
+};
+
+function detectedAttachmentMime(buffer) {
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))) return 'image/png';
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (buffer.length >= 12 && buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+    const brand = buffer.subarray(8, 12).toString('ascii').toLowerCase();
+    if (['heic','heix','hevc','hevx'].includes(brand)) return 'image/heic';
+    if (['heif','mif1','msf1'].includes(brand)) return 'image/heif';
+  }
+  if (buffer.length >= 8 && buffer.subarray(0, 5).toString('ascii') === '%PDF-' && buffer.subarray(Math.max(0, buffer.length - 2048)).includes(Buffer.from('%%EOF'))) return 'application/pdf';
+  return '';
+}
+
+function safeAttachmentFilename(value, mime) {
+  const extension = extname(String(value || '')).toLowerCase();
+  if (!attachmentExtensions[mime]?.has(extension)) return '';
+  const withoutControls = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/[\\/:*?"<>|]/g, '_').trim();
+  return cleanText(withoutControls, 180) || `anexo${extension}`;
+}
 
 function normalizeAnnouncementAttachments(value, existingAttachments = new Map()) {
   const source = value == null ? [] : value;
-  if (!Array.isArray(source)) return { error: 'Os anexos precisam ser uma lista de imagens.' };
-  if (source.length > ANNOUNCEMENT_ATTACHMENT_MAX_COUNT) return { error: `Adicione no máximo ${ANNOUNCEMENT_ATTACHMENT_MAX_COUNT} imagens por informativo.` };
+  if (!Array.isArray(source)) return { error: 'Os anexos precisam ser uma lista de arquivos.' };
+  if (source.length > ANNOUNCEMENT_ATTACHMENT_MAX_COUNT) return { error: `Adicione no máximo ${ANNOUNCEMENT_ATTACHMENT_MAX_COUNT} arquivos por informativo.` };
   const items = [];
+  const fingerprints = new Set();
+  const retainedIds = new Set();
+  let totalBytes = 0;
   for (const item of source) {
     const mime = String(item?.tipo || '').trim().toLowerCase();
     const dataUrl = String(item?.dataUrl || '').trim();
     if (!dataUrl && item?.id != null) {
       const existing = existingAttachments.get(Number(item.id));
       if (existing) {
-        items.push({ filename: existing.filename, mime_type: existing.mime_type, size_bytes: Number(existing.size_bytes), data_url: existing.data_url });
+        if (retainedIds.has(Number(existing.id))) return { error: 'O mesmo anexo foi informado mais de uma vez.' };
+        retainedIds.add(Number(existing.id));
+        totalBytes += Number(existing.size_bytes);
+        items.push({ ...existing, id: Number(existing.id), existing: true });
         continue;
       }
+      return { error: 'Um dos anexos não pertence a este informativo.' };
     }
-    const match = dataUrl.match(/^data:(image\/(?:png|jpeg|heic|heif));base64,([a-z0-9+/=\s]+)$/i);
+    const match = dataUrl.match(/^data:([a-z0-9.+/-]+);base64,([a-z0-9+/=\s]+)$/i);
     if (!ANNOUNCEMENT_ATTACHMENT_TYPES.has(mime) || !match || match[1].toLowerCase() !== mime) {
-      return { error: 'Cada anexo precisa ser uma imagem PNG, JPG/JPEG ou HEIC válida.' };
+      return { error: 'Cada anexo precisa ser uma imagem PNG, JPG/JPEG, WEBP, HEIC/HEIF ou um PDF válido.' };
     }
     const base64 = match[2].replace(/\s/g, '');
-    const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
-    const sizeBytes = Math.max(0, Math.floor(base64.length * 3 / 4) - padding);
-    if (!sizeBytes || sizeBytes > ANNOUNCEMENT_ATTACHMENT_MAX_BYTES) {
-      return { error: 'Cada imagem deve ter no máximo 5 MB.' };
-    }
-    const filename = cleanText(item?.nome || 'imagem', 180).replace(/[\\/:*?"<>|]/g, '_').trim() || 'imagem';
-    items.push({ filename, mime_type: mime, size_bytes: sizeBytes, data_url: dataUrl });
+    const buffer = Buffer.from(base64, 'base64');
+    if (buffer.toString('base64').replace(/=+$/,'') !== base64.replace(/=+$/,'')) return { error: 'Um dos anexos possui conteúdo Base64 inválido.' };
+    const detectedMime = detectedAttachmentMime(buffer);
+    if (detectedMime !== mime) return { error: 'O conteúdo de um dos arquivos não corresponde ao tipo informado.' };
+    const maxBytes = mime === 'application/pdf' ? ANNOUNCEMENT_PDF_MAX_BYTES : ANNOUNCEMENT_IMAGE_MAX_BYTES;
+    if (!buffer.length || buffer.length > maxBytes) return { error: mime === 'application/pdf' ? 'Cada PDF deve ter no máximo 10 MB.' : 'Cada imagem deve ter no máximo 5 MB.' };
+    const filename = safeAttachmentFilename(item?.nome, mime);
+    if (!filename) return { error: 'A extensão de um dos arquivos não corresponde ao seu conteúdo.' };
+    const fingerprint = sha256(buffer);
+    if (fingerprints.has(fingerprint)) return { error: 'O mesmo arquivo foi selecionado mais de uma vez.' };
+    fingerprints.add(fingerprint);
+    totalBytes += buffer.length;
+    items.push({ filename, mime_type: mime, size_bytes: buffer.length, data_url: dataUrl, buffer, fingerprint, existing: false });
   }
-  return { items };
+  if (totalBytes > ANNOUNCEMENT_ATTACHMENT_TOTAL_BYTES) return { error: 'O total dos anexos deve ter no máximo 20 MB.' };
+  return { items, existingItems: items.filter(item => item.existing), newItems: items.filter(item => !item.existing) };
+}
+
+async function ensureAnnouncementBucket() {
+  if (!useSupabaseAttachmentStorage) return;
+  announcementBucketPromise ||= (async () => {
+    const { data, error } = await supabaseAdmin.storage.getBucket(announcementStorageBucket);
+    if (data && !error) return;
+    const { error: createError } = await supabaseAdmin.storage.createBucket(announcementStorageBucket, {
+      public: false,
+      fileSizeLimit: ANNOUNCEMENT_PDF_MAX_BYTES,
+      allowedMimeTypes: [...ANNOUNCEMENT_ATTACHMENT_TYPES],
+    });
+    if (createError && !/already exists/i.test(createError.message || '')) throw createError;
+  })();
+  return announcementBucketPromise;
+}
+
+async function storeAnnouncementAttachment(announcementId, item) {
+  if (!useSupabaseAttachmentStorage) return { data_url: item.data_url, storage_path: null };
+  await ensureAnnouncementBucket();
+  const extension = extname(item.filename).toLowerCase();
+  const storagePath = `informativos/${announcementId}/${randomUUID()}${extension}`;
+  const { error } = await supabaseAdmin.storage.from(announcementStorageBucket).upload(storagePath, item.buffer, {
+    contentType: item.mime_type,
+    upsert: false,
+    cacheControl: '3600',
+  });
+  if (error) throw new Error(`Falha ao armazenar ${item.filename}: ${error.message}`);
+  return { data_url: null, storage_path: storagePath };
+}
+
+async function removeStoredAttachments(paths) {
+  const uniquePaths = [...new Set(paths.filter(Boolean))];
+  if (!useSupabaseAttachmentStorage || !uniquePaths.length) return;
+  const { error } = await supabaseAdmin.storage.from(announcementStorageBucket).remove(uniquePaths);
+  if (error) throw new Error(`Falha ao remover anexos do storage: ${error.message}`);
+}
+
+async function prepareStoredAttachments(announcementId, items) {
+  const stored = [];
+  try {
+    for (const item of items) {
+      const location = await storeAnnouncementAttachment(announcementId, item);
+      stored.push({ ...item, ...location });
+    }
+    return stored;
+  } catch (error) {
+    await removeStoredAttachments(stored.map(item => item.storage_path)).catch(cleanupError => console.error(cleanupError));
+    throw error;
+  }
+}
+
+async function insertAnnouncementAttachments(announcementId, items) {
+  for (const item of items) {
+    await db.prepare('INSERT INTO announcement_attachments (announcement_id,filename,mime_type,size_bytes,data_url,storage_path) VALUES (?,?,?,?,?,?)')
+      .run(announcementId,item.filename,item.mime_type,item.size_bytes,item.data_url || null,item.storage_path || null);
+  }
 }
 
 const ANNOUNCEMENT_RECIPIENT_MAX_COUNT = 200;
@@ -846,13 +992,37 @@ async function normalizeAnnouncementRecipients(value) {
   };
 }
 
+const appTimeZone = process.env.APP_TIMEZONE || 'America/Sao_Paulo';
+
+function zonedScheduleIso(date, time) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return '';
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+  const target = Date.UTC(year, month - 1, day, hour, minute);
+  let candidate = target;
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: appTimeZone,
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(candidate)).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+    const represented = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+    candidate += target - represented;
+  }
+  return new Date(candidate).toISOString();
+}
+
 function scheduleIsPast(date, time) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return false;
-  const nowParts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
-    timeZone: process.env.APP_TIMEZONE || 'America/Sao_Paulo',
+  const scheduled = zonedScheduleIso(date, time);
+  return Boolean(scheduled) && Date.parse(scheduled) < Date.now();
+}
+
+function announcementScheduleParts(value) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: appTimeZone,
     year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date()).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
-  return `${date}T${time}` < `${nowParts.year}-${nowParts.month}-${nowParts.day}T${nowParts.hour}:${nowParts.minute}`;
+  }).formatToParts(new Date(value)).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }
 
 async function supportTicketForSession(ticketId, session) {
@@ -1648,6 +1818,25 @@ async function api(request, response, url) {
     return json(response,200,{success:true});
   }
 
+  if(request.method==='GET'&&url.pathname==='/api/informativos/nao-lidos'){
+    const session=await authorize(request,response,['professor']);if(!session)return;
+    const result=await db.prepare(`SELECT COUNT(*) AS total FROM announcements
+      WHERE announcements.active=1
+        AND ${announcementScheduledCondition('announcements.scheduled_at')}
+        AND NOT EXISTS (SELECT 1 FROM announcement_reads WHERE announcement_reads.announcement_id=announcements.id AND announcement_reads.user_id=?)
+        AND (
+          NOT EXISTS (SELECT 1 FROM announcement_recipients ar_all WHERE ar_all.announcement_id=announcements.id)
+          OR EXISTS (SELECT 1 FROM announcement_recipients ar WHERE ar.announcement_id=announcements.id AND (
+            (ar.recipient_type='professor' AND ar.recipient_id=(SELECT pp.id FROM professor_profiles pp WHERE pp.user_id=? AND pp.active=1))
+            OR (ar.recipient_type='curso' AND ar.recipient_id IN (
+              SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id
+              WHERE pp.user_id=? AND pp.active=1 AND classes.active=1
+            ))
+          ))
+        )`).get(session.user_id,session.user_id,session.user_id);
+    return json(response,200,{total:Number(result?.total||0)});
+  }
+
   if(request.method==='GET'&&url.pathname==='/api/informativos'){
     const session=await authorize(request,response,['gestor','professor']);if(!session)return;
     const visibility=session.role==='professor' ? `
@@ -1668,7 +1857,7 @@ async function api(request, response, url) {
             )
         )
       )` : '';
-    const rows=await db.prepare(`SELECT announcements.*,COUNT(announcement_reads.user_id) AS read_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id WHERE announcements.active=1${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(...(session.role==='professor' ? [session.user_id,session.user_id,session.user_id] : [session.user_id]));
+    const rows=await db.prepare(`SELECT announcements.*,COUNT(read_users.id) AS read_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id LEFT JOIN users read_users ON read_users.id=announcement_reads.user_id AND read_users.role='professor' WHERE announcements.active=1${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(...(session.role==='professor' ? [session.user_id,session.user_id,session.user_id] : [session.user_id]));
     const attachmentsByAnnouncement = new Map();
     const recipientsByAnnouncement = new Map();
     if (rows.length) {
@@ -1689,8 +1878,9 @@ async function api(request, response, url) {
       }
     }
     const mapped=rows.map(row=>{
-      const date=new Date(row.scheduled_at);
-      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:row.content,data_publicacao:row.published_at,data:date.toLocaleDateString('pt-BR',{timeZone:'UTC'}),hora:date.toISOString().slice(11,16),lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read),anexos:attachmentsByAnnouncement.get(Number(row.id)) || [],destinatarios:recipientsByAnnouncement.get(Number(row.id)) || { todos: true, professores: [], cursos: [] }};
+      const schedule=announcementScheduleParts(row.scheduled_at);
+      const isScheduled=Date.parse(row.scheduled_at)>Date.now();
+      return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:sanitizeAnnouncementContent(row.content),data_publicacao:row.scheduled_at,agendado_em:row.scheduled_at,data:schedule.date.split('-').reverse().join('/'),hora:schedule.time,status:isScheduled?'Agendado':'Publicado',lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read),anexos:attachmentsByAnnouncement.get(Number(row.id)) || [],destinatarios:recipientsByAnnouncement.get(Number(row.id)) || { todos: true, professores: [], cursos: [] }};
     });
     return json(response,200,mapped);
   }
@@ -1729,68 +1919,107 @@ async function api(request, response, url) {
           (ar.recipient_type='professor' AND ar.recipient_id=(SELECT pp.id FROM professor_profiles pp WHERE pp.user_id=? AND pp.active=1))
           OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1))
         )))` : '';
-    const attachment=await db.prepare(`SELECT announcement_attachments.filename,announcement_attachments.mime_type,announcement_attachments.data_url FROM announcement_attachments JOIN announcements ON announcements.id=announcement_attachments.announcement_id WHERE announcement_attachments.id=? AND announcement_attachments.announcement_id=? AND announcements.active=1${visibility}`).get(...([Number(attachmentMatch[2]),Number(attachmentMatch[1]),...(session.role==='professor' ? [session.user_id,session.user_id] : [])]));
+    const attachment=await db.prepare(`SELECT announcement_attachments.filename,announcement_attachments.mime_type,announcement_attachments.data_url,announcement_attachments.storage_path FROM announcement_attachments JOIN announcements ON announcements.id=announcement_attachments.announcement_id WHERE announcement_attachments.id=? AND announcement_attachments.announcement_id=? AND announcements.active=1${visibility}`).get(...([Number(attachmentMatch[2]),Number(attachmentMatch[1]),...(session.role==='professor' ? [session.user_id,session.user_id] : [])]));
     if(!attachment)return json(response,404,{message:'Anexo não encontrado.'});
-    const base64=attachment.data_url.split(',')[1] || '';
-    const buffer=Buffer.from(base64,'base64');
-    response.writeHead(200,{...securityHeaders(attachment.mime_type),'Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`});
+    let buffer;
+    if(attachment.storage_path){
+      if(!supabaseAdmin)return json(response,503,{message:'O storage de anexos não está disponível.'});
+      const {data,error}=await supabaseAdmin.storage.from(announcementStorageBucket).download(attachment.storage_path);
+      if(error||!data)return json(response,502,{message:'Não foi possível carregar o anexo.'});
+      buffer=Buffer.from(await data.arrayBuffer());
+    }else{
+      const base64=String(attachment.data_url||'').split(',')[1] || '';
+      buffer=Buffer.from(base64,'base64');
+    }
+    const disposition=url.searchParams.get('download')==='1'?'attachment':'inline';
+    response.writeHead(200,{...securityHeaders(attachment.mime_type),'Content-Disposition':`${disposition}; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,'Content-Length':String(buffer.length),'Cache-Control':'private, max-age=300'});
     return response.end(buffer);
   }
   if(request.method==='POST'&&url.pathname==='/api/informativos'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
     const body=await readJson(request, 32 * 1024 * 1024),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),attachmentResult=normalizeAnnouncementAttachments(body.anexos),recipientResult=await normalizeAnnouncementRecipients(body.destinatarios);
-    const scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`;
+    const scheduled=zonedScheduleIso(body.dataAgendamento,body.horaAgendamento);
     const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',anexos:attachmentResult.error || '',destinatarios:recipientResult.error || ''};
     if(scheduleIsPast(body.dataAgendamento, body.horaAgendamento))errors.dataAgendamento='A data e hora devem ser futuras.';
-    if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
+    if(hasValidationErrors(errors)||!scheduled||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
     let result;
-    await db.transaction(async () => {
-      result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,new Date().toISOString(),body.fixarNoTopo?1:0);
-      for (const attachment of attachmentResult.items) await db.prepare('INSERT INTO announcement_attachments (announcement_id,filename,mime_type,size_bytes,data_url) VALUES (?,?,?,?,?)').run(result.lastInsertRowid,attachment.filename,attachment.mime_type,attachment.size_bytes,attachment.data_url);
-      for (const recipient of recipientResult.items) await db.prepare('INSERT INTO announcement_recipients (announcement_id,recipient_type,recipient_id) VALUES (?,?,?)').run(result.lastInsertRowid,recipient.recipient_type,recipient.recipient_id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
-    });
+    let stored=[];
+    try{
+      await db.transaction(async () => {
+        result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,scheduled,body.fixarNoTopo?1:0);
+        for (const recipient of recipientResult.items) await db.prepare('INSERT INTO announcement_recipients (announcement_id,recipient_type,recipient_id) VALUES (?,?,?)').run(result.lastInsertRowid,recipient.recipient_type,recipient.recipient_id);
+      });
+      stored=await prepareStoredAttachments(Number(result.lastInsertRowid),attachmentResult.newItems);
+      await db.transaction(async()=>{
+        await insertAnnouncementAttachments(Number(result.lastInsertRowid),stored);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
+      });
+    }catch(error){
+      await removeStoredAttachments(stored.map(item=>item.storage_path)).catch(cleanupError=>console.error(cleanupError));
+      if(result?.lastInsertRowid)await db.prepare('DELETE FROM announcements WHERE id=?').run(Number(result.lastInsertRowid)).catch(cleanupError=>console.error(cleanupError));
+      console.error('Falha ao criar informativo:',error);
+      return json(response,502,{message:'Não foi possível armazenar os anexos. O informativo não foi publicado.'});
+    }
     return json(response,201,{id:Number(result.lastInsertRowid),destinatarios:recipientResult.audience});
   }
   const announcementMatch=url.pathname.match(/^\/api\/informativos\/(\d+)$/);
   if(announcementMatch&&request.method==='PUT'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
     const announcementId=Number(announcementMatch[1]);
-    const existingAttachments=new Map((await db.prepare('SELECT id,filename,mime_type,size_bytes,data_url FROM announcement_attachments WHERE announcement_id=?').all(announcementId)).map(row => [Number(row.id), row]));
-    const body=await readJson(request, 32 * 1024 * 1024),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),scheduled=`${body.dataAgendamento||''}T${body.horaAgendamento||''}:00Z`,attachmentResult=normalizeAnnouncementAttachments(body.anexos, existingAttachments),recipientResult=await normalizeAnnouncementRecipients(body.destinatarios);
+    const announcement=await db.prepare('SELECT id,scheduled_at FROM announcements WHERE id=? AND active=1').get(announcementId);
+    if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
+    const existingAttachments=new Map((await db.prepare('SELECT id,filename,mime_type,size_bytes,data_url,storage_path FROM announcement_attachments WHERE announcement_id=?').all(announcementId)).map(row => [Number(row.id), row]));
+    const body=await readJson(request, 32 * 1024 * 1024),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),scheduled=zonedScheduleIso(body.dataAgendamento,body.horaAgendamento),attachmentResult=normalizeAnnouncementAttachments(body.anexos, existingAttachments),recipientResult=await normalizeAnnouncementRecipients(body.destinatarios);
     const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),dataAgendamento:/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'':'Informe uma data válida.',horaAgendamento:/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'':'Informe uma hora válida.',anexos:attachmentResult.error || '',destinatarios:recipientResult.error || ''};
-    if(scheduleIsPast(body.dataAgendamento, body.horaAgendamento))errors.dataAgendamento='A data e hora devem ser futuras.';
-    if(hasValidationErrors(errors)||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
+    if(scheduleIsPast(body.dataAgendamento, body.horaAgendamento) && scheduled!==new Date(announcement.scheduled_at).toISOString())errors.dataAgendamento='A data e hora devem ser futuras.';
+    if(hasValidationErrors(errors)||!scheduled||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
+    const retainedIds=attachmentResult.existingItems.map(item=>Number(item.id));
+    const removed=[...existingAttachments.values()].filter(item=>!retainedIds.includes(Number(item.id)));
+    let stored=[];
     let result;
-    await db.transaction(async () => {
-      result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,body.fixarNoTopo?1:0,announcementId);
-      if(!result.changes)return;
-      await db.prepare('DELETE FROM announcement_attachments WHERE announcement_id=?').run(announcementId);
-      for (const attachment of attachmentResult.items) await db.prepare('INSERT INTO announcement_attachments (announcement_id,filename,mime_type,size_bytes,data_url) VALUES (?,?,?,?,?)').run(announcementId,attachment.filename,attachment.mime_type,attachment.size_bytes,attachment.data_url);
-      await db.prepare('DELETE FROM announcement_recipients WHERE announcement_id=?').run(announcementId);
-      for (const recipient of recipientResult.items) await db.prepare('INSERT INTO announcement_recipients (announcement_id,recipient_type,recipient_id) VALUES (?,?,?)').run(announcementId,recipient.recipient_type,recipient.recipient_id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
-    });
-    if(!result.changes)return json(response,404,{message:'Informativo não encontrado.'});
+    try{
+      stored=await prepareStoredAttachments(announcementId,attachmentResult.newItems);
+      await db.transaction(async () => {
+        result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,published_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,scheduled,body.fixarNoTopo?1:0,announcementId);
+        if(retainedIds.length)await db.prepare(`DELETE FROM announcement_attachments WHERE announcement_id=? AND id NOT IN (${retainedIds.map(()=>'?').join(',')})`).run(announcementId,...retainedIds);
+        else await db.prepare('DELETE FROM announcement_attachments WHERE announcement_id=?').run(announcementId);
+        await insertAnnouncementAttachments(announcementId,stored);
+        await db.prepare('DELETE FROM announcement_recipients WHERE announcement_id=?').run(announcementId);
+        for (const recipient of recipientResult.items) await db.prepare('INSERT INTO announcement_recipients (announcement_id,recipient_type,recipient_id) VALUES (?,?,?)').run(announcementId,recipient.recipient_type,recipient.recipient_id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
+      });
+    }catch(error){
+      await removeStoredAttachments(stored.map(item=>item.storage_path)).catch(cleanupError=>console.error(cleanupError));
+      console.error('Falha ao atualizar informativo:',error);
+      return json(response,502,{message:'Não foi possível atualizar os anexos. O informativo anterior foi preservado.'});
+    }
+    await removeStoredAttachments(removed.map(item=>item.storage_path)).catch(error=>console.error('Cleanup de anexo pendente:',error));
     return json(response,200,{success:true,destinatarios:recipientResult.audience});
   }
   if(announcementMatch&&request.method==='DELETE'){
     const session=await authorize(request,response,['gestor']);if(!session)return;
-    await db.prepare('UPDATE announcements SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(Number(announcementMatch[1]));
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_deactivated',ip);
+    const announcementId=Number(announcementMatch[1]);
+    const attachments=await db.prepare('SELECT storage_path FROM announcement_attachments WHERE announcement_id=?').all(announcementId);
+    const result=await db.transaction(async()=>{
+      const deleted=await db.prepare('DELETE FROM announcements WHERE id=?').run(announcementId);
+      if(deleted.changes)await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_deleted',ip);
+      return deleted;
+    });
+    if(!result.changes)return json(response,404,{message:'Informativo não encontrado.'});
+    await removeStoredAttachments(attachments.map(item=>item.storage_path)).catch(error=>console.error('Cleanup de anexo pendente:',error));
     return json(response,200,{success:true});
   }
   const readMatch = url.pathname.match(/^\/api\/informativos\/(\d+)\/lida$/);
   if (readMatch && request.method === 'POST') {
-    const session = await authorize(request, response, ['gestor', 'professor']); if (!session) return;
+    const session = await authorize(request, response, ['professor']); if (!session) return;
     const announcementId=Number(readMatch[1]);
-    const visibility=session.role==='professor' ? `
+    const visibility=`
       AND (NOT EXISTS (SELECT 1 FROM announcement_recipients ar_all WHERE ar_all.announcement_id=announcements.id)
         OR EXISTS (SELECT 1 FROM announcement_recipients ar WHERE ar.announcement_id=announcements.id AND (
           (ar.recipient_type='professor' AND ar.recipient_id=(SELECT pp.id FROM professor_profiles pp WHERE pp.user_id=? AND pp.active=1))
           OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1))
-        )))` : '';
-    const announcement=await db.prepare(`SELECT announcements.id FROM announcements WHERE announcements.id=? AND announcements.active=1 AND ${announcementScheduledCondition('announcements.scheduled_at')}${visibility}`).get(...[announcementId,...(session.role==='professor' ? [session.user_id,session.user_id] : [])]);
+        )))`;
+    const announcement=await db.prepare(`SELECT announcements.id FROM announcements WHERE announcements.id=? AND announcements.active=1 AND ${announcementScheduledCondition('announcements.scheduled_at')}${visibility}`).get(announcementId,session.user_id,session.user_id);
     if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
     await db.prepare('INSERT INTO announcement_reads (announcement_id,user_id) VALUES (?,?) ON CONFLICT(announcement_id,user_id) DO UPDATE SET read_at=CURRENT_TIMESTAMP').run(announcementId,session.user_id);
     return json(response, 200, { success: true });
@@ -1804,7 +2033,7 @@ async function api(request, response, url) {
       FROM announcement_reads
       JOIN users ON users.id = announcement_reads.user_id
       LEFT JOIN professor_profiles ON professor_profiles.user_id = users.id
-      WHERE announcement_reads.announcement_id = ?
+      WHERE announcement_reads.announcement_id = ? AND users.role='professor'
       ORDER BY announcement_reads.read_at DESC
     `).all(Number(readersMatch[1]));
     return json(response, 200, rows);

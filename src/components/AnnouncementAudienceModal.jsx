@@ -30,6 +30,7 @@ const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, l
     const [professorSearch, setProfessorSearch] = useState('');
     const [courseSearch, setCourseSearch] = useState('');
     const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const professors = useMemo(() => (Array.isArray(options.professores) ? options.professores : []), [options.professores]);
     const courses = useMemo(() => (Array.isArray(options.cursos) ? options.cursos : []), [options.cursos]);
 
@@ -54,6 +55,7 @@ const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, l
         setProfessorSearch('');
         setCourseSearch('');
         setError('');
+        setSubmitting(false);
     }, [initialAudience, isOpen]);
 
     const toggleProfessor = professorId => {
@@ -119,17 +121,21 @@ const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, l
         setError('');
     };
 
-    const handleSubmit = event => {
+    const handleSubmit = async event => {
         event.preventDefault();
+        if (submitting) return;
         if (mode === 'selecionados' && !selection.selectedProfessors.length && !selection.selectedCourses.length) {
             setError('Selecione ao menos um professor ou curso, ou escolha “Todos”.');
             return;
         }
-        onConfirm({
-            todos: mode === 'todos',
-            professores: mode === 'todos' ? [] : normalizeIds(selection.selectedProfessors),
-            cursos: mode === 'todos' ? [] : normalizeIds(selection.selectedCourses),
-        });
+        setSubmitting(true);
+        try {
+            await onConfirm({
+                todos: mode === 'todos',
+                professores: mode === 'todos' ? [] : normalizeIds(selection.selectedProfessors),
+                cursos: mode === 'todos' ? [] : normalizeIds(selection.selectedCourses),
+            });
+        } finally { setSubmitting(false); }
     };
 
     return (
@@ -182,7 +188,7 @@ const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, l
                 {error && <p className="mt-4 text-sm text-danger" role="alert">{error}</p>}
                 <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
                     <button type="button" onClick={onClose} className="btn btn-secondary"><ArrowLeftIcon /> Voltar</button>
-                    <button type="submit" disabled={loading} className="btn btn-primary">{loading ? 'Carregando…' : 'Publicar informativo'}</button>
+                    <button type="submit" disabled={loading || submitting} className="btn btn-primary">{loading ? 'Carregando…' : submitting ? 'Publicando…' : 'Publicar informativo'}</button>
                 </div>
             </form>
         </Modal>
