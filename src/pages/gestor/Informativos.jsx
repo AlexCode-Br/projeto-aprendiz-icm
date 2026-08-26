@@ -116,7 +116,7 @@ const Informativos = () => {
                             </div>
                             <h3 className="font-bold text-lg text-text-default">{info.titulo}</h3>
                             <p className="text-sm text-text-muted mt-1">{info.data} às {info.hora}</p>
-                            <div className="prose prose-sm mt-4 max-w-none text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
+                            <div className="announcement-content mt-4 max-w-none text-sm text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
                         </div>
                         <div className="p-4 border-t border-border flex justify-between items-center text-xs text-text-muted">
                             <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem leu">

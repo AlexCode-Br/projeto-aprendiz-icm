@@ -11,7 +11,6 @@ import {
   cleanText,
   emailError,
   hasValidationErrors,
-  httpsUrlError,
   normalizeEmail,
   personNameError,
   phoneError,
@@ -755,7 +754,7 @@ function sanitizeAnnouncementContent(value) {
     .replace(/<\/?(?:script|style|iframe|object|embed|form)[^>]*>/gi, '')
     .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1="#"')
-    .slice(0, 4000000);
+    .slice(0, 12000000);
 }
 
 async function supportTicketForSession(ticketId, session) {

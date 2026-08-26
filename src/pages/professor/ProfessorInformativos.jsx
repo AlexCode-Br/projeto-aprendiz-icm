@@ -62,7 +62,7 @@ const ProfessorInformativos = () => {
                             {info.fixado && <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Fixado</span>}
                         </div>
                         <h3 className="text-xl font-bold text-text-default mb-2">{info.titulo}</h3>
-                        <div className="prose prose-sm mb-4 max-w-none text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
+                        <div className="announcement-content mb-4 max-w-none text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
 
                         <div className="flex items-center justify-between pt-4 border-t border-border">
                             <p className="text-xs text-text-muted">
