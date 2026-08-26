@@ -16,6 +16,7 @@ import {
   personNameError,
   phoneError,
   requiredTextError,
+  validateStudent,
   validateProfessor,
 } from '../shared/validation.mjs';
 
@@ -858,19 +859,18 @@ async function api(request, response, url) {
     const body = await readJson(request);
     const name = cleanText(body.nome,100), email = cleanEmail(body.contato || body.email), phone=cleanText(body.telefone,30);
     const courseName = cleanText(Array.isArray(body.curso) ? body.curso[0] : body.curso,100),locationName=cleanText(body.local,100);
-    const errors={
-      nome:personNameError(name,'nome completo'),contato:emailError(email),telefone:phoneError(phone),
-      igreja:requiredTextError(body.igreja,'A igreja',2,100),classe:['Adolescente','Jovem','Senhora','Varão'].includes(body.classe)?'':'Selecione uma classe válida.',
-      curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione uma igreja.',
-    };
+    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,curso:courseName,local:locationName});
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,locationName);
-    if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e local selecionados.' });
+    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1 AND courses.active=1 AND locations.active=1`).get(courseName,locationName);
+    if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e a igreja selecionados.' });
     try {
-      const result = await db.prepare('INSERT INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)').run(name,email,phone,cleanText(body.igreja,100),body.classe,body.instrumento === 'Sim' ? 1 : 0);
-      await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_created',ip);
-      return json(response, 201, { id: Number(result.lastInsertRowid) });
+      const studentId=await db.transaction(async()=>{
+        const result = await db.prepare('INSERT INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)').run(name,email,phone,locationName,body.classe,body.instrumento === 'Sim' ? 1 : 0);
+        await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_created',ip);
+        return Number(result.lastInsertRowid);
+      });
+      return json(response, 201, { id: studentId });
     } catch (error) {
       if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response, 409, { message: 'Já existe um aluno com este e-mail.' });
       throw error;
@@ -882,16 +882,20 @@ async function api(request, response, url) {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const id = Number(studentMatch[1]), body = await readJson(request);
     const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),courseName=cleanText(Array.isArray(body.curso)?body.curso[0]:body.curso,100),locationName=cleanText(body.local,100);
-    const errors={nome:personNameError(name,'nome completo'),contato:emailError(email),telefone:phoneError(phone),igreja:requiredTextError(body.igreja,'A igreja',2,100),classe:['Adolescente','Jovem','Senhora','Varão'].includes(body.classe)?'':'Selecione uma classe válida.',curso:courseName?'':'Selecione um curso.',local:locationName?'':'Selecione uma igreja.'};
+    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,curso:courseName,local:locationName});
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1`).get(courseName,locationName);
-    if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e local selecionados.' });
+    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1 AND courses.active=1 AND locations.active=1`).get(courseName,locationName);
+    if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e a igreja selecionados.' });
+    const currentStudent=await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
+    if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
     try {
-      await db.prepare(`UPDATE students SET name=?,email=?,phone=?,church=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
-        .run(name,email,phone,cleanText(body.igreja,100),body.classe,body.instrumento==='Sim'?1:0,id);
-      await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND status='ativa'").run(id);
-      await db.prepare(`INSERT INTO enrollments (student_id,class_id,status) VALUES (?,?,'ativa') ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa'`).run(id,classRow.id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
+      await db.transaction(async()=>{
+        await db.prepare(`UPDATE students SET name=?,email=?,phone=?,church=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
+          .run(name,email,phone,locationName,body.classe,body.instrumento==='Sim'?1:0,id);
+        await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND status='ativa'").run(id);
+        await db.prepare(`INSERT INTO enrollments (student_id,class_id,status) VALUES (?,?,'ativa') ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa'`).run(id,classRow.id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
+      });
       return json(response, 200, { success: true });
     } catch (error) {
       if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response, 409, { message: 'Já existe um aluno com este e-mail.' });

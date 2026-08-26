@@ -1,22 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
-import { emailError, personNameError, phoneError, requiredTextError } from '../../shared/validation.mjs';
+import { cleanText, validateStudent } from '../../shared/validation.mjs';
 
 const initialFormState = {
     nome: '',
     contato: '',
     telefone: '',
-    igreja: '',
     classe: '',
     curso: '',
     local: '',
     instrumento: 'Não',
 };
 
+const formatPhone = (value) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+};
+
 const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
     const [availableLocais, setAvailableLocais] = useState([]);
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => {
         if (aluno) {
@@ -24,7 +32,6 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                 nome: aluno.nome || '',
                 contato: aluno.contato || '',
                 telefone: aluno.telefone || '',
-                igreja: aluno.igreja || '',
                 classe: aluno.classe || '',
                 curso: Array.isArray(aluno.curso) ? aluno.curso[0] : (aluno.curso || ''), // Assume o primeiro curso para edição
                 local: aluno.local || '',
@@ -37,15 +44,18 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
             setAvailableLocais([]);
         }
         setErrors({});
+        setSaving(false);
     }, [aluno, isOpen, offerings]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const normalizedValue = name === 'telefone' ? formatPhone(value) : value;
+        setFormData(prev => ({ ...prev, [name]: normalizedValue }));
 
         if (name === 'curso') {
             setAvailableLocais([...new Set(offerings.filter(item => item.nome === value).map(item => item.local))]);
             setFormData(prev => ({ ...prev, local: '' }));
+            setErrors(prev => ({ ...prev, curso: null, local: null }));
         }
 
         if (errors[name]) {
@@ -54,30 +64,26 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
     };
 
     const validate = () => {
-        const newErrors = {};
-        const nameMessage = personNameError(formData.nome, 'nome completo');
-        const emailMessage = emailError(formData.contato);
-        const phoneMessage = phoneError(formData.telefone);
-        const churchMessage = requiredTextError(formData.igreja, 'A igreja', 2, 100);
-        if (nameMessage) newErrors.nome = nameMessage;
-        if (emailMessage) newErrors.contato = emailMessage;
-        if (phoneMessage) newErrors.telefone = phoneMessage;
-        if (churchMessage) newErrors.igreja = churchMessage;
-        if (!formData.classe) newErrors.classe = 'A classe é obrigatória.';
-        if (!formData.curso) newErrors.curso = 'O curso é obrigatório.';
-        if (!formData.local) newErrors.local = 'O local é obrigatório.';
+        const newErrors = validateStudent(formData);
+        if (formData.curso && formData.local && !offerings.some(item => item.nome === formData.curso && item.local === formData.local)) {
+            newErrors.local = 'Selecione uma igreja disponível para este curso.';
+        }
         return newErrors;
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         const validationErrors = validate();
         if (Object.keys(validationErrors).length > 0) {
             setErrors(validationErrors);
             return;
         }
-        // No protótipo, o curso é um array, então ajustamos aqui
-        onSave({ ...formData, curso: [formData.curso] }, aluno?.id);
+        setSaving(true);
+        try {
+            await onSave({ ...formData, nome: cleanText(formData.nome, 100), contato: cleanText(formData.contato, 254), curso: [formData.curso] }, aluno?.id);
+        } finally {
+            setSaving(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -87,15 +93,18 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {Object.entries({ nome: 'Nome Completo', contato: 'E-mail', telefone: 'Telefone (WhatsApp)', igreja: 'Igreja-Bairro' }).map(([key, label]) => (
+                            {Object.entries({ nome: 'Nome completo', contato: 'E-mail', telefone: 'Telefone (WhatsApp)' }).map(([key, label]) => (
                                 <div key={key}>
                                     <label htmlFor={key} className="form-label">{label}</label>
                                     <input
-                                        type={key === 'contato' ? 'email' : 'text'}
+                                        type={key === 'contato' ? 'email' : key === 'telefone' ? 'tel' : 'text'}
                                         name={key}
                                         id={key}
                                         value={formData[key]}
                                         onChange={handleChange}
+                                        autoComplete={key === 'nome' ? 'name' : key === 'contato' ? 'email' : 'tel'}
+                                        inputMode={key === 'telefone' ? 'tel' : undefined}
+                                        maxLength={key === 'contato' ? 254 : key === 'telefone' ? 15 : 100}
                                         aria-invalid={Boolean(errors[key])}
                                         className={`form-control ${errors[key] ? 'border-danger' : ''}`}
                                     />
@@ -141,8 +150,8 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                         </div>
                     </div>
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
-                        <button type="submit" className="btn btn-primary">Salvar alterações</button>
+                        <button type="button" onClick={onClose} disabled={saving} className="btn btn-secondary">Cancelar</button>
+                        <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Salvando...' : aluno ? 'Salvar alterações' : 'Adicionar aluno'}</button>
                     </div>
                 </form>
         </Modal>

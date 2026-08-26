@@ -6,6 +6,7 @@ import {
   personNameError,
   phoneError,
   validateProfessor,
+  validateStudent,
 } from '../shared/validation.mjs';
 
 test('valida dados pessoais e rejeita conteúdo arbitrário', () => {
@@ -31,4 +32,35 @@ test('valida catálogos e o cadastro completo do professor', () => {
     cursos: ['Violão I'],
   }), {});
   assert.ok(Object.keys(validateProfessor({ nome: 'Teste', contato: 'x', telefone: 'abc', local: '', cursos: [] })).length >= 5);
+});
+
+test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () => {
+  assert.deepEqual(validateStudent({
+    nome: 'Maria de Souza',
+    contato: 'maria@example.com',
+    telefone: '(71) 99999-1234',
+    classe: 'Jovem',
+    curso: 'Violão I',
+    local: 'Guarani',
+    instrumento: 'Não',
+  }), {});
+
+  const errors = validateStudent({
+    nome: 'Teste',
+    contato: 'qualquer coisa',
+    telefone: '31231231312312',
+    classe: 'Outra',
+    curso: '',
+    local: '',
+    instrumento: 'Talvez',
+  });
+  assert.deepEqual(Object.keys(errors).sort(), [
+    'classe',
+    'contato',
+    'instrumento',
+    'local',
+    'nome',
+    'curso',
+    'telefone',
+  ].sort());
 });

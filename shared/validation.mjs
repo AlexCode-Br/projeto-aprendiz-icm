@@ -66,4 +66,19 @@ export function validateProfessor(values) {
   return errors;
 }
 
+export function validateStudent(values) {
+  const errors = {};
+  const nameMessage = personNameError(values.nome, 'nome completo');
+  const emailMessage = emailError(values.contato);
+  const phoneMessage = phoneError(values.telefone);
+  if (nameMessage) errors.nome = nameMessage;
+  if (emailMessage) errors.contato = emailMessage;
+  if (phoneMessage) errors.telefone = phoneMessage;
+  if (!['Adolescente','Jovem','Senhora','Varão'].includes(values.classe)) errors.classe = 'Selecione uma classe válida.';
+  if (!cleanText(values.curso, 100)) errors.curso = 'Selecione um curso.';
+  if (!cleanText(values.local, 100)) errors.local = 'Selecione uma igreja.';
+  if (!['Sim','Não'].includes(values.instrumento)) errors.instrumento = 'Informe se o aluno possui instrumento.';
+  return errors;
+}
+
 export const hasValidationErrors = errors => Object.values(errors).some(Boolean);
