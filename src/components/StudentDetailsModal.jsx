@@ -7,12 +7,13 @@ const StudentDetailsModal = ({ student, isOpen, onClose }) => {
         ['Nome completo', student.nome],
         ['E-mail', student.contato],
         ['Telefone (WhatsApp)', student.telefone],
-        ['Igreja-bairro', student.igreja],
+        ['Igreja', student.igreja || student.local],
         ['Classe', student.classe],
-        ['Igreja da turma', student.local],
         ['Possui instrumento?', student.instrumento],
     ];
-    const courses = Array.isArray(student.curso) ? student.curso : student.curso ? [student.curso] : [];
+    const courses = Array.isArray(student.turmas) && student.turmas.length
+        ? student.turmas.map(item => `${item.nome} — ${item.local}`)
+        : Array.isArray(student.curso) ? student.curso : student.curso ? [student.curso] : [];
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Dados do aluno">

@@ -623,22 +623,69 @@ async function professorDeletionImpact(professorId) {
 }
 
 function studentView(row) {
-  const courseNames = row.course_names ? row.course_names.split('||') : [];
-  const locations = row.location_names ? row.location_names.split('||') : [];
+  const classes = row.class_offerings ? row.class_offerings.split('||').map(value => {
+    const [id, nome, local] = value.split('::');
+    return { id: Number(id), nome, local };
+  }) : [];
+  const courseNames = classes.map(item => item.nome);
   return {
     id: row.id, nome: row.name, email: row.email, contato: row.email,
     telefone: row.phone || '', igreja: row.church || '', classe: row.age_group || '',
     instrumento: row.has_instrument ? 'Sim' : 'Não', curso: courseNames,
-    local: locations[0] || '', foto_url: '',
-    cursos: courseNames.map((nome, index) => ({ nome, local: locations[index] || '' })),
+    local: row.church || '', foto_url: '',
+    cursos: classes.map(({ nome, local }) => ({ nome, local })),
+    turmas: classes,
     created_at: row.created_at,
   };
 }
 
+function studentClassIds(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map(Number).filter(id => Number.isInteger(id) && id > 0))];
+}
+
+function studentCourseNames(value) {
+  const courses = Array.isArray(value) ? value : value ? [value] : [];
+  return [...new Set(courses.map(course => cleanText(course, 100)).filter(Boolean))];
+}
+
+async function activeClassesForStudent(classIds, legacyCourseNames = []) {
+  let classes = [];
+  if (classIds.length) {
+    const placeholders = classIds.map(() => '?').join(',');
+    classes = await db.prepare(`
+      SELECT classes.id,classes.course_id,courses.name AS course_name
+      FROM classes
+      JOIN courses ON courses.id=classes.course_id
+      JOIN locations ON locations.id=classes.location_id
+      WHERE classes.id IN (${placeholders})
+        AND classes.active=1 AND courses.active=1 AND locations.active=1
+      ORDER BY classes.id
+    `).all(...classIds);
+    if (classes.length !== classIds.length) return { classes: [], error: 'Uma das turmas selecionadas não está mais disponível.' };
+  } else if (legacyCourseNames.length) {
+    const placeholders = legacyCourseNames.map(() => '?').join(',');
+    classes = await db.prepare(`
+      SELECT MIN(classes.id) AS id,courses.id AS course_id,courses.name AS course_name
+      FROM classes
+      JOIN courses ON courses.id=classes.course_id
+      JOIN locations ON locations.id=classes.location_id
+      WHERE courses.name IN (${placeholders})
+        AND classes.active=1 AND courses.active=1 AND locations.active=1
+      GROUP BY courses.id,courses.name
+      ORDER BY courses.name
+    `).all(...legacyCourseNames);
+    if (classes.length !== legacyCourseNames.length) return { classes: [], error: 'Um dos cursos selecionados não possui turma ativa.' };
+  }
+  if (new Set(classes.map(item => item.course_id)).size !== classes.length) {
+    return { classes: [], error: 'Escolha apenas uma turma para cada curso.' };
+  }
+  return { classes, error: '' };
+}
+
 const studentSelect = `
   SELECT students.*,
-    GROUP_CONCAT(courses.name, '||') AS course_names,
-    GROUP_CONCAT(locations.name, '||') AS location_names
+    GROUP_CONCAT(classes.id || '::' || courses.name || '::' || locations.name, '||') AS class_offerings
   FROM students
   LEFT JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa'
   LEFT JOIN classes ON classes.id=enrollments.class_id AND classes.active=1
@@ -859,15 +906,19 @@ async function api(request, response, url) {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const body = await readJson(request);
     const name = cleanText(body.nome,100), email = cleanEmail(body.contato || body.email), phone=cleanText(body.telefone,30);
-    const courseName = cleanText(Array.isArray(body.curso) ? body.curso[0] : body.curso,100),locationName=cleanText(body.local,100);
-    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,curso:courseName,local:locationName});
+    const rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso),locationName=cleanText(body.local,100);
+    const selections=rawClassIds.length?rawClassIds:courseNames;
+    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,turmas:selections,local:locationName});
+    if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1 AND courses.active=1 AND locations.active=1`).get(courseName,locationName);
-    if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e a igreja selecionados.' });
+    const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames);
+    if (classError) return invalid(response, { curso: classError });
     try {
       const studentId=await db.transaction(async()=>{
         const result = await db.prepare('INSERT INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)').run(name,email,phone,locationName,body.classe,body.instrumento === 'Sim' ? 1 : 0);
-        await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
+        for (const classRow of classRows) {
+          await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
+        }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_created',ip);
         return Number(result.lastInsertRowid);
       });
@@ -882,11 +933,13 @@ async function api(request, response, url) {
   if (studentMatch && request.method === 'PUT') {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const id = Number(studentMatch[1]), body = await readJson(request);
-    const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),courseName=cleanText(Array.isArray(body.curso)?body.curso[0]:body.curso,100),locationName=cleanText(body.local,100);
-    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,curso:courseName,local:locationName});
+    const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso),locationName=cleanText(body.local,100);
+    const selections=rawClassIds.length?rawClassIds:courseNames;
+    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,turmas:selections,local:locationName});
+    if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=? AND classes.active=1 AND courses.active=1 AND locations.active=1`).get(courseName,locationName);
-    if (!classRow) return json(response, 400, { message: 'Não existe uma turma ativa para o curso e a igreja selecionados.' });
+    const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames);
+    if (classError) return invalid(response, { curso: classError });
     const currentStudent=await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
     if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
     try {
@@ -894,7 +947,9 @@ async function api(request, response, url) {
         await db.prepare(`UPDATE students SET name=?,email=?,phone=?,church=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
           .run(name,email,phone,locationName,body.classe,body.instrumento==='Sim'?1:0,id);
         await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND status='ativa'").run(id);
-        await db.prepare(`INSERT INTO enrollments (student_id,class_id,status) VALUES (?,?,'ativa') ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa'`).run(id,classRow.id);
+        for (const classRow of classRows) {
+          await db.prepare(`INSERT INTO enrollments (student_id,class_id,status) VALUES (?,?,'ativa') ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa'`).run(id,classRow.id);
+        }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
       });
       return json(response, 200, { success: true });

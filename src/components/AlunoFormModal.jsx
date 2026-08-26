@@ -9,7 +9,7 @@ const initialFormState = {
     contato: '',
     telefone: '',
     classe: '',
-    curso: '',
+    turmas: [],
     local: '',
     instrumento: 'Não',
 };
@@ -22,11 +22,16 @@ const formatPhone = (value) => {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
-const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
+const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], churches = [] }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
-    const [availableLocais, setAvailableLocais] = useState([]);
     const [saving, setSaving] = useState(false);
+
+    const offeringOptions = React.useMemo(() => offerings.map(item => ({
+        value: item.id,
+        label: `${item.nome} — ${item.local}${item.professor ? ` · ${item.professor}` : ''}`,
+        courseName: item.nome,
+    })), [offerings]);
 
     useEffect(() => {
         if (aluno) {
@@ -35,15 +40,12 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                 contato: aluno.contato || '',
                 telefone: aluno.telefone || '',
                 classe: aluno.classe || '',
-                curso: Array.isArray(aluno.curso) ? aluno.curso[0] : (aluno.curso || ''), // Assume o primeiro curso para edição
-                local: aluno.local || '',
+                turmas: Array.isArray(aluno.turmas) ? aluno.turmas.slice(0, 3).map(item => item.id) : [],
+                local: aluno.igreja || aluno.local || '',
                 instrumento: aluno.instrumento || 'Não',
             });
-            const cursoSelecionado = Array.isArray(aluno.curso) ? aluno.curso[0] : aluno.curso;
-            setAvailableLocais([...new Set(offerings.filter(item => item.nome === cursoSelecionado).map(item => item.local))]);
         } else {
             setFormData(initialFormState);
-            setAvailableLocais([]);
         }
         setErrors({});
         setSaving(false);
@@ -54,22 +56,16 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
         const normalizedValue = name === 'telefone' ? formatPhone(value) : value;
         setFormData(prev => ({ ...prev, [name]: normalizedValue }));
 
-        if (name === 'curso') {
-            setAvailableLocais([...new Set(offerings.filter(item => item.nome === value).map(item => item.local))]);
-            setFormData(prev => ({ ...prev, local: '' }));
-            setErrors(prev => ({ ...prev, curso: null, local: null }));
-        }
-
         if (errors[name]) {
             setErrors(prev => ({ ...prev, [name]: null }));
+        }
+        if (name === 'turmas' && errors.curso) {
+            setErrors(prev => ({ ...prev, curso: null }));
         }
     };
 
     const validate = () => {
         const newErrors = validateStudent(formData);
-        if (formData.curso && formData.local && !offerings.some(item => item.nome === formData.curso && item.local === formData.local)) {
-            newErrors.local = 'Selecione uma igreja disponível para este curso.';
-        }
         return newErrors;
     };
 
@@ -82,7 +78,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
         }
         setSaving(true);
         try {
-            await onSave({ ...formData, nome: cleanText(formData.nome, 100), contato: cleanText(formData.contato, 254), curso: [formData.curso] }, aluno?.id);
+            await onSave({ ...formData, nome: cleanText(formData.nome, 100), contato: cleanText(formData.contato, 254) }, aluno?.id);
         } finally {
             setSaving(false);
         }
@@ -114,7 +110,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                                 </div>
                             ))}
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                              <div>
                                 <label htmlFor="classe" className="form-label">Classe</label>
                                 <FormSelect
@@ -128,29 +124,40 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [] }) => {
                                  {errors.classe && <p className="text-danger text-xs mt-1">{errors.classe}</p>}
                             </div>
                             <div>
-                                <label htmlFor="curso" className="form-label">Curso de interesse</label>
-                                <FormSelect
-                                    name="curso"
-                                    id="curso"
-                                    value={formData.curso}
-                                    onChange={handleChange}
-                                    options={[...new Set(offerings.map(item => item.nome))]}
-                                    invalid={Boolean(errors.curso)}
-                                />
-                                {errors.curso && <p className="text-danger text-xs mt-1">{errors.curso}</p>}
-                            </div>
-                            <div>
-                                <label htmlFor="local" className="form-label">Igreja da turma</label>
+                                <label htmlFor="local" className="form-label">Igreja</label>
                                 <FormSelect
                                     name="local"
                                     id="local"
                                     value={formData.local}
                                     onChange={handleChange}
-                                    isDisabled={!formData.curso}
-                                    options={availableLocais}
+                                    options={churches}
                                     invalid={Boolean(errors.local)}
                                 />
                                 {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
+                            </div>
+                            <div className="md:col-span-2">
+                                <label htmlFor="curso" className="form-label">Cursos de interesse</label>
+                                <FormSelect
+                                    name="turmas"
+                                    id="curso"
+                                    value={formData.turmas}
+                                    onChange={handleChange}
+                                    options={offeringOptions}
+                                    isMulti
+                                    isClearable
+                                    closeMenuOnSelect={false}
+                                    isOptionDisabled={option => {
+                                        if (formData.turmas.includes(option.value)) return false;
+                                        if (formData.turmas.length >= 3) return true;
+                                        const selectedCourseNames = formData.turmas
+                                            .map(classId => offeringOptions.find(item => item.value === classId)?.courseName)
+                                            .filter(Boolean);
+                                        return selectedCourseNames.includes(option.courseName);
+                                    }}
+                                    invalid={Boolean(errors.curso)}
+                                />
+                                <p className="mt-1 text-xs text-text-muted">Selecione até 3 cursos. Cada curso aparecerá como uma tag.</p>
+                                {errors.curso && <p className="text-danger text-xs mt-1">{errors.curso}</p>}
                             </div>
                         </div>
                          <div>

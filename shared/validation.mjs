@@ -75,7 +75,11 @@ export function validateStudent(values) {
   if (emailMessage) errors.contato = emailMessage;
   if (phoneMessage) errors.telefone = phoneMessage;
   if (!['Adolescente','Jovem','Senhora','Varão'].includes(values.classe)) errors.classe = 'Selecione uma classe válida.';
-  if (!cleanText(values.curso, 100)) errors.curso = 'Selecione um curso.';
+  const selectedClasses = values.turmas ?? values.curso;
+  const courses = Array.isArray(selectedClasses) ? selectedClasses : selectedClasses ? [selectedClasses] : [];
+  const normalizedCourses = [...new Set(courses.map(course => cleanText(course, 100)).filter(Boolean))];
+  if (normalizedCourses.length === 0) errors.curso = 'Selecione pelo menos um curso.';
+  if (normalizedCourses.length > 3) errors.curso = 'Selecione no máximo três cursos.';
   if (!cleanText(values.local, 100)) errors.local = 'Selecione uma igreja.';
   if (!['Sim','Não'].includes(values.instrumento)) errors.instrumento = 'Informe se o aluno possui instrumento.';
   return errors;
