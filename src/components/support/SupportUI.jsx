@@ -6,12 +6,6 @@ const statusClasses = {
   Resolvido: 'border-border bg-surface-muted text-text-muted',
 };
 
-const priorityClasses = {
-  Urgente: 'text-danger',
-  Alta: 'text-amber-700 dark:text-amber-300',
-  Normal: 'text-text-muted',
-};
-
 export function SupportStatusBadge({ status }) {
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses[status] || statusClasses.Aberto}`}>{status}</span>;
 }
@@ -39,7 +33,7 @@ export function SupportTicketList({ tickets, selectedId, onSelect, loading, empt
         {ticket.nao_lidas>0&&<span className="absolute right-4 top-4 inline-flex min-w-6 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-bold text-white" aria-label={`${ticket.nao_lidas} mensagem(ns) não lida(s)`}>{ticket.nao_lidas}</span>}
         <div className="flex items-center gap-2 pr-9">
           <span className="font-mono text-xs text-text-muted">#{ticket.id}</span>
-          <span className={`text-xs font-semibold ${priorityClasses[ticket.prioridade] || priorityClasses.Normal}`}>{ticket.prioridade}</span>
+          <span className="text-xs font-semibold text-primary">{ticket.categoria || 'Outro'}</span>
         </div>
         {role==='gestor'&&<p className="mt-1 truncate text-xs font-semibold uppercase tracking-wide text-primary">{ticket.nome}</p>}
         <p className="mt-1 line-clamp-2 font-semibold leading-5 text-text-default">{ticket.assunto}</p>
@@ -98,15 +92,20 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
 
   const managerBlocked=currentRole==='gestor'&&ticket.status==='Resolvido';
   return <section className="flex min-h-[36rem] flex-col bg-surface" aria-labelledby="support-conversation-title">
-    <header className="border-b border-border px-4 py-4 sm:px-6">
+    <header className="border-b border-border bg-surface px-4 py-4 sm:px-6">
       <button type="button" onClick={onBack} className="btn btn-ghost mb-3 px-2 lg:hidden" aria-label="Voltar para a lista de chamados">← Voltar</button>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Chamado #{ticket.id} · {ticket.categoria}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Chamado #{ticket.id}</p>
           <h2 id="support-conversation-title" className="mt-1 break-words text-xl font-bold text-text-default">{ticket.assunto}</h2>
-          {currentRole==='gestor'&&<p className="mt-1 text-sm text-text-muted">Professor: <span className="font-semibold text-text-default">{ticket.nome}</span> · {ticket.contato}</p>}
+          <div className="mt-3 grid gap-2 text-xs text-text-muted sm:grid-cols-2">
+            <p><span className="font-semibold text-text-default">Categoria</span><br />{ticket.categoria || 'Outro'}</p>
+            {currentRole==='gestor'&&<p><span className="font-semibold text-text-default">Professor</span><br />{ticket.nome} · {ticket.contato}</p>}
+            <p><span className="font-semibold text-text-default">Aberto em</span><br />{formatSupportDate(ticket.data_abertura, true)}</p>
+            <p><span className="font-semibold text-text-default">Mensagens</span><br />{ticket.total_mensagens}</p>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2"><SupportStatusBadge status={ticket.status}/>{actions}</div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end"><SupportStatusBadge status={ticket.status}/>{actions}</div>
       </div>
     </header>
 

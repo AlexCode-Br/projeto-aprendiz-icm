@@ -4,7 +4,6 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/u;
 
 export const SUPPORT_CATEGORIES = ['Acesso ao sistema', 'Alunos', 'Turmas', 'Frequência', 'Cursos', 'Relatórios', 'Outro'];
 export const SUPPORT_STATUSES = ['Aberto', 'Em atendimento', 'Resolvido'];
-export const SUPPORT_PRIORITIES = ['Normal', 'Alta', 'Urgente'];
 
 export const cleanText = (value, maxLength = 500) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
 export const normalizeEmail = value => cleanText(value, 254).toLowerCase();
