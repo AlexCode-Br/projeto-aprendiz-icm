@@ -1,36 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from './Modal';
 import api from '../services/api';
+import useLiveRefresh from '../hooks/useLiveRefresh';
 
 const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
     const [readers, setReaders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    useEffect(() => {
+    const fetchReaders = useCallback(async ({ silent = false } = {}) => {
         if (!isOpen || !informativo) return;
+        if (!silent) {
+            setLoading(true);
+            setError(null);
+        }
+        try {
+            const response = await api.get(`/api/informativos/${informativo.id}/leituras`);
+            setReaders(Array.isArray(response.data) ? response.data : []);
+            setError(null);
+        } catch (err) {
+            if (silent) throw err;
+            setError('Falha ao carregar a lista de visualizações.');
+            console.error(err);
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    }, [informativo, isOpen]);
 
-        let isMounted = true;
-        setLoading(true);
-        setError(null);
-
-        api.get(`/api/informativos/${informativo.id}/leituras`)
-            .then(response => {
-                if (isMounted) {
-                    setReaders(response.data);
-                    setLoading(false);
-                }
-            })
-            .catch(err => {
-                if (isMounted) {
-                    setError('Falha ao carregar a lista de visualizações.');
-                    setLoading(false);
-                    console.error(err);
-                }
-            });
-
-        return () => { isMounted = false; };
-    }, [isOpen, informativo]);
+    useEffect(() => {
+        if (isOpen && informativo) void fetchReaders();
+    }, [fetchReaders, informativo, isOpen]);
+    const refreshReaders = useCallback(() => fetchReaders({ silent: true }), [fetchReaders]);
+    useLiveRefresh(refreshReaders, { enabled: Boolean(isOpen && informativo), intervalMs: 10000, eventName: 'announcements:updated' });
 
     if (!isOpen) return null;
 
@@ -42,6 +43,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
                 <div className="py-8 text-center text-danger">{error}</div>
             ) : (
                 <div className="overflow-x-auto">
+                    <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-success/10 px-3 py-1.5 text-xs font-semibold text-success"><span className="h-2 w-2 rounded-full bg-success"/>{readers.length} {readers.length === 1 ? 'visualização sincronizada' : 'visualizações sincronizadas'}</p>
                     <table className="min-w-full divide-y divide-border text-sm">
                         <thead className="bg-surface">
                             <tr>

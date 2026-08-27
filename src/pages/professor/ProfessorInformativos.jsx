@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../services/api';
 import AnnouncementDetailModal from '../../components/AnnouncementDetailModal';
+import useLiveRefresh from '../../hooks/useLiveRefresh';
 
 const plainText = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -12,21 +13,26 @@ const ProfessorInformativos = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const fetchInformativos = useCallback(async () => {
-        setLoading(true);
+    const fetchInformativos = useCallback(async ({ silent = false } = {}) => {
+        if (!silent) setLoading(true);
         try {
             const response = await api.get('/api/informativos');
-            setInformativos(Array.isArray(response.data) ? response.data : []);
+            const nextInformativos = Array.isArray(response.data) ? response.data : [];
+            setInformativos(nextInformativos);
+            setSelected(current => current ? nextInformativos.find(item => item.id === current.id) || null : current);
             setError(null);
         } catch (err) {
+            if (silent) throw err;
             setError('Falha ao carregar os informativos. Tente novamente mais tarde.');
             console.error(err);
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     }, []);
 
-    useEffect(() => { fetchInformativos(); }, [fetchInformativos]);
+    useEffect(() => { void fetchInformativos(); }, [fetchInformativos]);
+    const refreshLive = useCallback(() => fetchInformativos({ silent: true }), [fetchInformativos]);
+    useLiveRefresh(refreshLive, { intervalMs: 15000, eventName: 'announcements:updated' });
 
     const openAnnouncement = async info => {
         setSelected(info);
@@ -54,7 +60,7 @@ const ProfessorInformativos = () => {
     const unread = informativos.filter(info => !info.hasRead).length;
 
     if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando informativos...</div>;
-    if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchInformativos} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
+    if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={() => void fetchInformativos()} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
         <>
@@ -63,6 +69,7 @@ const ProfessorInformativos = () => {
                     <h1 className="page-title">Informativos e avisos</h1>
                     <p className="page-description">Fique por dentro das últimas novidades e comunicados{unread ? ` · ${unread} não ${unread === 1 ? 'lido' : 'lidos'}` : ''}.</p>
                 </div>
+                <span className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-2 text-xs font-semibold text-success"><span className="h-2 w-2 rounded-full bg-success"/>Sincronizado ao vivo</span>
             </div>
 
             <div className="panel mb-6 grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">

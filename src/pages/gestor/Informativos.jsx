@@ -7,6 +7,7 @@ import api from '../../services/api';
 import InformativoReadersModal from '../../components/InformativoReadersModal';
 import AnnouncementAttachments from '../../components/AnnouncementAttachments';
 import AnnouncementAudienceModal from '../../components/AnnouncementAudienceModal';
+import useLiveRefresh from '../../hooks/useLiveRefresh';
 
 const Informativos = () => {
     const { showToast } = useToast();
@@ -24,24 +25,41 @@ const Informativos = () => {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('Todos');
 
-    const fetchInformativos = useCallback(async () => {
-        setLoading(true);
+    const fetchInformativos = useCallback(async ({ silent = false, refreshProfessors = false } = {}) => {
+        if (!silent) setLoading(true);
         try {
             const [infoResponse, profResponse] = await Promise.all([
                 api.get('/api/informativos'),
-                api.get('/professores')
+                refreshProfessors ? api.get('/professores') : Promise.resolve(null)
             ]);
             setInformativos(Array.isArray(infoResponse.data) ? infoResponse.data : []);
-            const professores = Array.isArray(profResponse.data?.professores)
+            const professores = Array.isArray(profResponse?.data?.professores)
                 ? profResponse.data.professores
                 : [];
-            setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
+            if (profResponse) setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
         } catch (error) {
+            if (silent) throw error;
             showToast(error.message || 'Erro ao carregar dados.', 'error');
-        } finally { setLoading(false); }
+        } finally {
+            if (!silent) setLoading(false);
+        }
     }, [showToast]);
 
-    useEffect(() => { fetchInformativos(); }, [fetchInformativos]);
+    useEffect(() => { void fetchInformativos({ refreshProfessors: true }); }, [fetchInformativos]);
+
+    const refreshLive = useCallback(() => fetchInformativos({ silent: true }), [fetchInformativos]);
+    useLiveRefresh(refreshLive, { intervalMs: 15000, eventName: 'announcements:updated' });
+
+    useEffect(() => {
+        const nextPublication = informativos
+            .filter(info => info.status === 'Agendado')
+            .map(info => new Date(info.data_publicacao).getTime())
+            .filter(timestamp => Number.isFinite(timestamp) && timestamp > Date.now())
+            .sort((first, second) => first - second)[0];
+        if (!nextPublication) return undefined;
+        const timeout = window.setTimeout(() => void refreshLive(), Math.min(Math.max(nextPublication - Date.now() + 750, 250), 2147483000));
+        return () => window.clearTimeout(timeout);
+    }, [informativos, refreshLive]);
 
     const handleOpenFormModal = (info = null) => {
         if (!info && !hasProfessors) {
@@ -95,7 +113,7 @@ const Informativos = () => {
             setSendConfirmModalOpen(false);
             setCurrentInformativo(null);
             setFormDataToSave(null);
-            await fetchInformativos();
+            await fetchInformativos({ silent: true });
         } catch (error) {
             showToast(error.message || 'Erro ao salvar o informativo.', 'error');
         }
@@ -107,7 +125,7 @@ const Informativos = () => {
             showToast('Informativo removido com sucesso!', 'success');
             setDeleteConfirmModalOpen(false);
             setCurrentInformativo(null);
-            await fetchInformativos();
+            await fetchInformativos({ silent: true });
         } catch (error) {
             showToast(error.message || 'Erro ao remover o informativo.', 'error');
         }
@@ -138,13 +156,14 @@ const Informativos = () => {
                 </button>
             </div>
 
-            <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_14rem]">
+            <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_14rem_auto]">
                 <label className="sr-only" htmlFor="manager-announcement-search">Pesquisar informativos</label>
                 <input id="manager-announcement-search" type="search" value={search} onChange={event => setSearch(event.target.value)} className="form-control" placeholder="Pesquisar por título, conteúdo ou anexo..." />
                 <label className="sr-only" htmlFor="manager-announcement-status">Filtrar por estado</label>
                 <select id="manager-announcement-status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="form-control">
                     <option>Todos</option><option value="Publicado">Publicados</option><option value="Agendado">Agendados</option>
                 </select>
+                <span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 text-xs font-semibold text-success" title="Status e visualizações são sincronizados automaticamente"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-40"/><span className="relative inline-flex h-2 w-2 rounded-full bg-success"/></span>Atualização automática</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
