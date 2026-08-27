@@ -25,33 +25,33 @@ const ProfessorInformativos = React.lazy(() => import('./pages/professor/Profess
 const ProfessorSuporte = React.lazy(() => import('./pages/professor/ProfessorSuporte.jsx'));
 const Configuracoes = React.lazy(() => import('./pages/gestor/Configuracoes.jsx'));
 const ProfessorConfiguracoes = React.lazy(() => import('./pages/professor/ProfessorConfiguracoes.jsx'));
+const AlunoPerfil = React.lazy(() => import('./pages/gestor/AlunoPerfil.jsx'));
 
 const PageLoading = () => <div className="flex min-h-64 items-center justify-center text-sm text-text-muted" role="status">Carregando página...</div>;
 
-
 const NotFound = () => (
-    <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-            <h1 className="text-4xl font-bold text-text-default">404</h1>
-            <p className="mt-2 text-text-muted">Página não encontrada</p>
-            <Link to="/" className="btn btn-primary mt-6">Voltar ao início</Link>
-        </div>
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+        <h2 className="mb-2 text-2xl font-bold text-text-default">Página não encontrada</h2>
+        <p className="mb-6 text-text-muted">O link que você seguiu pode estar quebrado ou a página foi removida.</p>
+        <Link to="/" className="btn btn-primary">Voltar ao início</Link>
     </div>
 );
 
 const DashboardRedirector = () => {
     const { user } = React.useContext(AuthContext);
     if (!user) return <Navigate to="/login" replace />;
-    
-    const dashboardPath = user.role === 'gestor' 
-        ? '/gestor/dashboard' 
+
+    const dashboardPath = user.role === 'gestor'
+        ? '/gestor/dashboard'
         : '/professor/dashboard';
-        
+
     return <Navigate to={dashboardPath} replace />;
 };
 
 const AppRoutes = () => {
-    const { user } = React.useContext(AuthContext);
+    const { user, loading } = React.useContext(AuthContext);
+
+    if (loading) return <PageLoading />;
 
     const commonRoutes = (
         <>
@@ -61,13 +61,16 @@ const AppRoutes = () => {
 
     const gestorRoutes = (
         <>
-            <Route path="/gestor/dashboard" element={<GestorDashboard />} />
-            <Route path="/gestor/cursos" element={<Cursos />} />
-            <Route path="/gestor/alunos" element={<Alunos />} />
-            <Route path="/gestor/professores" element={<Professores />} />
-            <Route path="/gestor/relatorios" element={<GestorRelatorios />} />
+            <Route path="/gestor/dashboard"    element={<GestorDashboard />} />
+            <Route path="/gestor/cursos"       element={<Cursos />} />
+            <Route path="/gestor/catalogo"     element={<Cursos />} />
+            <Route path="/gestor/alunos"       element={<Alunos />} />
+            <Route path="/gestor/alunos/:id"   element={<AlunoPerfil />} />
+            <Route path="/gestor/professores"  element={<Professores />} />
+            <Route path="/gestor/frequencia"   element={<GestorRelatorios />} />
+            <Route path="/gestor/relatorios"   element={<GestorRelatorios />} />
             <Route path="/gestor/informativos" element={<GestorInformativos />} />
-            <Route path="/gestor/suporte" element={<GestorSuporte />} />
+            <Route path="/gestor/suporte"      element={<GestorSuporte />} />
         </>
     );
 
@@ -75,6 +78,7 @@ const AppRoutes = () => {
         <>
             <Route path="/professor/dashboard" element={<ProfessorDashboard />} />
             <Route path="/professor/alunos" element={<ProfessorAlunos />} />
+            <Route path="/professor/alunos/:id" element={<AlunoPerfil readonly={true} />} />
             <Route path="/professor/frequencia" element={<ProfessorFrequencia />} />
             <Route path="/professor/relatorios" element={<ProfessorRelatorios />} />
             <Route path="/professor/informativos" element={<ProfessorInformativos />} />
@@ -88,15 +92,15 @@ const AppRoutes = () => {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
-            
-            <Route 
+
+            <Route
                 path="/*"
                 element={
                     <PrivateRoute>
                         <MainLayout>
                             <Routes>
                                 <Route path="/" element={<DashboardRedirector />} />
-                                
+
                                 {user?.role === 'gestor' && gestorRoutes}
                                 {user?.role === 'professor' && professorRoutes}
                                 {commonRoutes}
@@ -105,7 +109,7 @@ const AppRoutes = () => {
                             </Routes>
                         </MainLayout>
                     </PrivateRoute>
-                } 
+                }
             />
         </Routes>
     );
