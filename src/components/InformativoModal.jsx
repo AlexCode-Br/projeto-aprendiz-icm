@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
 import FormCheckbox from './FormCheckbox';
@@ -51,6 +51,15 @@ const todayForInput = () => {
     return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
+const initialFormatState = {
+    bold: false,
+    italic: false,
+    underline: false,
+    unorderedList: false,
+    orderedList: false,
+    link: false,
+};
+
 const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
@@ -61,6 +70,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
     const [fileProcessing, setFileProcessing] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [uploadMessage, setUploadMessage] = useState('');
+    const [formatState, setFormatState] = useState(initialFormatState);
     const editorRef = useRef(null);
     const fileInputRef = useRef(null);
     const savedSelectionRef = useRef(null);
@@ -100,7 +110,39 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         setFileProcessing(false);
         setDragActive(false);
         setUploadMessage('');
+        setFormatState(initialFormatState);
     }, [draft, informativo, isOpen]);
+
+    const updateFormatState = useCallback(() => {
+        const editor = editorRef.current;
+        const selection = window.getSelection?.();
+        if (!editor || !selection?.rangeCount || !editor.contains(selection.anchorNode)) return;
+
+        const commandState = command => {
+            try {
+                return document.queryCommandState(command);
+            } catch {
+                return false;
+            }
+        };
+        const anchorElement = selection.anchorNode?.nodeType === 1
+            ? selection.anchorNode
+            : selection.anchorNode?.parentElement;
+
+        setFormatState({
+            bold: commandState('bold'),
+            italic: commandState('italic'),
+            underline: commandState('underline'),
+            unorderedList: commandState('insertUnorderedList'),
+            orderedList: commandState('insertOrderedList'),
+            link: Boolean(anchorElement?.closest('a')),
+        });
+    }, []);
+
+    useEffect(() => {
+        document.addEventListener('selectionchange', updateFormatState);
+        return () => document.removeEventListener('selectionchange', updateFormatState);
+    }, [updateFormatState]);
 
     const validate = () => {
         const newErrors = {};
@@ -155,7 +197,12 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         const selection = window.getSelection();
         if (savedSelectionRef.current && selection) { selection.removeAllRanges(); selection.addRange(savedSelectionRef.current); }
     };
-    const format = command => { restoreSelection(); document.execCommand(command, false); syncEditor(); };
+    const format = command => {
+        restoreSelection();
+        document.execCommand(command, false);
+        syncEditor();
+        updateFormatState();
+    };
     const openLinkDialog = () => {
         saveSelection();
         const selection = window.getSelection();
@@ -183,6 +230,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         const anchor = `<a href="${escapeHtml(parsedUrl.toString())}" target="_blank" rel="noopener noreferrer">${escapeHtml(displayText)}</a>`;
         document.execCommand('insertHTML', false, anchor);
         syncEditor();
+        updateFormatState();
         setLinkDialogOpen(false);
         setLinkText('');
         setLinkUrl('');
@@ -300,12 +348,15 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                         <div>
                             <label htmlFor="info-content" className="form-label">Conteúdo</label>
                                 <div className="mb-2 flex flex-wrap items-center gap-1 rounded-t-lg border border-border bg-surface-muted p-2" role="toolbar" aria-label="Formatação do conteúdo">
-                                    {[['bold','Negrito','B'],['italic','Itálico','I'],['underline','Sublinhado','U']].map(([command,label,icon]) => <button key={command} type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format(command)} className="min-h-9 min-w-9 rounded px-2 font-semibold text-text-default hover:bg-surface-hover" aria-label={label}><span className={command}>{icon}</span></button>)}
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertUnorderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista com marcadores">• Lista</button>
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Lista numerada">1. Lista</button>
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className="min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover" aria-label="Inserir link">🔗 Link</button>
+                                    {[['bold','Negrito','B'],['italic','Itálico','I'],['underline','Sublinhado','U']].map(([command,label,icon]) => {
+                                        const active = formatState[command];
+                                        return <button key={command} type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format(command)} className={`min-h-9 min-w-9 rounded px-2 font-semibold text-text-default hover:bg-surface-hover ${active ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label={label} aria-pressed={active}><span className={command}>{icon}</span></button>;
+                                    })}
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertUnorderedList')} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.unorderedList ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Lista com marcadores" aria-pressed={formatState.unorderedList}>• Lista</button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.orderedList ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Lista numerada" aria-pressed={formatState.orderedList}>1. Lista</button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.link ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Inserir link" aria-pressed={formatState.link}>🔗 Link</button>
                                 </div>
-                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); }} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
+                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); updateFormatState(); }} onFocus={updateFormatState} onKeyUp={updateFormatState} onMouseUp={updateFormatState} onSelect={updateFormatState} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
                                 <div className="mt-4">
                                     <p className="form-label">Anexos</p>
                                     <button
