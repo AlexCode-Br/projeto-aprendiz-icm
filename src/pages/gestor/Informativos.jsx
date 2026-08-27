@@ -156,14 +156,13 @@ const Informativos = () => {
                 </button>
             </div>
 
-            <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_14rem_auto]">
+            <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_14rem]">
                 <label className="sr-only" htmlFor="manager-announcement-search">Pesquisar informativos</label>
                 <input id="manager-announcement-search" type="search" value={search} onChange={event => setSearch(event.target.value)} className="form-control" placeholder="Pesquisar por título, conteúdo ou anexo..." />
                 <label className="sr-only" htmlFor="manager-announcement-status">Filtrar por estado</label>
                 <select id="manager-announcement-status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="form-control">
                     <option>Todos</option><option value="Publicado">Publicados</option><option value="Agendado">Agendados</option>
                 </select>
-                <span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 text-xs font-semibold text-success" title="Status e visualizações são sincronizados automaticamente"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-40"/><span className="relative inline-flex h-2 w-2 rounded-full bg-success"/></span>Atualização automática</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
