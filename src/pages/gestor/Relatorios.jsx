@@ -15,17 +15,17 @@ const ReportTable = ({ headers, data, itemsPerPage = 5 }) => {
     }, [data, currentPage, itemsPerPage]);
 
     return (
-        <div className="mt-4 border border-border rounded-lg overflow-hidden">
+        <div className="mt-4">
             <div className="overflow-x-auto">
-                <table className="table-base">
-                    <thead>
+                <table className="w-full text-sm text-left text-text-default">
+                    <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                         <tr>
-                            {headers.map(header => <th key={header}>{header}</th>)}
+                            {headers.map(header => <th key={header} className="px-6 py-3">{header}</th>)}
                         </tr>
                     </thead>
                     <tbody>
                         {paginatedData.map((row, rowIndex) => (
-                            <tr key={rowIndex} className="border-t border-border hover:bg-surface-hover transition-colors">
+                            <tr key={rowIndex} className="border-b border-border hover:bg-surface-hover transition-colors">
                                 {Object.values(row).map((cell, cellIndex) => (
                                     <td key={cellIndex} className="px-6 py-4">{cell}</td>
                                 ))}
@@ -35,14 +35,14 @@ const ReportTable = ({ headers, data, itemsPerPage = 5 }) => {
                 </table>
             </div>
             {totalPages > 1 && (
-                <div className="p-4 flex flex-col sm:flex-row gap-4 sm:justify-between sm:items-center border-t border-border bg-surface">
+                <div className="p-4 flex justify-between items-center border-t border-border">
                     <span className="text-sm text-text-muted">Página {currentPage} de {totalPages}</span>
-                    <div className="flex items-center gap-1">
-                        <button type="button" aria-label="Página anterior" className="icon-btn w-9 h-9" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>&lt;</button>
+                    <div className="flex items-center space-x-1">
+                        <button type="button" aria-label="Página anterior" className="icon-button min-h-9 min-w-9" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>&lt;</button>
                         {[...Array(totalPages).keys()].map(i => (
-                            <button type="button" aria-label={`Página ${i + 1}`} aria-current={currentPage === i + 1 ? 'page' : undefined} key={i} onClick={() => setCurrentPage(i + 1)} className={`w-9 h-9 flex items-center justify-center rounded-lg text-sm font-medium ${currentPage === i + 1 ? 'bg-primary text-white' : 'text-text-muted hover:bg-surface-hover hover:text-text-default transition-colors'}`}>{i + 1}</button>
+                            <button type="button" aria-label={`Página ${i + 1}`} aria-current={currentPage === i + 1 ? 'page' : undefined} key={i} onClick={() => setCurrentPage(i + 1)} className={`min-h-9 min-w-9 rounded-md ${currentPage === i + 1 ? 'bg-primary font-bold text-white' : 'hover:bg-surface-hover transition-colors'}`}>{i + 1}</button>
                         ))}
-                        <button type="button" aria-label="Próxima página" className="icon-btn w-9 h-9" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>&gt;</button>
+                        <button type="button" aria-label="Próxima página" className="icon-button min-h-9 min-w-9" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>&gt;</button>
                     </div>
                 </div>
             )}

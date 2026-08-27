@@ -140,7 +140,6 @@ if (db.dialect === 'sqlite') await db.exec(`
     email TEXT NOT NULL UNIQUE COLLATE NOCASE,
     phone TEXT,
     church TEXT,
-    location_id INTEGER REFERENCES locations(id),
     age_group TEXT,
     has_instrument INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
@@ -161,23 +160,17 @@ if (db.dialect === 'sqlite') await db.exec(`
     label TEXT,
     weekday TEXT,
     start_time TEXT,
-    capacity INTEGER,
-    start_date TEXT,
-    end_date TEXT,
-    status TEXT NOT NULL DEFAULT 'ativa' CHECK(status IN ('ativa','concluida','cancelada')),
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(course_id, professor_id, location_id)
   );
   CREATE TABLE IF NOT EXISTS enrollments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL REFERENCES students(id),
     class_id INTEGER NOT NULL REFERENCES classes(id),
     status TEXT NOT NULL DEFAULT 'ativa' CHECK(status IN ('ativa','concluida','cancelada')),
-    started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    ended_at TEXT,
-    end_reason TEXT,
-    created_by INTEGER REFERENCES users(id),
-    enrolled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    enrolled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(student_id, class_id)
   );
   CREATE TABLE IF NOT EXISTS attendance_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -277,28 +270,6 @@ if (db.dialect === 'sqlite') await db.exec(`
     occurred_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
-  CREATE TABLE IF NOT EXISTS student_followups (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    class_id INTEGER NOT NULL REFERENCES classes(id),
-    reason TEXT NOT NULL,
-    contact_type TEXT,
-    outcome TEXT,
-    notes TEXT,
-    created_by INTEGER NOT NULL REFERENCES users(id),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE TABLE IF NOT EXISTS waitlists (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    class_id INTEGER NOT NULL REFERENCES classes(id),
-    status TEXT DEFAULT 'aguardando',
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS student_followups_student_id_idx ON student_followups(student_id);
-  CREATE INDEX IF NOT EXISTS student_followups_class_id_idx ON student_followups(class_id);
 `);
 if (db.dialect === 'sqlite') {
   const userColumns = await db.prepare('PRAGMA table_info(users)').all();
@@ -339,41 +310,6 @@ if (db.dialect === 'sqlite') {
       DROP TABLE announcement_attachments_legacy;
       CREATE INDEX announcement_attachments_announcement_id_idx ON announcement_attachments(announcement_id);
       CREATE UNIQUE INDEX announcement_attachments_storage_path_unique ON announcement_attachments(storage_path) WHERE storage_path IS NOT NULL;
-    `);
-  }
-  const studentColumns = await db.prepare('PRAGMA table_info(students)').all();
-  if (!studentColumns.some(c => c.name === 'location_id')) {
-    await db.exec('ALTER TABLE students ADD COLUMN location_id INTEGER REFERENCES locations(id);');
-    await db.exec('UPDATE students SET location_id = (SELECT id FROM locations WHERE LOWER(locations.name) = LOWER(students.church));');
-  }
-  const classesColumns = await db.prepare('PRAGMA table_info(classes)').all();
-  if (!classesColumns.some(c => c.name === 'capacity')) {
-    await db.exec(`
-      ALTER TABLE classes ADD COLUMN capacity INTEGER;
-      ALTER TABLE classes ADD COLUMN start_date TEXT;
-      ALTER TABLE classes ADD COLUMN end_date TEXT;
-      ALTER TABLE classes ADD COLUMN status TEXT NOT NULL DEFAULT 'ativa' CHECK(status IN ('ativa','concluida','cancelada'));
-      -- SQLite não permite DROP CONSTRAINT nativo sem recrear a tabela. Vamos deixar a constraint lá por enquanto se for DB antigo
-    `);
-  }
-  const enrollmentsColumns = await db.prepare('PRAGMA table_info(enrollments)').all();
-  if (!enrollmentsColumns.some(c => c.name === 'started_at')) {
-    await db.exec(`
-      ALTER TABLE enrollments RENAME TO enrollments_legacy;
-      CREATE TABLE IF NOT EXISTS enrollments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        student_id INTEGER NOT NULL REFERENCES students(id),
-        class_id INTEGER NOT NULL REFERENCES classes(id),
-        status TEXT NOT NULL DEFAULT 'ativa' CHECK(status IN ('ativa','concluida','cancelada')),
-        started_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        ended_at TEXT,
-        end_reason TEXT,
-        created_by INTEGER REFERENCES users(id),
-        enrolled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      );
-      INSERT INTO enrollments (id,student_id,class_id,status,enrolled_at,started_at)
-        SELECT id,student_id,class_id,status,enrolled_at,enrolled_at FROM enrollments_legacy;
-      DROP TABLE enrollments_legacy;
     `);
   }
 }
@@ -599,8 +535,8 @@ function cookies(request) {
   return Object.fromEntries(String(request.headers.cookie || '').split(';').map(value => value.trim().split('=').map(decodeURIComponent)).filter(pair => pair.length === 2));
 }
 
-function cookie(name, value, maxAge = null) {
-  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict${maxAge !== null ? `; Max-Age=${maxAge}` : ''}${isProduction ? '; Secure' : ''}`;
+function cookie(name, value, maxAge = 0) {
+  return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${isProduction ? '; Secure' : ''}`;
 }
 
 function securityHeaders(contentType = 'application/json; charset=utf-8') {
@@ -646,11 +582,11 @@ async function currentSession(request) {
 async function createAppSession(user, ip, remember = false) {
   const token = randomBytes(32).toString('base64url');
   const csrfToken = randomBytes(24).toString('base64url');
-  const sessionDuration = remember ? 30 * 86400 : 8 * 3600;
-  const expires = new Date(Date.now() + sessionDuration * 1000).toISOString();
+  const maxAge = remember ? 30 * 86400 : 8 * 3600;
+  const expires = new Date(Date.now() + maxAge * 1000).toISOString();
   await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at) VALUES (?,?,?,?)').run(user.id, sha256(token), csrfToken, expires);
   await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(user.id, 'login', ip);
-  return { token, csrfToken, maxAge: remember ? sessionDuration : null };
+  return { token, csrfToken, maxAge };
 }
 
 async function userFromSupabaseToken(request) {
@@ -1339,12 +1275,6 @@ async function api(request, response, url) {
     const body=await readJson(request),name=cleanText(body.nome,100),email=cleanEmail(body.email);
     const errors={nome:personNameError(name,'nome completo'),email:emailError(email)};
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const user=await db.prepare('SELECT auth_user_id,email FROM users WHERE id=?').get(session.user_id);
-    if(usesSupabaseAuth && user?.auth_user_id && user.email !== email){
-      if(!supabaseAdmin)return json(response,503,{message:'Supabase admin indisponível.'});
-      const {error}=await supabaseAdmin.auth.admin.updateUserById(user.auth_user_id,{email,email_confirm:true});
-      if(error)return json(response,502,{message:'Erro no provedor de autenticação.'});
-    }
     try{
       await db.transaction(async () => {
         await db.prepare('UPDATE users SET name=?,email=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(name,email,session.user_id);
@@ -1393,13 +1323,11 @@ async function api(request, response, url) {
     if(hasValidationErrors(errors))return invalid(response,errors);
     const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames);
     if (classError) return invalid(response, { curso: classError });
-    const location = await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
-    const locationId = location ? location.id : null;
     try {
       const studentId=await db.transaction(async()=>{
-        const result = await db.prepare('INSERT INTO students (name,email,phone,church,location_id,age_group,has_instrument) VALUES (?,?,?,?,?,?,?)').run(name,email,phone,locationName,locationId,body.classe,body.instrumento === 'Sim' ? 1 : 0);
+        const result = await db.prepare('INSERT INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)').run(name,email,phone,locationName,body.classe,body.instrumento === 'Sim' ? 1 : 0);
         for (const classRow of classRows) {
-          await db.prepare('INSERT INTO enrollments (student_id,class_id,created_by) VALUES (?,?,?)').run(result.lastInsertRowid,classRow.id,session.user_id);
+          await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_created',ip);
         return Number(result.lastInsertRowid);
@@ -1424,25 +1352,13 @@ async function api(request, response, url) {
     if (classError) return invalid(response, { curso: classError });
     const currentStudent=await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
     if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
-    const location = await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
-    const locationId = location ? location.id : null;
     try {
       await db.transaction(async()=>{
-        await db.prepare(`UPDATE students SET name=?,email=?,phone=?,church=?,location_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
-          .run(name,email,phone,locationName,locationId,body.classe,body.instrumento==='Sim'?1:0,id);
-
-        const currentActive = await db.prepare("SELECT class_id FROM enrollments WHERE student_id=? AND status='ativa'").all(id);
-        const currentActiveIds = currentActive.map(c => c.class_id);
-        const newClassIds = classRows.map(c => c.id);
-        for (const cid of currentActiveIds) {
-          if (!newClassIds.includes(cid)) {
-             await db.prepare("UPDATE enrollments SET status='cancelada', ended_at=CURRENT_TIMESTAMP, end_reason='Alteração de matrícula' WHERE student_id=? AND class_id=? AND status='ativa'").run(id, cid);
-          }
-        }
+        await db.prepare(`UPDATE students SET name=?,email=?,phone=?,church=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
+          .run(name,email,phone,locationName,body.classe,body.instrumento==='Sim'?1:0,id);
+        await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND status='ativa'").run(id);
         for (const classRow of classRows) {
-          if (!currentActiveIds.includes(classRow.id)) {
-             await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,created_by) VALUES (?,?,'ativa',?)`).run(id, classRow.id, session.user_id);
-          }
+          await db.prepare(`INSERT INTO enrollments (student_id,class_id,status) VALUES (?,?,'ativa') ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa'`).run(id,classRow.id);
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
       });
@@ -1452,60 +1368,6 @@ async function api(request, response, url) {
       throw error;
     }
   }
-
-  const student360Match = url.pathname.match(/^\/alunos\/(\d+)\/360$/);
-  if (student360Match && request.method === 'GET') {
-    const session = await authorize(request, response, ['gestor', 'professor']); if (!session) return;
-    const id = Number(student360Match[1]);
-    const student = await db.prepare('SELECT id, name, email, phone, church, location_id, age_group, has_instrument FROM students WHERE id=? AND active=1').get(id);
-    if (!student) return json(response, 404, { message: 'Aluno não encontrado' });
-
-    if (session.role === 'professor') {
-       const hasAccess = await db.prepare("SELECT 1 FROM enrollments JOIN classes ON classes.id=enrollments.class_id JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE enrollments.student_id=? AND pp.user_id=? LIMIT 1").get(id, session.user_id);
-       if (!hasAccess) return json(response, 403, { message: 'Você não tem acesso a este aluno.' });
-    }
-
-    const professorOnly = session.role === 'professor';
-    const scopedParams = professorOnly ? [id, session.user_id] : [id];
-    const enrollmentScope = professorOnly ? ' AND p.user_id=?' : '';
-    const enrollments = await db.prepare(`SELECT e.id, e.class_id, e.status, e.started_at, e.ended_at, e.end_reason, c.label as class_name, p.name as professor_name FROM enrollments e JOIN classes c ON c.id=e.class_id JOIN professor_profiles p ON p.id=c.professor_id WHERE e.student_id=?${enrollmentScope} ORDER BY e.started_at DESC`).all(...scopedParams);
-    const followups = await db.prepare(`SELECT f.id, f.class_id, f.reason, f.contact_type, f.outcome, f.notes, f.created_at, u.name as created_by_name FROM student_followups f JOIN classes c ON c.id=f.class_id JOIN professor_profiles p ON p.id=c.professor_id LEFT JOIN users u ON u.id=f.created_by WHERE f.student_id=?${enrollmentScope} ORDER BY f.created_at DESC`).all(...scopedParams);
-    const attendance = await db.prepare(`SELECT ar.status, asess.class_date, c.label as class_name FROM attendance_records ar JOIN attendance_sessions asess ON asess.id=ar.session_id JOIN classes c ON c.id=asess.class_id JOIN professor_profiles p ON p.id=c.professor_id WHERE ar.student_id=?${enrollmentScope} ORDER BY asess.class_date DESC`).all(...scopedParams);
-
-    return json(response, 200, { student, enrollments, followups, attendance });
-  }
-
-  const studentFollowupMatch = url.pathname.match(/^\/alunos\/(\d+)\/acompanhamentos$/);
-  if (studentFollowupMatch && request.method === 'POST') {
-    const session = await authorize(request, response, ['gestor', 'professor']); if (!session) return;
-    const id = Number(studentFollowupMatch[1]), body = await readJson(request);
-
-    if (!body.class_id || !body.reason) return json(response, 400, { message: 'Turma e motivo são obrigatórios.' });
-    const classId = Number(body.class_id);
-    const allowedClass = session.role === 'professor'
-      ? await db.prepare("SELECT 1 FROM enrollments JOIN classes ON classes.id=enrollments.class_id JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE enrollments.student_id=? AND enrollments.class_id=? AND pp.user_id=? LIMIT 1").get(id, classId, session.user_id)
-      : await db.prepare('SELECT 1 FROM enrollments WHERE student_id=? AND class_id=? LIMIT 1').get(id, classId);
-    if (!allowedClass) return json(response, 403, { message: 'Você não tem acesso a esta turma deste aluno.' });
-
-    await db.prepare(`INSERT INTO student_followups (student_id, class_id, reason, contact_type, outcome, notes, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
-      id, classId, cleanText(body.reason, 100), cleanText(body.contact_type||'', 50), cleanText(body.outcome||'', 100), cleanText(body.notes||'', 500), session.user_id
-    );
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'followup_created',ip);
-    return json(response, 201, { success: true });
-  }
-
-  const studentEndEnrollmentMatch = url.pathname.match(/^\/alunos\/(\d+)\/encerrar-matricula$/);
-  if (studentEndEnrollmentMatch && request.method === 'POST') {
-    const session = await authorize(request, response, ['gestor']); if (!session) return;
-    const id = Number(studentEndEnrollmentMatch[1]), body = await readJson(request);
-    if (!body.class_id || !body.reason) return json(response, 400, { message: 'Turma e motivo são obrigatórios.' });
-
-    await db.transaction(async () => {
-      await db.prepare(`UPDATE enrollments SET status='cancelada', ended_at=CURRENT_TIMESTAMP, end_reason=? WHERE student_id=? AND class_id=? AND status='ativa'`).run(cleanText(body.reason, 100), id, Number(body.class_id));
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'enrollment_ended',ip);
-    });
-    return json(response, 200, { success: true });
-  }
   if (studentMatch && request.method === 'DELETE') {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const id = Number(studentMatch[1]);
@@ -1514,7 +1376,7 @@ async function api(request, response, url) {
     await db.transaction(async () => {
       const enrollments = await db.prepare("SELECT class_id FROM enrollments WHERE student_id=? AND status='ativa'").all(id);
       await db.prepare('UPDATE students SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
-      await db.prepare("UPDATE enrollments SET status='cancelada', ended_at=CURRENT_TIMESTAMP, end_reason='Aluno inativado' WHERE student_id=? AND status='ativa'").run(id);
+      await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=?").run(id);
       for (const enrollment of enrollments) {
         await db.prepare('INSERT INTO dropout_events (student_id,class_id,reason,occurred_at) VALUES (?,?,?,?)').run(id,enrollment.class_id,'Excluído pelo gestor',new Date().toISOString().slice(0,10));
       }
@@ -1531,8 +1393,7 @@ async function api(request, response, url) {
     const profile = await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
     if (!profile) return json(response, 403, { message: 'Perfil de professor não configurado.' });
     const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE students.active=1 AND enrollments.status='ativa' AND classes.active=1 AND classes.professor_id=? AND (students.name LIKE ? OR students.email LIKE ?)`).get(profile.id,search,search)).total;
-    const sort = url.searchParams.get('sort') === 'recent' ? 'students.id DESC' : 'students.name';
-    const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND classes.active=1 AND classes.professor_id=?) AND (students.name LIKE ? OR students.email LIKE ?) GROUP BY students.id ORDER BY ${sort} LIMIT ? OFFSET ?`).all(profile.id,search,search,limit,(page-1)*limit);
+    const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND classes.active=1 AND classes.professor_id=?) AND (students.name LIKE ? OR students.email LIKE ?) GROUP BY students.id ORDER BY students.name LIMIT ? OFFSET ?`).all(profile.id,search,search,limit,(page-1)*limit);
     return json(response, 200, { alunos: rows.map(studentView), total });
   }
 
@@ -1624,13 +1485,24 @@ async function api(request, response, url) {
       LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
       WHERE classes.${classFilter}=?`).get(id);
     await db.transaction(async()=>{
-      await db.prepare(`UPDATE enrollments SET status='cancelada', ended_at=CURRENT_TIMESTAMP, end_reason='Turma inativada via catálogo' WHERE class_id IN (
+      await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
+        SELECT attendance_sessions.id FROM attendance_sessions
+        JOIN classes ON classes.id=attendance_sessions.class_id
+        WHERE classes.${classFilter}=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM attendance_sessions WHERE class_id IN (
         SELECT id FROM classes WHERE ${classFilter}=?
-      ) AND status='ativa'`).run(id);
-      await db.prepare(`UPDATE classes SET active=0 WHERE ${classFilter}=?`).run(id);
+      )`).run(id);
+      await db.prepare(`DELETE FROM dropout_events WHERE class_id IN (
+        SELECT id FROM classes WHERE ${classFilter}=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM enrollments WHERE class_id IN (
+        SELECT id FROM classes WHERE ${classFilter}=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM classes WHERE ${classFilter}=?`).run(id);
       if(kind === 'locais')await db.prepare('UPDATE professor_profiles SET home_location_id=NULL WHERE home_location_id=?').run(id);
-      await db.prepare(`UPDATE ${table} SET active=0 WHERE id=?`).run(id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_deactivated`, ip);
+      await db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `${entity}_permanently_deleted`, ip);
     });
     return json(response, 200, {
       success: true,
@@ -1802,7 +1674,7 @@ async function api(request, response, url) {
     const courseNames=[...new Set((Array.isArray(body.cursos)?body.cursos:[]).map(value=>cleanText(value,100)).filter(Boolean))];
     const errors=validateProfessor({...body,nome:name,contato:email,telefone:phone,local:locationName,cursos:courseNames});
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const current=await db.prepare('SELECT p.id, p.user_id, p.email, u.auth_user_id FROM professor_profiles p LEFT JOIN users u ON u.id = p.user_id WHERE p.id=? AND p.active=1').get(id);
+    const current=await db.prepare('SELECT id FROM professor_profiles WHERE id=? AND active=1').get(id);
     if(!current)return json(response,404,{message:'Professor ativo não encontrado.'});
     const location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
     if(!location)return invalid(response,{local:'Selecione uma igreja ativa cadastrada em Cursos e igrejas.'});
@@ -1812,18 +1684,20 @@ async function api(request, response, url) {
       if(!course)return invalid(response,{cursos:`O curso “${courseName}” não está cadastrado ou está inativo.`});
       catalogCourses.push(course);
     }
-
-    if (usesSupabaseAuth && current.auth_user_id && current.email !== email) {
-      if (!supabaseAdmin) return json(response, 503, { message: 'Supabase admin indisponível.' });
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(current.auth_user_id, { email, email_confirm: true });
-      if (error) return json(response, 502, { message: 'Erro ao sincronizar e-mail no provedor de autenticação.' });
-    }
-
     try{
       await db.transaction(async()=>{
         await db.prepare('UPDATE professor_profiles SET name=?,email=?,phone=?,home_location_id=? WHERE id=?').run(name,email,phone,location.id,id);
-        if (current.user_id) {
-          await db.prepare('UPDATE users SET email=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(email, current.user_id);
+        await db.prepare('UPDATE classes SET active=0 WHERE professor_id=?').run(id);
+        for(const course of catalogCourses){
+          const oldClass = await db.prepare('SELECT id FROM classes WHERE course_id=? AND professor_id=? AND active=0 ORDER BY id LIMIT 1').get(course.id, id);
+          await db.prepare(`INSERT INTO classes (course_id,professor_id,location_id,label,active) VALUES (?,?,?,?,1)
+            ON CONFLICT(course_id,professor_id,location_id) DO UPDATE SET active=1,label=excluded.label`).run(course.id,id,location.id,`${course.name} — ${locationName}`);
+          if (oldClass) {
+            const newClass = await db.prepare('SELECT id FROM classes WHERE course_id=? AND professor_id=? AND location_id=? AND active=1').get(course.id, id, location.id);
+            if (newClass && newClass.id !== oldClass.id) {
+              await db.prepare("UPDATE enrollments SET class_id=? WHERE class_id=? AND status='ativa'").run(newClass.id, oldClass.id);
+            }
+          }
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_updated',ip);
       });
@@ -1858,25 +1732,54 @@ async function api(request, response, url) {
 
     await db.transaction(async()=>{
       if(professor.user_id){
+        await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
+          SELECT attendance_sessions.id FROM attendance_sessions
+          LEFT JOIN classes ON classes.id=attendance_sessions.class_id
+          WHERE classes.professor_id=? OR attendance_sessions.recorded_by=?
+        )`).run(id,professor.user_id);
+        await db.prepare(`DELETE FROM attendance_sessions WHERE class_id IN (
+          SELECT id FROM classes WHERE professor_id=?
+        ) OR recorded_by=?`).run(id,professor.user_id);
+        await db.prepare(`DELETE FROM announcement_reads WHERE announcement_id IN (
+          SELECT id FROM announcements WHERE author_user_id=?
+        ) OR user_id=?`).run(professor.user_id,professor.user_id);
+        await db.prepare('DELETE FROM announcements WHERE author_user_id=?').run(professor.user_id);
+        await db.prepare(`DELETE FROM support_messages WHERE ticket_id IN (
+          SELECT id FROM support_tickets WHERE requester_user_id=?
+        ) OR author_user_id=?`).run(professor.user_id,professor.user_id);
+        await db.prepare('DELETE FROM support_tickets WHERE requester_user_id=?').run(professor.user_id);
         await db.prepare('DELETE FROM sessions WHERE user_id=?').run(professor.user_id);
         await db.prepare('DELETE FROM password_resets WHERE user_id=?').run(professor.user_id);
-        await db.prepare('UPDATE users SET active=0 WHERE id=?').run(professor.user_id);
+        await db.prepare('DELETE FROM user_settings WHERE user_id=?').run(professor.user_id);
+        await db.prepare('DELETE FROM audit_log WHERE user_id=?').run(professor.user_id);
       }
-
-      await db.prepare(`UPDATE enrollments SET status='cancelada', ended_at=CURRENT_TIMESTAMP, end_reason='Professor desativado' WHERE class_id IN (
+      await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
+        SELECT attendance_sessions.id FROM attendance_sessions
+        JOIN classes ON classes.id=attendance_sessions.class_id
+        WHERE classes.professor_id=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM attendance_sessions WHERE class_id IN (
         SELECT id FROM classes WHERE professor_id=?
-      ) AND status='ativa'`).run(id);
-      await db.prepare('UPDATE classes SET active=0 WHERE professor_id=?').run(id);
+      )`).run(id);
+      await db.prepare(`DELETE FROM dropout_events WHERE class_id IN (
+        SELECT id FROM classes WHERE professor_id=?
+      )`).run(id);
+      await db.prepare(`DELETE FROM enrollments WHERE class_id IN (
+        SELECT id FROM classes WHERE professor_id=?
+      )`).run(id);
+      await db.prepare('DELETE FROM classes WHERE professor_id=?').run(id);
       await db.prepare('DELETE FROM professor_invites WHERE professor_profile_id=?').run(id);
-      await db.prepare('UPDATE professor_profiles SET active=0 WHERE id=?').run(id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_deactivated',ip);
+      await db.prepare('DELETE FROM dev_emails WHERE recipient=(SELECT email FROM professor_profiles WHERE id=?)').run(id);
+      await db.prepare('DELETE FROM professor_profiles WHERE id=?').run(id);
+      if(professor.user_id)await db.prepare('DELETE FROM users WHERE id=?').run(professor.user_id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_permanently_deleted',ip);
     });
     return json(response,200,{
       success:true,
-      permanentlyDeleted:false,
-      authAccountRemoved:!!professor.auth_user_id,
+      permanentlyDeleted:true,
+      authAccountRemoved:true,
       resumo:impact?.resumo,
-      message:'Professor desativado com sucesso.',
+      message:'Professor e todos os dados vinculados foram excluídos definitivamente.',
     });
   }
 
@@ -1902,18 +1805,16 @@ async function api(request, response, url) {
     if(!Array.isArray(body.frequencias))return json(response,400,{message:'A lista de frequência é inválida.'});
     const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1`).get(classId,session.user_id);
     if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
-    await db.transaction(async () => {
-      await db.prepare(`INSERT INTO attendance_sessions (class_id,class_date,recorded_by) VALUES (?,?,?) ON CONFLICT(class_id,class_date) DO UPDATE SET recorded_by=excluded.recorded_by,updated_at=CURRENT_TIMESTAMP`).run(classId,date,session.user_id);
-      const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
-      const enrolled=(await db.prepare(`SELECT student_id FROM enrollments WHERE class_id=? AND started_at <= ? AND (ended_at IS NULL OR ended_at >= ?)`).all(classId, date + 'T23:59:59Z', date + 'T00:00:00Z')).map(row=>row.student_id);
-      const allowed=new Set(enrolled);
-      for(const item of body.frequencias||[]){
-        const studentId=Number(item.aluno_id),status=String(item.status);
-        if(!allowed.has(studentId)||!['presente','ausente','justificado'].includes(status))continue;
-        await db.prepare(`INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?) ON CONFLICT(session_id,student_id) DO UPDATE SET status=excluded.status`).run(attendanceSession.id,studentId,status);
-      }
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'attendance_saved',ip);
-    });
+    await db.prepare(`INSERT INTO attendance_sessions (class_id,class_date,recorded_by) VALUES (?,?,?) ON CONFLICT(class_id,class_date) DO UPDATE SET recorded_by=excluded.recorded_by,updated_at=CURRENT_TIMESTAMP`).run(classId,date,session.user_id);
+    const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
+    const enrolled=(await db.prepare("SELECT student_id FROM enrollments WHERE class_id=? AND status='ativa'").all(classId)).map(row=>row.student_id);
+    const allowed=new Set(enrolled);
+    for(const item of body.frequencias||[]){
+      const studentId=Number(item.aluno_id),status=String(item.status);
+      if(!allowed.has(studentId)||!['presente','ausente','justificado'].includes(status))continue;
+      await db.prepare(`INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?) ON CONFLICT(session_id,student_id) DO UPDATE SET status=excluded.status`).run(attendanceSession.id,studentId,status);
+    }
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'attendance_saved',ip);
     return json(response,200,{success:true});
   }
 
@@ -2305,22 +2206,7 @@ async function api(request, response, url) {
   if(request.method==='GET'&&url.pathname==='/api/dashboard/professor'){
     const session=await authorize(request,response,['professor']);if(!session)return;
     const totalAlunos=(await db.prepare("SELECT COUNT(DISTINCT enrollments.student_id) AS total FROM enrollments JOIN classes ON classes.id=enrollments.class_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id JOIN students ON students.id=enrollments.student_id WHERE professor_profiles.user_id=? AND enrollments.status='ativa' AND students.active=1 AND classes.active=1").get(session.user_id)).total;
-    const allClasses=await db.prepare('SELECT courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.active=1').all(session.user_id);
-    const dayMap = { 'domingo': 0, 'segunda-feira': 1, 'terça-feira': 2, 'quarta-feira': 3, 'quinta-feira': 4, 'sexta-feira': 5, 'sábado': 6 };
-    const now = new Date();
-    const currentDay = now.getDay(), currentTime = now.toTimeString().slice(0,5);
-    let proxima = null, minDiff = Infinity;
-    for (const c of allClasses) {
-      if (!c.weekday || !c.start_time) continue;
-      const classDay = dayMap[c.weekday.toLowerCase()];
-      if (classDay === undefined) continue;
-      let diffDays = classDay - currentDay;
-      if (diffDays < 0 || (diffDays === 0 && c.start_time <= currentTime)) diffDays += 7;
-      const classTimeMinutes = parseInt(c.start_time.split(':')[0]) * 60 + parseInt(c.start_time.split(':')[1]);
-      const currentTimeMinutes = parseInt(currentTime.split(':')[0]) * 60 + parseInt(currentTime.split(':')[1]);
-      const diffMinutes = diffDays * 24 * 60 + (classTimeMinutes - currentTimeMinutes);
-      if (diffMinutes < minDiff) { minDiff = diffMinutes; proxima = c; }
-    }
+    const proxima=await db.prepare('SELECT courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.active=1 ORDER BY classes.id LIMIT 1').get(session.user_id);
     const frequency=await db.prepare("SELECT COUNT(attendance_records.id) AS total,COALESCE(SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS presencas FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=?").get(session.user_id);
     const frequenciaMedia=frequency.total?Math.round(100*frequency.presencas/frequency.total):null;
     const informativos=(await db.prepare(`SELECT COUNT(*) AS total FROM announcements WHERE active=1 AND ${announcementScheduledCondition('scheduled_at')} AND (
@@ -2368,51 +2254,6 @@ async function api(request, response, url) {
     if(end){conditions.push('dropout_events.occurred_at<=?');params.push(end)}
     const sql="SELECT courses.name AS curso,students.name AS aluno,enrollments.enrolled_at AS dataInscricao,dropout_events.occurred_at AS dataEvasao,dropout_events.reason AS motivo FROM dropout_events JOIN students ON students.id=dropout_events.student_id JOIN classes ON classes.id=dropout_events.class_id JOIN courses ON courses.id=classes.course_id LEFT JOIN enrollments ON enrollments.student_id=students.id AND enrollments.class_id=classes.id WHERE "+conditions.join(' AND ')+" ORDER BY dropout_events.occurred_at DESC";
     return json(response,200,await db.prepare(sql).all(...params));
-  }
-
-  if (request.method === 'GET' && url.pathname === '/api/radar') {
-    const session = await authorize(request, response, ['gestor']); if (!session) return;
-    const enrollments = await db.prepare(`
-      SELECT e.student_id, e.class_id, c.label as class_name, s.name as student_name, s.phone as student_phone
-      FROM enrollments e
-      JOIN students s ON s.id=e.student_id
-      JOIN classes c ON c.id=e.class_id
-      WHERE e.status='ativa' AND s.active=1
-    `).all();
-    const attendance = await db.prepare(`
-      SELECT ar.student_id, ar.status, asess.class_date, asess.class_id
-      FROM attendance_records ar
-      JOIN attendance_sessions asess ON asess.id=ar.session_id
-      WHERE asess.class_date >= ${db.dialect === 'sqlite' ? "date('now', '-3 months')" : "CURRENT_DATE - INTERVAL '3 months'"}
-      ORDER BY asess.class_date DESC
-    `).all();
-    const alerts = [];
-    for (const e of enrollments) {
-      const records = attendance.filter(a => a.student_id === e.student_id && a.class_id === e.class_id);
-      if (records.length === 0) continue;
-      let consecutiveAbsences = 0;
-      for (const r of records) {
-        if (r.status === 'ausente') consecutiveAbsences++;
-        else break;
-      }
-      const totalClasses = records.length;
-      const presentClasses = records.filter(r => r.status === 'presente').length;
-      const frequency = totalClasses > 0 ? presentClasses / totalClasses : 1;
-      const riskReasons = [];
-      if (consecutiveAbsences >= 3) riskReasons.push(`${consecutiveAbsences} faltas consecutivas`);
-      if (totalClasses >= 4 && frequency < 0.75) riskReasons.push(`Frequência global baixa (${Math.round(frequency*100)}%)`);
-      if (riskReasons.length > 0) {
-        alerts.push({
-          student_id: e.student_id,
-          class_id: e.class_id,
-          student_name: e.student_name,
-          student_phone: e.student_phone,
-          class_name: e.class_name,
-          reasons: riskReasons
-        });
-      }
-    }
-    return json(response, 200, { radar: alerts });
   }
 
   return json(response, 404, { message: 'Rota não encontrada.' });

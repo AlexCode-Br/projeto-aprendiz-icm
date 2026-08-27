@@ -135,19 +135,12 @@ const Cursos = () => {
                         <div className="max-h-80 overflow-auto">
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-surface-muted text-xs uppercase text-text-muted"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
-                                <tbody>{catalogos[type].map(item => <tr key={item.id} className="border-t border-border hover:bg-surface-hover transition-colors">
-                                     <td className="px-5 py-3 font-medium text-sm">{item.nome}</td>
-                                     <td className="px-5 py-3 text-center text-sm text-text-muted">{item.turmas}{type === 'locais' ? ` turma(s) · ${item.professores} prof.` : ' turma(s)'}</td>
-                                     <td className="px-5 py-3 text-center"><span className={`badge ${item.ativo ? 'badge-success' : 'badge-neutral'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
-                                     <td className="px-5 py-3 text-right">
-                                       <button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-btn" aria-label={`Editar ${item.nome}`} title="Editar">
-                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
-                                       </button>
-                                       <button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-btn icon-btn-danger" aria-label={`Excluir definitivamente ${item.nome}`} title="Excluir">
-                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
-                                       </button>
-                                     </td>
-                                 </tr>)}</tbody>
+                                <tbody>{catalogos[type].map(item => <tr key={item.id} className="border-t border-border">
+                                    <td className="px-5 py-3 font-medium">{item.nome}</td>
+                                    <td className="px-5 py-3 text-center">{item.turmas}{type === 'locais' ? ` turma(s) · ${item.professores} professor(es)` : ' turma(s)'}</td>
+                                    <td className="px-5 py-3 text-center"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.ativo ? 'bg-success/10 text-success' : 'bg-gray-100 text-text-muted dark:bg-white/10'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
+                                    <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}>✎</button><button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Excluir definitivamente ${item.nome}`}>×</button></td>
+                                </tr>)}</tbody>
                             </table>
                             {!catalogos[type].length && <p className="p-8 text-center text-sm text-text-muted">Nenhum cadastro encontrado.</p>}
                         </div>

@@ -1,157 +1,79 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import useDarkMode from '../hooks/useDarkMode';
-import {
-  MenuIcon,
-  CloseIcon,
-  SunIcon,
-  MoonIcon,
-  LogoutIcon,
-  UserCircleIcon,
-  ConfiguracoesIcon,
-} from './icons/index.jsx';
-
-/* Map route segments to human-readable page titles */
-const PAGE_TITLES = {
-  dashboard:    'Dashboard',
-  alunos:       'Alunos',
-  professores:  'Professores',
-  cursos:       'Turmas',
-  catalogo:     'Catálogo de Cursos',
-  frequencia:   'Frequência',
-  relatorios:   'Relatórios',
-  informativos: 'Informativos',
-  suporte:      'Suporte',
-  configuracoes:'Configurações',
-};
-
-function getPageTitle(pathname) {
-  const segments = pathname.split('/').filter(Boolean);
-  // segments[0] is role ('gestor'|'professor'), segments[1] is page
-  const page = segments[1];
-  // If third segment exists it's likely a detail page — don't show the id
-  if (segments[2] && isNaN(Number(segments[2]))) return PAGE_TITLES[segments[2]] || '';
-  return PAGE_TITLES[page] || '';
-}
 
 const Header = ({ sidebarOpen, setSidebarOpen }) => {
-  const { user, logout } = useContext(AuthContext);
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-  const [isDark, setIsDark] = useDarkMode();
-  const location = useLocation();
+    const { user, logout } = useContext(AuthContext);
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const dropdownRef = useRef(null);
+    const [isDark, setIsDark] = useDarkMode();
 
-  const pageTitle = getPageTitle(location.pathname);
+    useEffect(() => {
+        const clickHandler = ({ target }) => {
+            if (!dropdownRef.current || dropdownRef.current.contains(target)) return;
+            setDropdownOpen(false);
+        };
+        document.addEventListener('click', clickHandler);
+        return () => document.removeEventListener('click', clickHandler);
+    }, []);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handler = (e) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        setDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+    const initial = user?.nome?.trim()?.charAt(0)?.toUpperCase() || 'U';
 
-  const initial = user?.nome?.trim()?.charAt(0)?.toUpperCase() || 'U';
-  const roleName = user?.role === 'gestor' ? 'Gestor' : 'Professor';
-
-  return (
-    <header className="sticky top-0 z-20 flex h-[60px] shrink-0 items-center gap-3 border-b border-border bg-surface/95 px-4 backdrop-blur-sm sm:px-5">
-      {/* Mobile menu toggle */}
-      <button
-        id="menu-button"
-        type="button"
-        aria-label={sidebarOpen ? 'Fechar menu' : 'Abrir menu'}
-        aria-controls="sidebar"
-        aria-expanded={sidebarOpen}
-        className={`icon-btn mr-1 lg:hidden ${sidebarOpen ? 'menu-open' : ''}`}
-        onClick={() => setSidebarOpen(s => !s)}
-      >
-        <MenuIcon className="w-5 h-5 icon-hamburger" />
-        <CloseIcon className="w-5 h-5 icon-close" />
-      </button>
-
-      {/* Page title */}
-      <div className="flex min-w-0 flex-1">
-        {pageTitle && (
-          <h1 className="truncate text-base font-semibold text-text-default sm:text-[15px]">
-            {pageTitle}
-          </h1>
-        )}
-      </div>
-
-      {/* Right-side actions */}
-      <div className="flex items-center gap-1">
-        {/* Dark mode toggle */}
-        <button
-          type="button"
-          aria-label={isDark ? 'Ativar tema claro' : 'Ativar tema escuro'}
-          className="icon-btn"
-          onClick={() => setIsDark(!isDark)}
-        >
-          {isDark ? <SunIcon className="w-5 h-5" /> : <MoonIcon className="w-5 h-5" />}
-        </button>
-
-        {/* User avatar + dropdown */}
-        <div className="relative" ref={dropdownRef}>
-          <button
-            type="button"
-            aria-label="Menu da conta"
-            aria-haspopup="menu"
-            aria-expanded={dropdownOpen}
-            onClick={() => setDropdownOpen(d => !d)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-primary font-semibold text-sm text-white ring-2 ring-primary/20 ring-offset-2 ring-offset-surface transition hover:ring-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            <span aria-hidden="true">{initial}</span>
-          </button>
-
-          {/* Dropdown menu */}
-          <div
-            role="menu"
-            aria-label="Opções da conta"
-            className={[
-              'absolute right-0 top-11 z-50 w-56 rounded-xl border border-border bg-surface shadow-lg',
-              'transition-all duration-150 origin-top-right',
-              dropdownOpen ? 'scale-100 opacity-100 visible' : 'scale-95 opacity-0 invisible pointer-events-none',
-            ].join(' ')}
-          >
-            {/* User info */}
-            <div className="border-b border-border px-4 py-3">
-              <p className="truncate text-sm font-semibold text-text-default">{user?.nome}</p>
-              <p className="text-xs text-text-muted mt-0.5">{roleName} · {user?.email}</p>
+    return (
+        <header className="relative sticky top-0 z-20 flex h-20 shrink-0 items-center justify-between border-b border-border bg-surface/90 px-3 backdrop-blur-md sm:px-5 lg:px-6">
+            <button id="menu-button" type="button" aria-label={sidebarOpen ? 'Fechar menu de navegação' : 'Abrir menu de navegação'} aria-controls="sidebar" aria-expanded={sidebarOpen} className={`icon-button mr-2 lg:hidden ${sidebarOpen ? 'menu-open' : ''}`} onClick={() => setSidebarOpen(!sidebarOpen)}>
+                <svg className="w-6 h-6 icon-hamburger" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                <svg className="w-6 h-6 icon-close" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            <div className="flex min-w-0 flex-1 justify-start">
+                <p className="truncate text-lg font-semibold text-text-default sm:text-xl">Projeto Aprendiz</p>
             </div>
+            <div className="relative flex items-center" ref={dropdownRef}>
+                <button type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen(!dropdownOpen)} className="group flex min-h-11 min-w-11 items-center justify-center rounded-full ring-2 ring-transparent transition hover:ring-primary/20">
+                    <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-primary font-bold text-white shadow-sm ring-2 ring-primary/25 ring-offset-2 ring-offset-surface transition group-hover:ring-primary/60">{initial}</span>
+                </button>
+                <div
+                    id="profile-dropdown"
+                    role="menu"
+                    className={`absolute right-0 top-12 z-50 mt-2 w-56 origin-top-right rounded-xl border border-border bg-surface shadow-lg transition-all duration-200 ease-out ${dropdownOpen ? 'visible scale-100 opacity-100' : 'invisible scale-95 opacity-0 pointer-events-none'}`}
+                >
+                    <div className="border-b border-border px-4 py-3">
+                        <p className="truncate text-sm font-medium text-text-default">{user?.nome}</p>
+                        <p className="truncate text-xs text-text-muted">{user?.email}</p>
+                    </div>
 
-            <div className="py-1">
-              <Link
-                to="/configuracoes"
-                role="menuitem"
-                onClick={() => setDropdownOpen(false)}
-                className="flex items-center gap-3 px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-primary transition-colors min-h-[2.25rem]"
-              >
-                <ConfiguracoesIcon className="w-4 h-4" aria-hidden="true" />
-                Configurações de perfil
-              </Link>
-            </div>
+                    <div className="py-1">
+                        <Link to="/configuracoes" role="menuitem" onClick={() => setDropdownOpen(false)} className="flex min-h-11 items-center px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-primary transition-colors">
+                            <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                            Editar Perfil
+                        </Link>
 
-            <div className="border-t border-border py-1">
-              <button
-                role="menuitem"
-                type="button"
-                onClick={logout}
-                className="flex w-full items-center gap-3 px-4 py-2 text-sm text-text-default hover:bg-danger-bg hover:text-danger transition-colors min-h-[2.25rem]"
-              >
-                <LogoutIcon className="w-4 h-4" aria-hidden="true" />
-                Sair do sistema
-              </button>
+                        <button role="menuitem" type="button" onClick={() => { setIsDark(!isDark); setDropdownOpen(false); }} className="flex min-h-11 w-full items-center px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-primary transition-colors">
+                            {isDark ? (
+                                <>
+                                    <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                    Tema Claro
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                                    Tema Escuro
+                                </>
+                            )}
+                        </button>
+                    </div>
+
+                    <div className="border-t border-border py-1">
+                        <button role="menuitem" type="button" onClick={logout} className="flex min-h-11 w-full items-center px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-danger transition-colors">
+                            <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                            Sair
+                        </button>
+                    </div>
+                </div>
             </div>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
+        </header>
+    );
 };
 
 export default Header;
