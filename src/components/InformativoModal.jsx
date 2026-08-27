@@ -111,12 +111,14 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         setDragActive(false);
         setUploadMessage('');
         setFormatState(initialFormatState);
+        savedSelectionRef.current = null;
     }, [draft, informativo, isOpen]);
 
     const updateFormatState = useCallback(() => {
         const editor = editorRef.current;
         const selection = window.getSelection?.();
         if (!editor || !selection?.rangeCount || !editor.contains(selection.anchorNode)) return;
+        savedSelectionRef.current = selection.getRangeAt(0).cloneRange();
 
         const commandState = command => {
             try {
@@ -192,14 +194,36 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         const selection = window.getSelection();
         if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) savedSelectionRef.current = selection.getRangeAt(0).cloneRange();
     };
-    const restoreSelection = () => {
-        editorRef.current?.focus();
+    const hasEditorSelection = () => {
         const selection = window.getSelection();
-        if (savedSelectionRef.current && selection) { selection.removeAllRanges(); selection.addRange(savedSelectionRef.current); }
+        return Boolean(selection?.rangeCount && editorRef.current?.contains(selection.anchorNode));
+    };
+    const restoreSelection = () => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        editor.focus();
+        const selection = window.getSelection();
+        if (!selection) return;
+        const savedRange = savedSelectionRef.current;
+        const savedContainer = savedRange?.commonAncestorContainer;
+        const savedRangeIsValid = savedContainer && (savedContainer === editor || editor.contains(savedContainer));
+        selection.removeAllRanges();
+        if (savedRangeIsValid) {
+            selection.addRange(savedRange);
+            return;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        selection.addRange(range);
+        savedSelectionRef.current = range.cloneRange();
     };
     const format = command => {
-        restoreSelection();
+        // Manter a seleção viva preserva os estados de digitação aplicados por
+        // execCommand, permitindo combinar B + I + U antes ou durante a escrita.
+        if (!hasEditorSelection()) restoreSelection();
         document.execCommand(command, false);
+        saveSelection();
         syncEditor();
         updateFormatState();
     };
@@ -246,15 +270,20 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         if (file.size <= MAX_IMAGE_SIZE) return { dataUrl, mime: inputType, name: file.name };
         if (['image/heic', 'image/heif'].includes(inputType)) throw new Error('Imagens HEIC/HEIF acima de 5 MB não podem ser comprimidas neste navegador. Converta para JPG e tente novamente.');
         const image = new Image();
-        image.src = dataUrl;
-        await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = () => reject(new Error('Não foi possível abrir a imagem para compressão.')); });
+        await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error('Não foi possível abrir a imagem para compressão.'));
+            image.src = dataUrl;
+        });
         let scale = Math.min(1, Math.sqrt(MAX_IMAGE_SIZE / file.size));
         let compressed = '';
         for (let attempt = 0; attempt < 7; attempt += 1) {
             const canvas = document.createElement('canvas');
             canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
             canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-            canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+            const context = canvas.getContext('2d');
+            if (!context) throw new Error('Este navegador não conseguiu preparar a imagem para compressão.');
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
             let quality = 0.88;
             compressed = canvas.toDataURL('image/jpeg', quality);
             while (dataUrlByteSize(compressed) > MAX_IMAGE_SIZE && quality > 0.35) {
@@ -303,9 +332,11 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
     };
 
     const handleFileInput = event => {
-        const files = event.target.files;
-        event.target.value = '';
-        addFiles(files);
+        // FileList acompanha o valor do input. Copiá-lo antes de limpar permite
+        // selecionar novamente o mesmo arquivo sem esvaziar a seleção atual.
+        const files = Array.from(event.currentTarget.files || []);
+        event.currentTarget.value = '';
+        void addFiles(files);
     };
 
     if (!isOpen) return null;
@@ -356,7 +387,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                     <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.orderedList ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Lista numerada" aria-pressed={formatState.orderedList}>1. Lista</button>
                                     <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.link ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Inserir link" aria-pressed={formatState.link}>🔗 Link</button>
                                 </div>
-                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); updateFormatState(); }} onFocus={updateFormatState} onKeyUp={updateFormatState} onMouseUp={updateFormatState} onSelect={updateFormatState} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
+                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); updateFormatState(); }} onFocus={updateFormatState} onBlur={saveSelection} onKeyUp={updateFormatState} onMouseUp={updateFormatState} onSelect={updateFormatState} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
                                 <div className="mt-4">
                                     <p className="form-label">Anexos</p>
                                     <button
@@ -386,7 +417,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                         <button type="button" onClick={() => { setFormData(prev => ({ ...prev, anexos: prev.anexos.filter((_, itemIndex) => itemIndex !== index) })); setErrors(prev => ({ ...prev, anexos: null })); setUploadMessage(''); }} className="shrink-0 rounded p-2 text-text-muted hover:bg-surface-hover hover:text-danger" aria-label={`Remover anexo ${attachment.nome}`}>×</button>
                                     </div>;
                                 })}</div>}
-                                {errors.anexos && <p className="text-danger text-xs mt-1">{errors.anexos}</p>}
+                                {errors.anexos && <p className="text-danger text-xs mt-1" role="alert">{errors.anexos}</p>}
                                 {errors.conteudo && <p className="text-danger text-xs mt-1">{errors.conteudo}</p>}
                         </div>
                         <div className="space-y-3 pt-2">
