@@ -7,28 +7,37 @@ const formatFileSize = bytes => {
     return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 };
 
+const OpenIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>;
+const DownloadIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>;
+
 const AnnouncementAttachments = ({ attachments = [] }) => {
     if (!Array.isArray(attachments) || attachments.length === 0) return null;
     return (
-        <div className="mt-4 border-t border-border pt-3" aria-label="Anexos do informativo">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">Anexos</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+        <section className="mt-4 min-w-0 border-t border-border pt-3" aria-label="Anexos do informativo">
+            <div className="mb-2 flex items-center justify-between gap-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">Anexos</h4>
+                <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[0.68rem] font-semibold text-text-muted">{attachments.length} {attachments.length === 1 ? 'arquivo' : 'arquivos'}</span>
+            </div>
+            <div className="grid min-w-0 gap-2">
                 {attachments.map((attachment, index) => {
                     const fileUrl = attachment.url || attachment.dataUrl;
                     const isImage = String(attachment.tipo || '').startsWith('image/');
                     const name = attachment.nome || (isImage ? 'Imagem' : 'Documento');
                     const downloadUrl = attachment.url ? `${attachment.url}${attachment.url.includes('?') ? '&' : '?'}download=1` : attachment.dataUrl;
-                    return <div key={attachment.id || `${name}-${index}`} className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-surface-muted p-2 text-sm text-text-default">
-                        {isImage && fileUrl ? <a href={fileUrl} target="_blank" rel="noreferrer" className="shrink-0" aria-label={`Visualizar imagem ${name}`}><img src={fileUrl} alt="" loading="lazy" className="h-12 w-12 rounded object-cover" /></a> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-surface text-xl" aria-hidden="true">📄</span>}
-                        <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={name}>{name}</span><span className="text-xs text-text-muted">{isImage ? 'Imagem' : 'PDF'} · {formatFileSize(attachment.tamanho)}</span></span>
-                        {fileUrl && <span className="flex shrink-0 gap-1">
-                            <a href={fileUrl} target="_blank" rel="noreferrer" className="rounded px-2 py-2 text-xs font-semibold text-primary hover:bg-surface-hover" aria-label={`Visualizar ${name}`}>Abrir</a>
-                            <a href={downloadUrl} download={name} className="rounded px-2 py-2 text-xs font-semibold text-text-muted hover:bg-surface-hover" aria-label={`Baixar ${name}`}>Baixar</a>
+                    return <div key={attachment.id || `${name}-${index}`} className="group grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-lg border border-border bg-surface-muted p-2 text-sm text-text-default transition-colors hover:bg-surface-hover">
+                        {isImage && fileUrl ? <a href={fileUrl} target="_blank" rel="noreferrer" className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md bg-surface" aria-label={`Visualizar imagem ${name}`}><img src={fileUrl} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" /></a> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-surface text-lg" aria-hidden="true">📄</span>}
+                        <span className="min-w-0 overflow-hidden">
+                            <span className="block truncate font-medium leading-5" title={name}>{name}</span>
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.7rem] text-text-muted"><span className="rounded bg-surface px-1.5 py-0.5 font-semibold uppercase">{isImage ? 'Imagem' : 'PDF'}</span><span className="truncate">{formatFileSize(attachment.tamanho)}</span></span>
+                        </span>
+                        {fileUrl && <span className="flex shrink-0 items-center gap-1">
+                            <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 w-9 items-center justify-center rounded-md text-primary hover:bg-surface" aria-label={`Abrir ${name}`} title="Abrir"><OpenIcon /></a>
+                            <a href={downloadUrl} download={name} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface hover:text-text-default" aria-label={`Baixar ${name}`} title="Baixar"><DownloadIcon /></a>
                         </span>}
                     </div>;
                 })}
             </div>
-        </div>
+        </section>
     );
 };
 
