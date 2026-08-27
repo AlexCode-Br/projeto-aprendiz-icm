@@ -1,220 +1,144 @@
 import React, { useState, useEffect, useCallback, useContext } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { AuthContext } from '../../contexts/AuthContext';
-import {
-  FrequenciaIcon,
-  AlunosIcon,
-  CalendarIcon,
-  ChevronRightIcon,
-  ArrowUpRightIcon,
-} from '../../components/icons/index.jsx';
+
+// --- Ícones SVG ---
+const StudentsIcon = () => <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>;
+const BellIcon = () => <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>;
+const CalendarIcon = () => <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>;
+const CheckCircleIcon = () => <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>;
+const ChevronRightIcon = () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>;
+
+
+// --- Componente StatCard ---
+const StatCard = ({ icon, title, value, color, to }) => (
+    <Link to={to} className={`stat-card grid min-h-32 grid-cols-[1fr,auto] items-center gap-3 rounded-xl p-5 text-white shadow-md transition-transform hover:-translate-y-0.5 ${color}`}>
+        <div className="min-w-0">
+            <div className="break-words text-2xl font-bold leading-tight">{value}</div>
+            <div className="mt-1 break-words text-xs font-semibold leading-5">{title}</div>
+        </div>
+        <div className="rounded-full bg-white/20 p-3">
+            {icon}
+        </div>
+    </Link>
+);
+
 
 const ProfessorDashboard = () => {
-  const { user } = useContext(AuthContext);
-  const navigate = useNavigate();
-  const [stats, setStats] = useState(null);
-  const [proximaAula, setProximaAula] = useState(null);
-  const [recentStudents, setRecentStudents] = useState([]);
-  const [informativos, setInformativos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+    const { user } = useContext(AuthContext);
+    const [stats, setStats] = useState({
+        totalAlunos: 0,
+        totalInformativos: 0,
+        proximaAula: 'A definir',
+        frequenciaMedia: 'Sem aulas',
+    });
+    const [recentStudents, setRecentStudents] = useState([]);
+    const [informativos, setInformativos] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [studRes, infoRes, dashRes] = await Promise.all([
-        api.get('/api/professores/me/alunos?sort=recent'),
-        api.get('/api/informativos?limit=3'),
-        api.get('/api/dashboard/professor'),
-      ]);
+    const fetchData = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [studentResponse, infoResponse, dashboardResponse] = await Promise.all([
+                api.get('/api/professores/me/alunos'),
+                api.get('/api/informativos?limit=3'),
+                api.get('/api/dashboard/professor')
+            ]);
 
-      const summary = dashRes.data;
-      setStats({
-        totalAlunos:      summary.stats.totalAlunos,
-        frequenciaMedia:  summary.stats.frequenciaMedia,
-      });
-      setProximaAula(summary.proximaAula || null);
-      setRecentStudents((studRes.data.alunos || []).slice(0, 5));
-      setInformativos(
-        (infoRes.data || [])
-          .sort((a, b) => new Date(b.data_publicacao) - new Date(a.data_publicacao))
-          .slice(0, 3)
-      );
-      setError(null);
-    } catch (err) {
-      setError('Não foi possível carregar o painel.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+            const studentData = studentResponse.data.alunos || [];
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+            const summary = dashboardResponse.data;
+            setStats({
+                totalAlunos: summary.stats.totalAlunos,
+                totalInformativos: summary.stats.informativos,
+                proximaAula: summary.proximaAula?.descricao || 'A definir',
+                frequenciaMedia: summary.stats.frequenciaMedia === null ? 'Sem aulas' : `${summary.stats.frequenciaMedia}%`,
+            });
 
-  const firstName = user?.nome?.split(' ')[0] || '';
-  const now = new Date();
-  const hora = now.getHours();
-  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
+            setRecentStudents(studentData.slice(0, 5));
+            setInformativos(infoResponse.data.sort((a, b) => new Date(b.data_publicacao) - new Date(a.data_publicacao)).slice(0, 3));
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-24" role="status">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-primary" />
-    </div>
-  );
+            setError(null);
+        } catch (err) {
+            setError("Falha ao carregar os dados do dashboard.");
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    }, []);
 
-  if (error) return (
-    <div className="flex flex-col items-center gap-4 py-24 text-center">
-      <p className="text-text-muted">{error}</p>
-      <button type="button" onClick={fetchData} className="btn btn-secondary">Tentar novamente</button>
-    </div>
-  );
+    useEffect(() => {
+        fetchData();
+    }, [fetchData]);
 
-  return (
-    <div className="space-y-6">
-      {/* ── Saudação ────────────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-xl font-semibold text-text-default">
-          {saudacao}, {firstName}!
-        </h1>
-        <p className="mt-0.5 text-sm text-text-muted">
-          {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
-      </div>
+    if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando painel...</div>;
+    if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={fetchData} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
-      {/* ── Próxima Aula + CTA ──────────────────────────────────────────────── */}
-      {proximaAula ? (
-        <section
-          aria-label="Próxima aula"
-          className="panel border-l-4 border-l-primary p-5"
-        >
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden="true">
-                <CalendarIcon className="w-5 h-5" />
-              </span>
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Próxima aula</p>
-                <p className="mt-0.5 text-base font-semibold text-text-default">{proximaAula.descricao}</p>
-                {proximaAula.horario && (
-                  <p className="mt-0.5 text-sm text-text-muted">{proximaAula.horario}</p>
-                )}
-              </div>
+    return (
+        <div className="">
+            <h1 className="page-title mb-2">
+                Olá, Professor(a) {user?.nome?.split(' ')[0] || ''}!
+            </h1>
+            <p className="page-description mb-8">Aqui está um resumo das suas turmas e atividades.</p>
+
+            {/* Grid de Estatísticas */}
+            <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-6">
+                <StatCard icon={<StudentsIcon />} title="Meus Alunos" value={stats.totalAlunos} color="bg-gradient-to-br from-blue-500 to-blue-600" to="/professor/alunos" />
+                <StatCard icon={<BellIcon />} title="Avisos/Informativos" value={stats.totalInformativos} color="bg-gradient-to-br from-yellow-500 to-yellow-600" to="/professor/informativos" />
+                <StatCard icon={<CalendarIcon />} title="Próxima Aula" value={stats.proximaAula} color="bg-gradient-to-br from-red-500 to-red-600" to="/professor/frequencia" />
+                <StatCard icon={<CheckCircleIcon />} title="Frequência Média" value={stats.frequenciaMedia} color="bg-gradient-to-br from-green-500 to-green-600" to="/professor/frequencia" />
             </div>
-            <Link
-              to="/professor/frequencia"
-              className="btn btn-primary shrink-0"
-            >
-              <FrequenciaIcon className="w-4 h-4" aria-hidden="true" />
-              Fazer Chamada
-            </Link>
-          </div>
-        </section>
-      ) : (
-        <section className="panel p-5 text-center">
-          <CalendarIcon className="mx-auto w-8 h-8 text-text-muted mb-2" aria-hidden="true" />
-          <p className="text-sm text-text-muted">Nenhuma aula programada encontrada.</p>
-          <Link to="/professor/frequencia" className="btn btn-secondary mt-3 text-xs">
-            Registrar Chamada Manualmente
-          </Link>
-        </section>
-      )}
 
-      {/* ── Quick Stats ──────────────────────────────────────────────────────── */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-4">
-          <Link
-            to="/professor/alunos"
-            className="panel flex items-center gap-4 p-4 hover:shadow-sm transition-shadow group"
-          >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary" aria-hidden="true">
-              <AlunosIcon className="w-5 h-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xl font-bold text-text-default tabular-nums">{stats.totalAlunos}</p>
-              <p className="text-xs text-text-muted">Meus Alunos</p>
-            </div>
-            <ChevronRightIcon className="ml-auto w-4 h-4 text-text-muted opacity-0 group-hover:opacity-100 shrink-0" />
-          </Link>
-
-          <div className="panel flex items-center gap-4 p-4">
-            <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${stats.frequenciaMedia !== null && stats.frequenciaMedia < 75 ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`} aria-hidden="true">
-              <FrequenciaIcon className="w-5 h-5" />
-            </span>
-            <div className="min-w-0">
-              <p className="text-xl font-bold text-text-default tabular-nums">
-                {stats.frequenciaMedia !== null ? `${stats.frequenciaMedia}%` : '—'}
-              </p>
-              <p className="text-xs text-text-muted">Frequência Média</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Últimos Alunos + Informativos ────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Alunos recentes */}
-        <section className="panel overflow-hidden" aria-labelledby="recent-students-title">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <h2 id="recent-students-title" className="text-sm font-semibold text-text-default">Últimos Alunos</h2>
-            <Link to="/professor/alunos" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
-              Ver Todos <ChevronRightIcon className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-          {recentStudents.length > 0 ? (
-            <ul className="divide-y divide-border">
-              {recentStudents.map(student => (
-                <li key={student.id}>
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/professor/alunos/${student.id}`)}
-                    className="group flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-hover"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">
-                        {student.nome?.charAt(0)?.toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-text-default truncate">{student.nome}</p>
-                        <p className="text-xs text-text-muted truncate">{student.email}</p>
-                      </div>
+            {/* Grid de Alunos Recentes e Informativos */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Últimos Alunos Adicionados */}
+                <div className="panel overflow-hidden">
+                    <div className="p-5 flex justify-between items-center border-b border-border">
+                        <h3 className="text-lg font-semibold text-text-default">Últimos Alunos Adicionados</h3>
+                        <Link to="/professor/alunos" className="text-sm font-semibold text-primary hover:underline flex items-center">
+                            Ver Todos <ChevronRightIcon />
+                        </Link>
                     </div>
-                    <ArrowUpRightIcon className="w-3.5 h-3.5 text-text-muted opacity-0 group-hover:opacity-100 shrink-0" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="p-6 text-center text-sm text-text-muted">Nenhum aluno encontrado.</p>
-          )}
-        </section>
+                    <ul className="divide-y divide-border">
+                        {recentStudents.length > 0 ? recentStudents.map(student => (
+                            <li key={student.id} className="p-4 flex items-center justify-between hover:bg-surface-hover transition-colors">
+                                <div>
+                                    <p className="font-medium text-text-default">{student.nome}</p>
+                                    <p className="text-sm text-text-muted">{student.email}</p>
+                                </div>
+                                <span className="text-xs text-text-muted">{new Date(student.created_at).toLocaleDateString()}</span>
+                            </li>
+                        )) : (
+                            <li className="p-4 text-center text-text-muted">Nenhum aluno recente.</li>
+                        )}
+                    </ul>
+                </div>
 
-        {/* Informativos */}
-        <section className="panel overflow-hidden" aria-labelledby="info-title">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <h2 id="info-title" className="text-sm font-semibold text-text-default">Informativos Recentes</h2>
-            <Link to="/professor/informativos" className="flex items-center gap-1 text-xs text-primary hover:underline font-medium">
-              Ver Todos <ChevronRightIcon className="w-3.5 h-3.5" />
-            </Link>
-          </div>
-          {informativos.length > 0 ? (
-            <ul className="divide-y divide-border">
-              {informativos.map(info => (
-                <li key={info.id} className="px-4 py-3">
-                  <p className="text-sm font-medium text-text-default line-clamp-1">{info.titulo}</p>
-                  <p className="mt-0.5 text-xs text-text-muted line-clamp-2">{info.conteudo}</p>
-                  <p className="mt-1.5 text-[11px] text-text-muted">
-                    {new Date(info.data_publicacao).toLocaleDateString('pt-BR')}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="p-6 text-center text-sm text-text-muted">Nenhum informativo disponível.</p>
-          )}
-        </section>
-      </div>
-    </div>
-  );
+                {/* Avisos e Informativos */}
+                <div className="panel overflow-hidden">
+                    <div className="p-5 flex justify-between items-center border-b border-border">
+                        <h3 className="text-lg font-semibold text-text-default">Avisos e Informativos</h3>
+                        <Link to="/professor/informativos" className="text-sm font-semibold text-primary hover:underline flex items-center">
+                            Ver Todos <ChevronRightIcon />
+                        </Link>
+                    </div>
+                    <ul className="divide-y divide-border">
+                       {informativos.length > 0 ? informativos.map(info => (
+                           <li key={info.id} className="p-4 hover:bg-surface-hover transition-colors">
+                               <p className="font-semibold text-text-default">{info.titulo}</p>
+                               <p className="text-sm text-text-muted mt-1 line-clamp-2">{info.conteudo}</p>
+                               <p className="text-xs text-text-muted mt-2">{new Date(info.data_publicacao).toLocaleDateString()}</p>
+                           </li>
+                       )) : (
+                           <li className="p-4 text-center text-text-muted">Nenhum informativo recente.</li>
+                       )}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 export default ProfessorDashboard;

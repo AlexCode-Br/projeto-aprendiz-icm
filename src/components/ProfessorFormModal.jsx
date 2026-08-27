@@ -54,7 +54,6 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
 
     if (!isOpen) return null;
     const catalogsReady = courses.length > 0 && locations.length > 0;
-    const isEditing = Boolean(professor);
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'}>
@@ -92,15 +91,14 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
                         </div>
                     </div>
                     <fieldset>
-                        <legend className="form-label">Cursos que o professor ministrará {isEditing && <span className="text-xs text-text-muted">(Edição de turmas será feita em outro painel)</span>}</legend>
+                        <legend className="form-label">Cursos que o professor ministrará</legend>
                         <div className={`grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2 ${errors.cursos ? 'border-danger' : 'border-border'}`}>
                             {courses.map(course => (
-                                <div key={course} className={`rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors ${isEditing ? 'opacity-50 pointer-events-none' : ''}`}>
+                                <div key={course} className="rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
                                     <FormCheckbox
                                         checked={formData.cursos.includes(course)}
                                         onChange={() => toggleCourse(course)}
                                         label={course}
-                                        disabled={isEditing}
                                         className="py-2 px-3 min-h-11 items-center"
                                     />
                                 </div>

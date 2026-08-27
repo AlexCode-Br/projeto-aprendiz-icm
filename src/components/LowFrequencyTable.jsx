@@ -1,7 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import FormSelect from './FormSelect';
-import { EyeIcon } from './icons/index.jsx';
-import Pagination from './Pagination';
 
 const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -24,18 +22,18 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
         return filteredData.slice(startIndex, startIndex + itemsPerPage);
     }, [filteredData, currentPage, itemsPerPage]);
 
-    return (
-        <div className="panel mt-6 overflow-hidden">
-            <div className="p-4 md:p-5 border-b border-border">
-                <h3 className="text-lg font-semibold text-text-default">Alunos com Baixa Frequência (&lt;75%)</h3>
-            </div>
+    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
 
-            <div className="p-4 md:px-5 border-b border-border bg-surface">
+    return (
+        <div className="panel mt-6 overflow-hidden ">
+            <div className="p-4 md:p-6"><h3 className="text-lg font-semibold text-text-default">Alunos com Baixa Frequência (&lt;75%)</h3></div>
+
+            <div className="p-4 md:px-6 border-y border-border bg-surface-muted">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="search-low-frequency" className="form-label">Pesquisar por aluno</label>
                         <input
-                            type="search"
+                            type="text"
                             id="search-low-frequency"
                             placeholder="Nome do aluno..."
                             className="form-control"
@@ -45,43 +43,45 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
                     </div>
                     <div>
                         <label htmlFor="low-frequency-course" className="form-label">Filtrar por curso</label>
-                        <FormSelect
+                         <FormSelect
                             id="low-frequency-course"
                             value={selectedCourse}
                             onChange={(e) => { setSelectedCourse(e.target.value); setCurrentPage(1); }}
                             options={allCourses}
                             placeholder="Todos os Cursos"
-                        />
+                         />
                     </div>
                 </div>
             </div>
 
             <div className="overflow-x-auto">
-                <table className="table-base">
-                    <thead>
+                <table className="w-full text-sm text-left text-text-default">
+                    <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                         <tr>
-                            <th scope="col">Curso</th>
-                            <th scope="col">Aluno</th>
-                            <th scope="col">Frequência</th>
-                            <th scope="col" className="text-right">Ações</th>
+                            <th scope="col" className="px-6 py-3 whitespace-nowrap">Curso</th>
+                            <th scope="col" className="px-6 py-3 whitespace-nowrap">Aluno</th>
+                            <th scope="col" className="px-6 py-3 whitespace-nowrap">Frequência</th>
+                            <th scope="col" className="px-6 py-3 text-center whitespace-nowrap">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {paginatedData.length > 0 ? paginatedData.map(student => (
-                            <tr key={student.contato} className="border-t border-border hover:bg-surface-hover transition-colors">
-                                <td>{student.curso.join(', ')}</td>
-                                <td className="font-medium text-text-default">{student.nome}</td>
-                                <td><span className="badge badge-danger">{student.frequencia}%</span></td>
-                                <td className="text-right">
-                                    <button
-                                        type="button"
-                                        aria-label={`Visualizar ${student.nome}`}
-                                        className="icon-btn"
-                                        title="Visualizar Aluno"
-                                        onClick={() => onSelectStudent(student)}
-                                    >
-                                        <EyeIcon className="w-4 h-4" />
-                                    </button>
+                            <tr key={student.contato} className="border-b border-border hover:bg-surface-hover transition-colors transition-colors duration-200">
+                                <td className="px-6 py-4 font-medium">{student.curso.join(', ')}</td>
+                                <td className="px-6 py-4">{student.nome}</td>
+                                <td className="px-6 py-4"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-danger text-text-inverse">{student.frequencia}%</span></td>
+                                <td className="px-6 py-4">
+                                    <div className="flex items-center justify-center space-x-2">
+                                        <button
+                                            type="button"
+                                            aria-label={`Visualizar ${student.nome}`}
+                                            className="icon-button text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-500/20"
+                                            title="Visualizar Aluno"
+                                            onClick={() => onSelectStudent(student)}
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         )) : (
@@ -90,13 +90,47 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
                     </tbody>
                 </table>
             </div>
-
-            <Pagination
-                currentPage={currentPage}
-                totalItems={filteredData.length}
-                itemsPerPage={itemsPerPage}
-                onPageChange={setCurrentPage}
-            />
+             <div className="flex flex-col gap-4 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+                {totalPages > 1 && (
+                    <>
+                        <div className="flex-1 text-sm text-text-muted">
+                            Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, filteredData.length)} a {Math.min(currentPage * itemsPerPage, filteredData.length)} de {filteredData.length} resultados
+                        </div>
+                        <div className="flex items-center space-x-1">
+                            <button
+                                type="button"
+                                aria-label="Página anterior"
+                                className="icon-button min-h-10 min-w-10 disabled:text-text-muted disabled:cursor-not-allowed"
+                                onClick={() => setCurrentPage(p => p - 1)}
+                                disabled={currentPage === 1}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            {[...Array(totalPages).keys()].map(i => (
+                               <button
+                                    type="button"
+                                    aria-label={`Página ${i + 1}`}
+                                    aria-current={currentPage === i + 1 ? 'page' : undefined}
+                                    key={i + 1}
+                                    className={`min-h-10 min-w-10 rounded-md px-3 py-1 ${currentPage === i + 1 ? 'bg-primary text-white' : 'hover:bg-surface-hover transition-colors'}`}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                >
+                                    {i + 1}
+                                </button>
+                            ))}
+                            <button
+                                type="button"
+                                aria-label="Próxima página"
+                                className="icon-button min-h-10 min-w-10 disabled:text-text-muted disabled:cursor-not-allowed"
+                                onClick={() => setCurrentPage(p => p + 1)}
+                                disabled={currentPage === totalPages}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                    </>
+                )}
+            </div>
         </div>
     );
 };
