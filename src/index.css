@@ -215,6 +215,27 @@
     opacity: 0;
 }
 
+/* Skeleton loading (estados de carregamento) */
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--color-text-muted) 14%, transparent);
+}
+
+.skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-surface) 65%, transparent), transparent);
+    animation: shimmer 1.6s infinite;
+}
+
+@keyframes shimmer {
+    100% { transform: translateX(100%); }
+}
+
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: var(--color-surface-muted); }
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--color-text-muted) 45%, transparent); border-radius: 999px; }
