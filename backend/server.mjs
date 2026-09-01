@@ -1236,6 +1236,52 @@ function scheduleIsPast(date, time) {
   return Boolean(scheduled) && Date.parse(scheduled) < Date.now();
 }
 
+const weekdayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+function zonedTodayDate(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: appTimeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function mostRecentScheduledDate(weekday, startTime, now = new Date()) {
+  if (!weekdayNames.includes(weekday)) return '';
+  const today = zonedTodayDate(now);
+  const base = Date.parse(`${today}T12:00:00Z`);
+  for (let offset = 0; offset < 7; offset += 1) {
+    const candidate = new Date(base - offset * 86_400_000);
+    if (weekdayNames[candidate.getUTCDay()] !== weekday) continue;
+    const date = candidate.toISOString().slice(0, 10);
+    if (offset === 0 && (!startTime || !scheduleIsPast(date, startTime))) continue;
+    return date;
+  }
+  return '';
+}
+
+async function pendingAttendanceForProfessor(userId, period) {
+  if (period.active!==1 || period.closed_at) return [];
+  const classes = await db.prepare(`
+    SELECT classes.id,courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time
+    FROM classes
+    JOIN courses ON courses.id=classes.course_id
+    JOIN locations ON locations.id=classes.location_id
+    JOIN professor_profiles ON professor_profiles.id=classes.professor_id
+    WHERE professor_profiles.user_id=? AND professor_profiles.active=1
+      AND classes.active=1 AND classes.school_year_id=? AND classes.weekday IS NOT NULL
+    ORDER BY courses.name,classes.id
+  `).all(userId,period.id);
+  const pending = [];
+  for (const classRow of classes) {
+    const date = mostRecentScheduledDate(classRow.weekday,classRow.start_time);
+    if (!date) continue;
+    if (period.dates_confirmed===1 && (date<period.start_date || date>period.end_date)) continue;
+    const recorded = await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classRow.id,date);
+    if (!recorded) pending.push({ classId:Number(classRow.id), curso:classRow.curso, local:classRow.local, weekday:classRow.weekday, data:date });
+  }
+  return pending;
+}
+
 function announcementScheduleParts(value) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
     timeZone: appTimeZone,
@@ -2136,7 +2182,7 @@ async function api(request, response, url) {
   if(request.method==='GET'&&url.pathname==='/professores/meus-cursos'){
     const session=await authorize(request,response,['professor']);if(!session)return;
     const period=await selectedSchoolYear(request,response);if(!period)return;
-    const rows=await db.prepare(`SELECT classes.id,courses.name AS nome,locations.name AS local FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=? ORDER BY courses.name`).all(session.user_id,period.id);
+    const rows=await db.prepare(`SELECT classes.id,classes.label,classes.weekday,classes.start_time,courses.name AS nome,locations.name AS local FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=? ORDER BY courses.name,classes.label,locations.name`).all(session.user_id,period.id);
     return json(response,200,rows);
   }
 
@@ -2146,8 +2192,17 @@ async function api(request, response, url) {
     const classId=Number(url.searchParams.get('curso_id')),date=url.searchParams.get('data');
     const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=?`).get(classId,session.user_id,period.id);
     if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||''))||Number.isNaN(Date.parse(`${date}T00:00:00Z`)))return json(response,400,{message:'Informe uma data de aula válida.'});
+    const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
     const rows=await db.prepare(`SELECT students.id,students.name AS nome,attendance_records.status AS status FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' LEFT JOIN attendance_sessions ON attendance_sessions.class_id=enrollments.class_id AND attendance_sessions.class_date=? LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE enrollments.class_id=? AND students.active=1 ORDER BY students.name`).all(date,classId);
-    return json(response,200,rows);
+    return json(response,200,{alunos:rows,registrada:Boolean(attendanceSession)});
+  }
+
+  if(request.method==='GET'&&url.pathname==='/api/frequencia/pendentes'){
+    const session=await authorize(request,response,['professor']);if(!session)return;
+    const period=await selectedSchoolYear(request,response);if(!period)return;
+    const items=await pendingAttendanceForProfessor(session.user_id,period);
+    return json(response,200,{total:items.length,items});
   }
 
   if(request.method==='POST'&&url.pathname==='/frequencia'){
@@ -2155,19 +2210,25 @@ async function api(request, response, url) {
     const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
     const body=await readJson(request),classId=Number(body.curso_id),date=String(body.data_aula||'');
     if(!Number.isInteger(classId)||classId<1||!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(`${date}T00:00:00Z`)))return json(response,400,{message:'Selecione uma turma e uma data válidas.'});
+    if(date>zonedTodayDate())return json(response,400,{message:'Não é possível registrar uma chamada em uma data futura.'});
     if(!Array.isArray(body.frequencias))return json(response,400,{message:'A lista de frequência é inválida.'});
     const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=?`).get(classId,session.user_id,period.id);
     if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
-    await db.prepare(`INSERT INTO attendance_sessions (class_id,class_date,recorded_by) VALUES (?,?,?) ON CONFLICT(class_id,class_date) DO UPDATE SET recorded_by=excluded.recorded_by,updated_at=CURRENT_TIMESTAMP`).run(classId,date,session.user_id);
-    const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
     const enrolled=(await db.prepare("SELECT student_id FROM enrollments WHERE class_id=? AND status='ativa'").all(classId)).map(row=>row.student_id);
     const allowed=new Set(enrolled);
-    for(const item of body.frequencias||[]){
+    const submitted=new Map();
+    for(const item of body.frequencias){
       const studentId=Number(item.aluno_id),status=String(item.status);
-      if(!allowed.has(studentId)||!['presente','ausente','justificado'].includes(status))continue;
-      await db.prepare(`INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?) ON CONFLICT(session_id,student_id) DO UPDATE SET status=excluded.status`).run(attendanceSession.id,studentId,status);
+      if(!allowed.has(studentId)||submitted.has(studentId)||!['presente','ausente','justificado'].includes(status))return json(response,400,{message:'A chamada contém alunos ou estados inválidos.'});
+      submitted.set(studentId,status);
     }
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'attendance_saved',ip);
+    if(submitted.size!==allowed.size)return json(response,400,{message:'A chamada precisa incluir todos os alunos ativos da turma.'});
+    await db.transaction(async()=>{
+      await db.prepare(`INSERT INTO attendance_sessions (class_id,class_date,recorded_by) VALUES (?,?,?) ON CONFLICT(class_id,class_date) DO UPDATE SET recorded_by=excluded.recorded_by,updated_at=CURRENT_TIMESTAMP`).run(classId,date,session.user_id);
+      const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
+      for(const [studentId,status] of submitted)await db.prepare(`INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?) ON CONFLICT(session_id,student_id) DO UPDATE SET status=excluded.status`).run(attendanceSession.id,studentId,status);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'attendance_saved',ip);
+    });
     return json(response,200,{success:true});
   }
 
@@ -2572,7 +2633,8 @@ async function api(request, response, url) {
       ))
     )`).get(session.user_id,session.user_id)).total;
     const ticketsAbertos=(await db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE requester_user_id=? AND status<>'Resolvido'").get(session.user_id)).total;
-    return json(response,200,{stats:{totalAlunos,informativos,ticketsAbertos,frequenciaMedia},proximaAula:proxima?{...proxima,descricao:`${proxima.weekday||'A definir'}, ${proxima.start_time||'horário a definir'}`} : null,periodo:schoolYearView(period)});
+    const chamadasPendentes=await pendingAttendanceForProfessor(session.user_id,period);
+    return json(response,200,{stats:{totalAlunos,informativos,ticketsAbertos,frequenciaMedia,chamadasPendentes:chamadasPendentes.length},chamadasPendentes,proximaAula:proxima?{...proxima,descricao:`${proxima.weekday||'A definir'}, ${proxima.start_time||'horário a definir'}`} : null,periodo:schoolYearView(period)});
   }
 
   if(request.method==='GET'&&url.pathname==='/api/relatorios/opcoes'){

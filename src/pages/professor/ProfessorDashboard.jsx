@@ -8,6 +8,7 @@ const StudentsIcon = () => <svg className="h-6 w-6" fill="none" stroke="currentC
 const BellIcon = () => <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>;
 const CalendarIcon = () => <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>;
 const CheckCircleIcon = () => <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>;
+const ClipboardIcon = () => <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5.25H7.5A2.25 2.25 0 005.25 7.5v12A2.25 2.25 0 007.5 21h9a2.25 2.25 0 002.25-2.25v-12A2.25 2.25 0 0016.5 4.5H15m-6 0A2.25 2.25 0 0111.25 2.25h1.5A2.25 2.25 0 0115 4.5v.75A.75.75 0 0114.25 6h-4.5A.75.75 0 019 5.25V4.5zm.75 8.25 1.5 1.5 3-3" /></svg>;
 const ChevronRightIcon = () => <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>;
 
 
@@ -32,6 +33,7 @@ const ProfessorDashboard = () => {
         totalInformativos: 0,
         proximaAula: 'A definir',
         frequenciaMedia: 'Sem aulas',
+        chamadasPendentes: 0,
     });
     const [recentStudents, setRecentStudents] = useState([]);
     const [informativos, setInformativos] = useState([]);
@@ -55,6 +57,7 @@ const ProfessorDashboard = () => {
                 totalInformativos: summary.stats.informativos,
                 proximaAula: summary.proximaAula?.descricao || 'A definir',
                 frequenciaMedia: summary.stats.frequenciaMedia === null ? 'Sem aulas' : `${summary.stats.frequenciaMedia}%`,
+                chamadasPendentes: summary.stats.chamadasPendentes || 0,
             });
 
             setRecentStudents(studentData.slice(0, 5));
@@ -77,8 +80,8 @@ const ProfessorDashboard = () => {
         <div role="status" aria-label="Carregando painel">
             <div className="skeleton h-9 w-72 max-w-full" />
             <div className="skeleton mt-3 h-4 w-96 max-w-full" />
-            <div className="mt-8 mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-6">
-                {[0, 1, 2, 3].map(i => <div key={i} className="skeleton min-h-32 rounded-xl" />)}
+            <div className="mt-8 mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 xl:gap-6">
+                {[0, 1, 2, 3, 4].map(i => <div key={i} className="skeleton min-h-32 rounded-xl" />)}
             </div>
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
                 <div className="skeleton h-64 rounded-xl" />
@@ -96,11 +99,12 @@ const ProfessorDashboard = () => {
             <p className="page-description mb-8">Aqui está um resumo das suas turmas e atividades.</p>
 
             {/* Grid de Estatísticas */}
-            <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-6">
+            <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5 xl:gap-6">
                 <StatCard icon={<StudentsIcon />} title="Meus Alunos" value={stats.totalAlunos} accent="bg-primary/10 text-primary" to="/professor/alunos" />
                 <StatCard icon={<BellIcon />} title="Avisos/Informativos" value={stats.totalInformativos} accent="bg-gray-500/10 text-text-muted" to="/professor/informativos" />
                 <StatCard icon={<CalendarIcon />} title="Próxima Aula" value={stats.proximaAula} accent="bg-primary/10 text-primary" to="/professor/frequencia" />
                 <StatCard icon={<CheckCircleIcon />} title="Frequência Média" value={stats.frequenciaMedia} accent="bg-gray-500/10 text-text-muted" to="/professor/frequencia" />
+                <StatCard icon={<ClipboardIcon />} title="Chamadas pendentes" value={stats.chamadasPendentes} accent={stats.chamadasPendentes ? 'bg-warning/15 text-warning' : 'bg-gray-500/10 text-text-muted'} to="/professor/frequencia" />
             </div>
 
             {/* Grid de Alunos Recentes e Informativos */}
@@ -118,7 +122,7 @@ const ProfessorDashboard = () => {
                             <li key={student.id} className="p-4 flex items-center justify-between hover:bg-surface-hover transition-colors">
                                 <div>
                                     <p className="font-medium text-text-default">{student.nome}</p>
-                                    <p className="text-sm text-text-muted">{student.email}</p>
+                                    <p className="text-sm text-text-muted">{student.email || 'E-mail não informado'}</p>
                                 </div>
                                 <span className="text-xs text-text-muted">{new Date(student.created_at).toLocaleDateString()}</span>
                             </li>
