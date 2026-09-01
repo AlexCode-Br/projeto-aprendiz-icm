@@ -1,6 +1,72 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 
 const DEFAULT_SWEEP_INTERVAL = 256;
+const scrypt = promisify(scryptCallback);
+
+export const sha256 = value => createHash('sha256').update(value).digest('hex');
+export const strongPassword = value => typeof value === 'string' && value.length >= 10 && /[A-Z]/.test(value) && /[a-z]/.test(value) && /\d/.test(value) && /[^A-Za-z0-9]/.test(value);
+
+export async function hashPassword(password) {
+  const salt = randomBytes(16);
+  const derived = await scrypt(password, salt, 64);
+  return `scrypt$${salt.toString('hex')}$${Buffer.from(derived).toString('hex')}`;
+}
+
+export async function verifyPassword(password, encoded) {
+  const [, saltHex, hashHex] = String(encoded).split('$');
+  if (!saltHex || !hashHex) return false;
+  const derived = Buffer.from(await scrypt(password, Buffer.from(saltHex, 'hex'), 64));
+  const expected = Buffer.from(hashHex, 'hex');
+  return derived.length === expected.length && timingSafeEqual(derived, expected);
+}
+
+export async function readJson(request, maxBytes = 32768) {
+  let body = '';
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > maxBytes) throw new Error('PAYLOAD_TOO_LARGE');
+  }
+  return body ? JSON.parse(body) : {};
+}
+
+export function createHttpSecurity({ isProduction, appOrigin }) {
+  function cookies(request) {
+    return Object.fromEntries(String(request.headers.cookie || '').split(';').map(value => value.trim().split('=').map(decodeURIComponent)).filter(pair => pair.length === 2));
+  }
+
+  function cookie(name, value, maxAge = 0) {
+    return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${isProduction ? '; Secure' : ''}`;
+  }
+
+  function securityHeaders(contentType = 'application/json; charset=utf-8') {
+    const connectSources = ["'self'"];
+    if (process.env.SUPABASE_URL) connectSources.push(new URL(process.env.SUPABASE_URL).origin);
+    const headers = {
+      'Content-Type': contentType,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'no-referrer',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ${connectSources.join(' ')}; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+      'Cache-Control': 'no-store',
+    };
+    if (isProduction) headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
+    return headers;
+  }
+
+  function json(response, status, data, extra = {}) {
+    response.writeHead(status, { ...securityHeaders(), ...extra });
+    response.end(JSON.stringify(data));
+  }
+
+  function originAllowed(request) {
+    const origin = request.headers.origin;
+    return !origin || origin === appOrigin;
+  }
+
+  return { cookies, cookie, securityHeaders, json, originAllowed };
+}
 
 export function opaqueRateLimitKey(namespace, value) {
   const normalizedNamespace = String(namespace || 'request').trim().toLowerCase();
@@ -57,4 +123,3 @@ export function createSlidingWindowRateLimiter({ clock = () => Date.now(), sweep
     },
   };
 }
-
