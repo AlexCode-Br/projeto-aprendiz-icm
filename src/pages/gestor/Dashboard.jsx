@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import StatCard from '../../components/StatCard';
 import EnrollmentOverviewChart from '../../components/charts/EnrollmentOverviewChart.jsx';
 import RecentActivities from '../../components/RecentActivities';
 import LowFrequencyTable from '../../components/LowFrequencyTable.jsx';
 import StudentDetailsModal from '../../components/StudentDetailsModal.jsx';
+import AtRiskStudentsTable from '../../components/AtRiskStudentsTable.jsx';
+import StudentContactModal from '../../components/StudentContactModal.jsx';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -28,17 +30,26 @@ const SuporteIcon = () => (
         <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
     </svg>
 );
+const RiscoIcon = () => (
+    <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.052 3.38c.865-1.5 3.03-1.5 3.896 0l7.355 12.746zM12 16.5h.008v.008H12V16.5z" /></svg>
+);
 
 const Dashboard = () => {
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [dashboard, setDashboard] = useState({ stats: {}, inscricoesPorCurso: [], ultimasInscricoes: [], baixaFrequencia: [] });
+    const [contactStudent, setContactStudent] = useState(null);
+    const [dashboard, setDashboard] = useState({ stats: {}, inscricoesPorCurso: [], ultimasInscricoes: [], baixaFrequencia: [], alunosRisco: [] });
     const [loading, setLoading] = useState(true);
     const { showToast } = useToast();
 
-    useEffect(() => {
-        api.get('/api/dashboard/gestor').then(({ data }) => setDashboard(data)).catch(error => showToast(error.message, 'error')).finally(() => setLoading(false));
+    const fetchDashboard = useCallback(async () => {
+        setLoading(true);
+        try { const { data } = await api.get('/api/dashboard/gestor'); setDashboard(data); }
+        catch (error) { showToast(error.message, 'error'); }
+        finally { setLoading(false); }
     }, [showToast]);
+
+    useEffect(() => { fetchDashboard(); }, [fetchDashboard]);
 
     const handleSelectStudent = (student) => {
         setSelectedStudent(student);
@@ -50,18 +61,34 @@ const Dashboard = () => {
         setSelectedStudent(null);
     };
 
+    const handleSaveContact = async values => {
+        if (!contactStudent) return;
+        try {
+            await api.post(`/api/alunos/${contactStudent.id}/contatos`, values);
+            showToast('Contato registrado com sucesso!', 'success');
+            setContactStudent(null);
+            await fetchDashboard();
+        } catch (error) {
+            showToast(error.response?.data?.message || error.message || 'Erro ao registrar o contato.', 'error');
+            throw error;
+        }
+    };
+
     return (
         <>
             <div className="page-header">
                 <div><h1 className="page-title">Visão geral</h1><p className="page-description">Acompanhe inscrições, turmas, equipe e frequência em um só lugar.</p></div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 sm:gap-6">
                 <StatCard to="/gestor/alunos" title="Total de Alunos" value={dashboard.stats.totalAlunos} loading={loading} icon={<AlunosIcon />} colorClass="primary" delay="100" />
                 <StatCard to="/gestor/cursos" title="Turmas Ativas" value={dashboard.stats.cursosAtivos} loading={loading} icon={<TurmasIcon />} colorClass="neutral" delay="200" />
                 <StatCard to="/gestor/professores" title="Professores" value={dashboard.stats.professores} loading={loading} icon={<ProfessoresIcon />} colorClass="primary" delay="300" />
                 <StatCard to="/gestor/suporte" title="Tickets Pendentes" value={dashboard.stats.ticketsPendentes} loading={loading} icon={<SuporteIcon />} colorClass="warning" delay="400" />
+                <StatCard to="#alunos-em-risco" title="Alunos em risco" value={dashboard.stats.alunosRisco} loading={loading} icon={<RiscoIcon />} colorClass="warning" delay="500" />
             </div>
+
+            <div id="alunos-em-risco"><AtRiskStudentsTable students={dashboard.alunosRisco} loading={loading} onRegisterContact={setContactStudent} /></div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-6">
                 <div className="panel p-4 md:p-6 xl:col-span-2">
@@ -80,6 +107,7 @@ const Dashboard = () => {
                 isOpen={isModalOpen}
                 onClose={handleCloseModal}
             />
+            <StudentContactModal student={contactStudent} isOpen={Boolean(contactStudent)} onClose={() => setContactStudent(null)} onSave={handleSaveContact} />
         </>
     );
 };

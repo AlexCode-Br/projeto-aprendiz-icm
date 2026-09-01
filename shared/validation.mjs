@@ -115,6 +115,16 @@ export function validateClassDetails(values) {
   return errors;
 }
 
+export const STUDENT_CONTACT_OUTCOMES = ['contatado', 'sem_resposta', 'retorno_agendado', 'outro'];
+
+export function validateStudentContact(values) {
+  const errors = {};
+  const note = cleanText(values.note, 1000);
+  if (note.length < 3) errors.note = 'Descreva o contato em pelo menos 3 caracteres.';
+  if (!STUDENT_CONTACT_OUTCOMES.includes(values.outcome)) errors.outcome = 'Selecione um resultado válido para o contato.';
+  return errors;
+}
+
 export function validateSchoolYear(values) {
   const errors = {};
   const label = cleanText(values.label, 40);

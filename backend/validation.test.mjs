@@ -9,6 +9,7 @@ import {
   validateStudent,
   validateClassSchedule,
   validateClassDetails,
+  validateStudentContact,
   validateSchoolYear,
   validateSupportTicket,
   supportClientMessageIdError,
@@ -91,6 +92,12 @@ test('valida dia e horário da turma como um único agendamento opcional', () =>
   assert.equal(validateClassSchedule({ weekday: 'Feriado', start_time: '25:99' }).weekday, 'Selecione um dia da semana válido.');
   assert.deepEqual(validateClassDetails({ weekday: 'Sábado', start_time: '09:00', label: 'Turma A', capacity: 25 }), {});
   assert.match(validateClassDetails({ weekday: '', start_time: '', label: 'Turma A', capacity: 0 }).capacity, /entre 1 e 500/);
+});
+
+test('valida o registro de contato com aluno em risco', () => {
+  assert.deepEqual(validateStudentContact({ note: 'Responsável confirmou retorno.', outcome: 'retorno_agendado' }), {});
+  assert.ok(validateStudentContact({ note: 'x', outcome: 'qualquer' }).note);
+  assert.ok(validateStudentContact({ note: 'x', outcome: 'qualquer' }).outcome);
 });
 
 test('valida período letivo por intervalo de datas, inclusive entre anos civis', () => {

@@ -23,6 +23,7 @@ import {
   validateSupportTicket,
   supportMessageError,
   supportClientMessageIdError,
+  validateStudentContact,
   SUPPORT_CATEGORIES,
   SUPPORT_STATUSES,
 } from '../shared/validation.mjs';
@@ -301,6 +302,16 @@ if (db.dialect === 'sqlite') await db.exec(`
     occurred_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS student_contacts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    note TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK(outcome IN ('contatado','sem_resposta','retorno_agendado','outro')),
+    contacted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS student_contacts_student_date_idx ON student_contacts(student_id,contacted_at DESC,id DESC);
+  CREATE INDEX IF NOT EXISTS student_contacts_user_id_idx ON student_contacts(user_id);
 `);
 if (db.dialect === 'sqlite') {
   const userColumns = await db.prepare('PRAGMA table_info(users)').all();
@@ -990,6 +1001,60 @@ const studentSelect = `
   LEFT JOIN locations ON locations.id=classes.location_id
 `;
 
+async function atRiskStudents(schoolYearId) {
+  const rows=await db.prepare(`
+    SELECT students.id AS student_id,students.name,students.email,students.phone,students.guardian_phone,students.age_group,
+      churches.name AS church_name,classes.id AS class_id,courses.name AS course_name,locations.name AS location_name,
+      attendance_sessions.class_date,attendance_sessions.id AS session_id,attendance_records.status
+    FROM enrollments
+    JOIN students ON students.id=enrollments.student_id AND students.active=1
+    JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=?
+    JOIN courses ON courses.id=classes.course_id
+    JOIN locations ON locations.id=classes.location_id
+    LEFT JOIN churches ON churches.id=students.church_id
+    JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
+    LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id
+    WHERE enrollments.status='ativa'
+    ORDER BY students.id,classes.id,attendance_sessions.class_date DESC,attendance_sessions.id DESC
+  `).all(schoolYearId);
+  const streaks=new Map();
+  for(const row of rows){
+    const key=`${row.student_id}:${row.class_id}`;
+    if(!streaks.has(key))streaks.set(key,{...row,consecutive:0,absenceDates:[],closed:false});
+    const streak=streaks.get(key);
+    if(streak.closed)continue;
+    if(row.status==='ausente'){
+      streak.consecutive+=1;
+      streak.absenceDates.push(row.class_date);
+    }else streak.closed=true;
+  }
+  const students=new Map();
+  for(const streak of streaks.values()){
+    if(streak.consecutive<2)continue;
+    if(!students.has(streak.student_id))students.set(streak.student_id,{
+      id:Number(streak.student_id),nome:streak.name,contato:streak.email||'',telefone:streak.phone||'',guardian_phone:streak.guardian_phone||'',classe:streak.age_group||'',igreja:streak.church_name||'',faltasConsecutivas:0,ultimaFalta:'',turmas:[],ultimoContato:null,
+    });
+    const student=students.get(streak.student_id);
+    student.faltasConsecutivas=Math.max(student.faltasConsecutivas,streak.consecutive);
+    if(!student.ultimaFalta||streak.absenceDates[0]>student.ultimaFalta)student.ultimaFalta=streak.absenceDates[0];
+    student.turmas.push({id:Number(streak.class_id),curso:streak.course_name,local:streak.location_name,faltasConsecutivas:streak.consecutive});
+  }
+  const result=[...students.values()].sort((a,b)=>b.faltasConsecutivas-a.faltasConsecutivas||a.nome.localeCompare(b.nome,'pt-BR'));
+  if(result.length){
+    const ids=result.map(student=>student.id),contacts=await db.prepare(`
+      SELECT student_contacts.*,users.name AS user_name
+      FROM student_contacts JOIN users ON users.id=student_contacts.user_id
+      WHERE student_contacts.student_id IN (${ids.map(()=>'?').join(',')})
+      ORDER BY student_contacts.contacted_at DESC,student_contacts.id DESC
+    `).all(...ids),latest=new Map();
+    for(const contact of contacts)if(!latest.has(Number(contact.student_id)))latest.set(Number(contact.student_id),{
+      id:Number(contact.id),note:contact.note,outcome:contact.outcome,contactedAt:contact.contacted_at,registeredBy:contact.user_name,
+    });
+    for(const student of result)student.ultimoContato=latest.get(student.id)||null;
+  }
+  return result;
+}
+
 const supportStatusFromDatabase = status => status === 'Pendente' ? 'Em atendimento' : status;
 const supportStatusToDatabase = status => status === 'Em atendimento' ? 'Pendente' : status;
 const supportWaitingFor = role => role === 'professor' ? 'Gestor' : role === 'gestor' ? 'Professor' : '';
@@ -1669,6 +1734,34 @@ async function api(request, response, url) {
     if(!result.changes)return json(response,404,{message:'Igreja não encontrada.'});
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_deactivated',ip);
     return json(response,200,{success:true});
+  }
+
+  if(request.method==='GET'&&url.pathname==='/api/alunos/risco'){
+    if(!await authorize(request,response,['gestor']))return;
+    const period=await selectedSchoolYear(request,response);if(!period)return;
+    const alunos=await atRiskStudents(period.id);
+    return json(response,200,{alunos,total:alunos.length,periodo:schoolYearView(period)});
+  }
+  const studentContactMatch=url.pathname.match(/^\/api\/alunos\/(\d+)\/contatos$/);
+  if(studentContactMatch&&request.method==='GET'){
+    if(!await authorize(request,response,['gestor']))return;
+    const studentId=Number(studentContactMatch[1]);
+    const rows=await db.prepare(`SELECT student_contacts.id,student_contacts.note,student_contacts.outcome,student_contacts.contacted_at,users.name AS registered_by FROM student_contacts JOIN users ON users.id=student_contacts.user_id WHERE student_contacts.student_id=? ORDER BY student_contacts.contacted_at DESC,student_contacts.id DESC LIMIT 50`).all(studentId);
+    return json(response,200,rows.map(row=>({id:Number(row.id),note:row.note,outcome:row.outcome,contactedAt:row.contacted_at,registeredBy:row.registered_by})));
+  }
+  if(studentContactMatch&&request.method==='POST'){
+    const session=await authorize(request,response,['gestor']);if(!session)return;
+    const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
+    const studentId=Number(studentContactMatch[1]),body=await readJson(request),values={note:cleanText(body.note,1000),outcome:cleanText(body.outcome,30)},errors=validateStudentContact(values);
+    if(hasValidationErrors(errors))return invalid(response,errors);
+    const student=await db.prepare("SELECT students.id FROM students JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE students.id=? AND students.active=1 AND enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? LIMIT 1").get(studentId,period.id);
+    if(!student)return json(response,404,{message:'Aluno ativo não encontrado neste período.'});
+    const result=await db.transaction(async()=>{
+      const inserted=await db.prepare('INSERT INTO student_contacts (student_id,user_id,note,outcome) VALUES (?,?,?,?)').run(studentId,session.user_id,values.note,values.outcome);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_contact_registered',ip);
+      return inserted;
+    });
+    return json(response,201,{id:Number(result.lastInsertRowid),success:true});
   }
 
   if (request.method === 'GET' && url.pathname === '/alunos') {
@@ -2613,10 +2706,12 @@ async function api(request, response, url) {
       professores:(await db.prepare('SELECT COUNT(DISTINCT professor_id) AS total FROM classes WHERE active=1 AND school_year_id=?').get(period.id)).total,
       ticketsPendentes:(await db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE status<>'Resolvido'").get()).total,
     };
+    const alunosRisco=await atRiskStudents(period.id);
+    stats.alunosRisco=alunosRisco.length;
     const inscricoesPorCurso=await db.prepare("SELECT courses.name AS curso,COUNT(enrollments.id) AS total FROM courses LEFT JOIN classes ON classes.course_id=courses.id AND classes.active=1 AND classes.school_year_id=? LEFT JOIN enrollments ON enrollments.class_id=classes.id AND enrollments.status='ativa' WHERE courses.active=1 GROUP BY courses.id ORDER BY total DESC,courses.name").all(period.id);
     const ultimasInscricoes=await db.prepare("SELECT students.name AS nome,courses.name AS curso,locations.name AS local,enrollments.enrolled_at FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.status='ativa' AND classes.school_year_id=? ORDER BY enrollments.enrolled_at DESC,enrollments.id DESC LIMIT 6").all(period.id);
     const baixaFrequencia=(await db.prepare(`SELECT students.id,students.name AS nome,students.email AS contato,students.phone AS telefone,churches.name AS igreja,students.age_group AS classe,students.has_instrument,courses.name AS curso,locations.name AS local,ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0)) AS frequencia FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN students ON students.id=attendance_records.student_id LEFT JOIN churches ON churches.id=students.church_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE students.active=1 AND classes.school_year_id=? GROUP BY students.id,classes.id,churches.name,courses.name,locations.name HAVING ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0))<75 ORDER BY frequencia,students.name`).all(period.id)).map(row=>({...row,curso:[row.curso],instrumento:row.has_instrument?'Sim':'Não',status:'Ativo'}));
-    return json(response,200,{stats,inscricoesPorCurso,ultimasInscricoes,baixaFrequencia,periodo:schoolYearView(period)});
+    return json(response,200,{stats,inscricoesPorCurso,ultimasInscricoes,baixaFrequencia,alunosRisco,periodo:schoolYearView(period)});
   }
   if(request.method==='GET'&&url.pathname==='/api/dashboard/professor'){
     const session=await authorize(request,response,['professor']);if(!session)return;
