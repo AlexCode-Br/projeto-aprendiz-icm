@@ -9,7 +9,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     const userRole = user?.role || 'gestor';
     const [supportUnread,setSupportUnread]=useState(0);
     const [announcementUnread,setAnnouncementUnread]=useState(0);
-    const [attendancePending,setAttendancePending]=useState(0);
 
     const [isCollapsed, setIsCollapsed] = useState(() => {
         return localStorage.getItem('sidebarCollapsed') === 'true';
@@ -30,12 +29,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         catch { setAnnouncementUnread(0); }
     },[userRole]);
 
-    const refreshAttendancePending=useCallback(async()=>{
-        if(userRole!=='professor'){setAttendancePending(0);return;}
-        try { const response=await api.get('/api/frequencia/pendentes');setAttendancePending(Number(response.data.total||0)); }
-        catch { setAttendancePending(0); }
-    },[userRole]);
-
     useEffect(()=>{
         refreshSupportUnread();
         const interval=setInterval(refreshSupportUnread,30000);
@@ -51,14 +44,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         window.addEventListener('announcements:updated',refreshAnnouncementUnread);
         return()=>{clearInterval(interval);window.removeEventListener('focus',refreshAnnouncementUnread);window.removeEventListener('announcements:updated',refreshAnnouncementUnread);};
     },[refreshAnnouncementUnread]);
-
-    useEffect(()=>{
-        refreshAttendancePending();
-        const interval=setInterval(refreshAttendancePending,30000);
-        window.addEventListener('focus',refreshAttendancePending);
-        window.addEventListener('attendance:updated',refreshAttendancePending);
-        return()=>{clearInterval(interval);window.removeEventListener('focus',refreshAttendancePending);window.removeEventListener('attendance:updated',refreshAttendancePending);};
-    },[refreshAttendancePending]);
 
     const navLinks = [
         { path: "/dashboard", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>, label: "Dashboard", role: ['gestor', 'professor'] },
@@ -76,7 +61,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>,
             label: 'Frequência',
             role: ['professor'],
-            unread: attendancePending,
         });
     }
 

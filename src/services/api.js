@@ -1,6 +1,5 @@
 let csrfToken = '';
 let accessToken = '';
-let schoolYearId = '';
 
 async function request(method, url, body, options = {}) {
   const response = await fetch(url, {
@@ -10,7 +9,6 @@ async function request(method, url, body, options = {}) {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-      ...(schoolYearId ? { 'X-School-Year-Id': schoolYearId } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -36,7 +34,6 @@ const api = {
   defaults: { headers: {} },
   setCsrfToken(value) { csrfToken = value || ''; },
   setAccessToken(value) { accessToken = value || ''; },
-  setSchoolYearId(value) { schoolYearId = value ? String(value) : ''; },
   get(url, config) { return request('GET', withQuery(url, config)); },
   post(url, body, config) { return request('POST', url, normalizeBody(body), config); },
   put(url, body, config) { return request('PUT', url, normalizeBody(body), config); },

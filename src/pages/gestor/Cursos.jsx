@@ -185,7 +185,7 @@ const Cursos = () => {
                                 <th scope="col" className="px-6 py-3">Igreja</th>
                                 <th scope="col" className="px-6 py-3">Professor</th>
                                 <th scope="col" className="px-6 py-3">Horário</th>
-                                <th scope="col" className="px-6 py-3 text-center">Ocupação</th>
+                                <th scope="col" className="px-6 py-3 text-center">Alunos</th>
                                 <th scope="col" className="px-6 py-3 text-center">Status</th>
                                 <th scope="col" className="px-6 py-3 text-center">Ações</th>
                             </tr>
@@ -193,13 +193,13 @@ const Cursos = () => {
                         <tbody>
                             {filteredCursos.map(curso => (
                                 <tr key={curso.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-                                    <td className="px-6 py-4 font-medium">{curso.nome}{curso.label && curso.label !== `${curso.nome} — ${curso.local}` && <span className="mt-1 block text-xs font-normal text-text-muted">{curso.label}</span>}</td>
+                                    <td className="px-6 py-4 font-medium">{curso.nome}</td>
                                     <td className="px-6 py-4">{curso.local}</td>
                                     <td className="px-6 py-4">{curso.professor}</td>
                                     <td className="px-6 py-4 text-xs">
                                         {curso.weekday ? `${curso.weekday} às ${curso.start_time || '--:--'}` : 'A definir'}
                                     </td>
-                                    <td className="px-6 py-4 text-center">{curso.capacity ? `${curso.alunos} / ${curso.capacity}` : `${curso.alunos} / sem limite`}</td>
+                                    <td className="px-6 py-4 text-center">{curso.alunos}</td>
                                     <td className="px-6 py-4 text-center">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${curso.status === 'Ativo' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                                             {curso.status}
@@ -248,7 +248,7 @@ const Cursos = () => {
                 onClose={() => setCatalogToDelete(null)}
                 onConfirm={handleDeleteCatalog}
                 title={`Excluir definitivamente ${catalogToDelete?.type === 'cursos' ? 'curso' : 'igreja'}?`}
-                message={catalogToDelete ? `Esta ação é irreversível. “${catalogToDelete.item.nome}”, ${catalogToDelete.item.turmas} turma(s), ${catalogToDelete.item.matriculas} matrícula(s) e ${catalogToDelete.item.frequencias} frequência(s) vinculadas serão apagadas. Os alunos e professores permanecerão cadastrados.` : ''}
+                message={catalogToDelete ? `Esta ação é irreversível. “${catalogToDelete.item.nome}”, ${catalogToDelete.item.turmas} turma(s) e ${catalogToDelete.item.matriculas} matrícula(s) vinculadas serão apagadas. Os alunos e professores permanecerão cadastrados.` : ''}
                 confirmLabel="Excluir definitivamente"
                 loading={isDeletingCatalog}
             />

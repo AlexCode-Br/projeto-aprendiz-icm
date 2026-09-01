@@ -5,24 +5,36 @@ export function createDashboardRoutes(context) {
     authorize,
     schoolYearView,
     selectedSchoolYear,
-    atRiskStudents,
-    pendingAttendanceForProfessor,
     announcementScheduledCondition,
-    managerDecisionMetrics,
-    pendingAttendance,
   } = context;
 
   return async function dashboardRoutes(request, response, url) {
       if(request.method==='GET'&&url.pathname==='/api/dashboard/gestor'){
         if(!await authorize(request,response,['gestor']))return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
-        const alunosRisco=await atRiskStudents(period.id);
-        const [decisionMetrics,chamadasPendentes]=await Promise.all([managerDecisionMetrics(period),pendingAttendance(period)]);
-        const stats={...decisionMetrics,alunosRisco:alunosRisco.length,chamadasPendentes:chamadasPendentes.length};
-        const inscricoesPorCurso=await db.prepare("SELECT courses.name AS curso,COUNT(enrollments.id) AS total FROM courses LEFT JOIN classes ON classes.course_id=courses.id AND classes.active=1 AND classes.school_year_id=? LEFT JOIN enrollments ON enrollments.class_id=classes.id AND enrollments.status='ativa' WHERE courses.active=1 GROUP BY courses.id ORDER BY total DESC,courses.name").all(period.id);
-        const ultimasInscricoes=await db.prepare("SELECT students.name AS nome,courses.name AS curso,locations.name AS local,enrollments.enrolled_at FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.status='ativa' AND classes.school_year_id=? ORDER BY enrollments.enrolled_at DESC,enrollments.id DESC LIMIT 6").all(period.id);
-        const baixaFrequencia=(await db.prepare(`SELECT students.id,students.name AS nome,students.email AS contato,students.phone AS telefone,churches.name AS igreja,students.age_group AS classe,students.has_instrument,courses.name AS curso,locations.name AS local,ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0)) AS frequencia FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN students ON students.id=attendance_records.student_id LEFT JOIN churches ON churches.id=students.church_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE students.active=1 AND classes.school_year_id=? GROUP BY students.id,classes.id,churches.name,courses.name,locations.name HAVING ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0))<75 ORDER BY frequencia,students.name`).all(period.id)).map(row=>({...row,curso:[row.curso],instrumento:row.has_instrument?'Sim':'Não',status:'Ativo'}));
-        return json(response,200,{stats,inscricoesPorCurso,ultimasInscricoes,baixaFrequencia,alunosRisco,chamadasPendentes,periodo:schoolYearView(period)});
+        const [totalAlunos,cursosAtivos,professores,ticketsPendentes,alunosPorTurma,ultimasInscricoes]=await Promise.all([
+          db.prepare("SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 WHERE students.active=1 AND classes.school_year_id=?").get(period.id),
+          db.prepare('SELECT COUNT(*) AS total FROM classes WHERE active=1 AND school_year_id=?').get(period.id),
+          db.prepare('SELECT COUNT(DISTINCT professor_profiles.id) AS total FROM professor_profiles JOIN classes ON classes.professor_id=professor_profiles.id WHERE professor_profiles.active=1 AND classes.active=1 AND classes.school_year_id=?').get(period.id),
+          db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE status<>'Resolvido'").get(),
+          db.prepare(`SELECT classes.id,
+            COALESCE(NULLIF(classes.label,''),courses.name || ' — ' || locations.name) AS curso,
+            COUNT(DISTINCT CASE WHEN enrollments.status='ativa' AND students.active=1 THEN students.id END) AS total
+            FROM classes
+            JOIN courses ON courses.id=classes.course_id
+            JOIN locations ON locations.id=classes.location_id
+            LEFT JOIN enrollments ON enrollments.class_id=classes.id
+            LEFT JOIN students ON students.id=enrollments.student_id
+            WHERE classes.active=1 AND classes.school_year_id=?
+            GROUP BY classes.id,classes.label,courses.name,locations.name
+            ORDER BY total DESC,courses.name,locations.name`).all(period.id),
+          db.prepare("SELECT students.name AS nome,courses.name AS curso,locations.name AS local,enrollments.enrolled_at FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.status='ativa' AND students.active=1 AND classes.active=1 AND classes.school_year_id=? ORDER BY enrollments.enrolled_at DESC,enrollments.id DESC LIMIT 6").all(period.id),
+        ]);
+        return json(response,200,{
+          stats:{totalAlunos:Number(totalAlunos.total||0),cursosAtivos:Number(cursosAtivos.total||0),professores:Number(professores.total||0),ticketsPendentes:Number(ticketsPendentes.total||0)},
+          alunosPorTurma:alunosPorTurma.map(row=>({...row,id:Number(row.id),total:Number(row.total||0)})),
+          ultimasInscricoes,
+        });
       }
       if(request.method==='GET'&&url.pathname==='/api/dashboard/professor'){
         const session=await authorize(request,response,['professor']);if(!session)return;
@@ -39,10 +51,8 @@ export function createDashboardRoutes(context) {
           ))
         )`).get(session.user_id,session.user_id)).total;
         const ticketsAbertos=(await db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE requester_user_id=? AND status<>'Resolvido'").get(session.user_id)).total;
-        const chamadasPendentes=await pendingAttendanceForProfessor(session.user_id,period);
-        return json(response,200,{stats:{totalAlunos,informativos,ticketsAbertos,frequenciaMedia,chamadasPendentes:chamadasPendentes.length},chamadasPendentes,proximaAula:proxima?{...proxima,descricao:`${proxima.weekday||'A definir'}, ${proxima.start_time||'horário a definir'}`} : null,periodo:schoolYearView(period)});
+        return json(response,200,{stats:{totalAlunos,informativos,ticketsAbertos,frequenciaMedia},proximaAula:proxima?{...proxima,descricao:`${proxima.weekday||'A definir'}, ${proxima.start_time||'horário a definir'}`} : null,periodo:schoolYearView(period)});
       }
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

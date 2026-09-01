@@ -17,7 +17,6 @@ import {
 } from './security.mjs';
 import { createApiHandler } from './routes/index.mjs';
 import { createEmailService } from './email.mjs';
-import { createNotificationJobs, startNotificationScheduler } from './jobs.mjs';
 import { createStructuredLogger } from './logger.mjs';
 import {
   ANNOUNCEMENT_ATTACHMENT_TOTAL_BYTES,
@@ -841,13 +840,6 @@ async function professorDeletionImpact(professorId) {
     JOIN classes ON classes.id=enrollments.class_id
     WHERE classes.professor_id=?
   `).get(professorId);
-  const attendanceSummary = await db.prepare(`
-    SELECT COUNT(*) AS total FROM attendance_records
-    JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id
-    JOIN classes ON classes.id=attendance_sessions.class_id
-    WHERE classes.professor_id=?
-  `).get(professorId);
-
   return {
     professor: {
       id: professor.id,
@@ -861,7 +853,6 @@ async function professorDeletionImpact(professorId) {
       locais: new Set(classes.map(row => row.local)).size,
       alunosAtivos: Number(studentSummary?.total || 0),
       matriculas: Number(enrollmentSummary?.total || 0),
-      frequencias: Number(attendanceSummary?.total || 0),
     },
     turmas: classes.map(row => ({
       id: row.id,
@@ -960,60 +951,6 @@ const studentSelect = `
   LEFT JOIN courses ON courses.id=classes.course_id
   LEFT JOIN locations ON locations.id=classes.location_id
 `;
-
-async function atRiskStudents(schoolYearId) {
-  const rows=await db.prepare(`
-    SELECT students.id AS student_id,students.name,students.email,students.phone,students.guardian_phone,students.age_group,
-      churches.name AS church_name,classes.id AS class_id,courses.name AS course_name,locations.name AS location_name,
-      attendance_sessions.class_date,attendance_sessions.id AS session_id,attendance_records.status
-    FROM enrollments
-    JOIN students ON students.id=enrollments.student_id AND students.active=1
-    JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=?
-    JOIN courses ON courses.id=classes.course_id
-    JOIN locations ON locations.id=classes.location_id
-    LEFT JOIN churches ON churches.id=students.church_id
-    JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
-    LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id
-    WHERE enrollments.status='ativa'
-    ORDER BY students.id,classes.id,attendance_sessions.class_date DESC,attendance_sessions.id DESC
-  `).all(schoolYearId);
-  const streaks=new Map();
-  for(const row of rows){
-    const key=`${row.student_id}:${row.class_id}`;
-    if(!streaks.has(key))streaks.set(key,{...row,consecutive:0,absenceDates:[],closed:false});
-    const streak=streaks.get(key);
-    if(streak.closed)continue;
-    if(row.status==='ausente'){
-      streak.consecutive+=1;
-      streak.absenceDates.push(row.class_date);
-    }else streak.closed=true;
-  }
-  const students=new Map();
-  for(const streak of streaks.values()){
-    if(streak.consecutive<2)continue;
-    if(!students.has(streak.student_id))students.set(streak.student_id,{
-      id:Number(streak.student_id),nome:streak.name,contato:streak.email||'',telefone:streak.phone||'',guardian_phone:streak.guardian_phone||'',classe:streak.age_group||'',igreja:streak.church_name||'',faltasConsecutivas:0,ultimaFalta:'',turmas:[],ultimoContato:null,
-    });
-    const student=students.get(streak.student_id);
-    student.faltasConsecutivas=Math.max(student.faltasConsecutivas,streak.consecutive);
-    if(!student.ultimaFalta||streak.absenceDates[0]>student.ultimaFalta)student.ultimaFalta=streak.absenceDates[0];
-    student.turmas.push({id:Number(streak.class_id),curso:streak.course_name,local:streak.location_name,faltasConsecutivas:streak.consecutive});
-  }
-  const result=[...students.values()].sort((a,b)=>b.faltasConsecutivas-a.faltasConsecutivas||a.nome.localeCompare(b.nome,'pt-BR'));
-  if(result.length){
-    const ids=result.map(student=>student.id),contacts=await db.prepare(`
-      SELECT student_contacts.*,users.name AS user_name
-      FROM student_contacts JOIN users ON users.id=student_contacts.user_id
-      WHERE student_contacts.student_id IN (${ids.map(()=>'?').join(',')})
-      ORDER BY student_contacts.contacted_at DESC,student_contacts.id DESC
-    `).all(...ids),latest=new Map();
-    for(const contact of contacts)if(!latest.has(Number(contact.student_id)))latest.set(Number(contact.student_id),{
-      id:Number(contact.id),note:contact.note,outcome:contact.outcome,contactedAt:contact.contacted_at,registeredBy:contact.user_name,
-    });
-    for(const student of result)student.ultimoContato=latest.get(student.id)||null;
-  }
-  return result;
-}
 
 const supportStatusFromDatabase = status => status === 'Pendente' ? 'Em atendimento' : status;
 const supportStatusToDatabase = status => status === 'Em atendimento' ? 'Pendente' : status;
@@ -1128,92 +1065,11 @@ function scheduleIsPast(date, time) {
   return Boolean(scheduled) && Date.parse(scheduled) < Date.now();
 }
 
-const weekdayNames = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
-
 function zonedTodayDate(now = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
     timeZone: appTimeZone, year: 'numeric', month: '2-digit', day: '2-digit',
   }).formatToParts(now).filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function mostRecentScheduledDate(weekday, startTime, now = new Date()) {
-  if (!weekdayNames.includes(weekday)) return '';
-  const today = zonedTodayDate(now);
-  const base = Date.parse(`${today}T12:00:00Z`);
-  for (let offset = 0; offset < 7; offset += 1) {
-    const candidate = new Date(base - offset * 86_400_000);
-    if (weekdayNames[candidate.getUTCDay()] !== weekday) continue;
-    const date = candidate.toISOString().slice(0, 10);
-    if (offset === 0 && (!startTime || !scheduleIsPast(date, startTime))) continue;
-    return date;
-  }
-  return '';
-}
-
-function shiftDate(date, days) {
-  const shifted=new Date(Date.parse(`${date}T12:00:00Z`)+days*86_400_000);
-  return shifted.toISOString().slice(0,10);
-}
-
-async function pendingAttendance(period, userId = null) {
-  if (period.active!==1 || period.closed_at) return [];
-  const userFilter=userId===null?'':'AND professor_profiles.user_id=?';
-  const params=userId===null?[period.id]:[userId,period.id];
-  const classes = await db.prepare(`
-    SELECT classes.id,courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time,
-      professor_profiles.id AS professor_id,professor_profiles.name AS professor,professor_profiles.email AS professor_email
-    FROM classes
-    JOIN courses ON courses.id=classes.course_id
-    JOIN locations ON locations.id=classes.location_id
-    JOIN professor_profiles ON professor_profiles.id=classes.professor_id
-    WHERE professor_profiles.active=1 ${userFilter}
-      AND classes.active=1 AND classes.school_year_id=? AND classes.weekday IS NOT NULL
-    ORDER BY courses.name,classes.id
-  `).all(...params);
-  const pending = [];
-  for (const classRow of classes) {
-    const date = mostRecentScheduledDate(classRow.weekday,classRow.start_time);
-    if (!date) continue;
-    if (period.dates_confirmed===1 && (date<period.start_date || date>period.end_date)) continue;
-    const recorded = await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classRow.id,date);
-    if (!recorded) pending.push({ classId:Number(classRow.id), curso:classRow.curso, local:classRow.local, weekday:classRow.weekday, data:date,professorId:Number(classRow.professor_id),professor:classRow.professor,professorEmail:classRow.professor_email });
-  }
-  return pending;
-}
-
-const pendingAttendanceForProfessor=(userId,period)=>pendingAttendance(period,userId);
-
-async function managerDecisionMetrics(period) {
-  const today=zonedTodayDate(),tomorrow=shiftDate(today,1),current30=shiftDate(today,-29),previous30=shiftDate(current30,-30),current4=shiftDate(today,-27),previous4=shiftDate(current4,-28);
-  const enrollmentCounts=await db.prepare(`SELECT
-    COALESCE(SUM(CASE WHEN enrollments.enrolled_at>=? AND enrollments.enrolled_at<? THEN 1 ELSE 0 END),0) AS current_total,
-    COALESCE(SUM(CASE WHEN enrollments.enrolled_at>=? AND enrollments.enrolled_at<? THEN 1 ELSE 0 END),0) AS previous_total
-    FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE classes.school_year_id=?`).get(current30,tomorrow,previous30,current30,period.id);
-  const currentEnrollments=Number(enrollmentCounts.current_total||0),previousEnrollments=Number(enrollmentCounts.previous_total||0);
-  const enrollmentVariation=previousEnrollments?Math.round(100*(currentEnrollments-previousEnrollments)/previousEnrollments):(currentEnrollments?100:0);
-  const dropouts=Number((await db.prepare('SELECT COUNT(DISTINCT dropout_events.student_id) AS total FROM dropout_events JOIN classes ON classes.id=dropout_events.class_id WHERE classes.school_year_id=? AND dropout_events.occurred_at>=? AND dropout_events.occurred_at<?').get(period.id,period.start_date,tomorrow)).total||0);
-  const classRows=await db.prepare(`SELECT classes.id,classes.label,classes.capacity,courses.name AS curso,locations.name AS local,professor_profiles.name AS professor,
-    COUNT(DISTINCT CASE WHEN enrollments.status='ativa' AND students.active=1 THEN enrollments.id END) AS alunos
-    FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id
-    LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id
-    WHERE classes.school_year_id=? AND classes.active=1
-    GROUP BY classes.id,classes.label,classes.capacity,courses.name,locations.name,professor_profiles.name ORDER BY courses.name,classes.label`).all(period.id);
-  const attendanceRows=await db.prepare(`SELECT classes.id,
-    COUNT(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? THEN attendance_records.id END) AS current_records,
-    COALESCE(SUM(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? AND attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS current_presence,
-    COUNT(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? THEN attendance_records.id END) AS previous_records,
-    COALESCE(SUM(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? AND attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS previous_presence
-    FROM classes LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
-    WHERE classes.school_year_id=? AND classes.active=1 GROUP BY classes.id`).all(current4,tomorrow,current4,tomorrow,previous4,current4,previous4,current4,period.id);
-  const attendanceByClass=new Map(attendanceRows.map(row=>[Number(row.id),row]));
-  const turmas=classRows.map(row=>{
-    const attendance=attendanceByClass.get(Number(row.id))||{},currentRecords=Number(attendance.current_records||0),previousRecords=Number(attendance.previous_records||0),currentFrequency=currentRecords?Math.round(100*Number(attendance.current_presence||0)/currentRecords):null,previousFrequency=previousRecords?Math.round(100*Number(attendance.previous_presence||0)/previousRecords):null,capacity=row.capacity==null?null:Number(row.capacity),students=Number(row.alunos||0);
-    return{id:Number(row.id),label:row.label||row.curso,curso:row.curso,local:row.local,professor:row.professor,alunos:students,capacity,ocupacao:capacity?Math.round(100*students/capacity):null,frequenciaAtual:currentFrequency,frequenciaAnterior:previousFrequency,tendencia:currentFrequency!==null&&previousFrequency!==null?currentFrequency-previousFrequency:null};
-  });
-  const currentRecords=attendanceRows.reduce((sum,row)=>sum+Number(row.current_records||0),0),currentPresence=attendanceRows.reduce((sum,row)=>sum+Number(row.current_presence||0),0),previousRecords=attendanceRows.reduce((sum,row)=>sum+Number(row.previous_records||0),0),previousPresence=attendanceRows.reduce((sum,row)=>sum+Number(row.previous_presence||0),0);
-  const frequencyCurrent=currentRecords?Math.round(100*currentPresence/currentRecords):null,frequencyPrevious=previousRecords?Math.round(100*previousPresence/previousRecords):null;
-  return{novasMatriculas:{atual:currentEnrollments,anterior:previousEnrollments,variacaoPercentual:enrollmentVariation},evasoes:dropouts,frequencia:{atual:frequencyCurrent,anterior:frequencyPrevious,tendencia:frequencyCurrent!==null&&frequencyPrevious!==null?frequencyCurrent-frequencyPrevious:null},turmas,janelas:{matriculasInicio:current30,frequenciaInicio:current4}};
 }
 
 function announcementScheduleParts(value) {
@@ -1340,7 +1196,6 @@ const api = createApiHandler({
   duplicateError,
   selectedSchoolYear,
   catalogNameError,
-  atRiskStudents,
   validateStudentContact,
   activeChurch,
   studentSelect,
@@ -1352,7 +1207,6 @@ const api = createApiHandler({
   validateClassDetails,
   professorDeletionImpact,
   validateProfessor,
-  pendingAttendanceForProfessor,
   zonedTodayDate,
   announcementScheduledCondition,
   announcementScheduleParts,
@@ -1376,8 +1230,6 @@ const api = createApiHandler({
   supportClientMessageIdError,
   SUPPORT_CATEGORIES,
   SUPPORT_STATUSES,
-  managerDecisionMetrics,
-  pendingAttendance,
   requiredTextError,
   supportStatusFromDatabase,
   securityHeaders,
@@ -1385,9 +1237,6 @@ const api = createApiHandler({
   scheduleIsPast,
   logger,
 });
-const notificationJobs=createNotificationJobs({db,sendEmail,pendingAttendance,atRiskStudents,zonedTodayDate,baseUrl});
-const scheduledJobsEnabled=process.env.ENABLE_SCHEDULED_JOBS==='true'||(isProduction&&process.env.ENABLE_SCHEDULED_JOBS!=='false');
-let notificationScheduler=null;
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }
@@ -1433,17 +1282,12 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, host, () => {
   console.log(`Projeto Aprendiz Aprimorado em ${baseUrl}`);
   if (!isProduction) console.log('Caixa de e-mail de testes em /dev-mail');
-  if(scheduledJobsEnabled){
-    const configuredInterval=Number(process.env.SCHEDULED_JOB_INTERVAL_MS||60*60_000);
-    notificationScheduler=startNotificationScheduler({...notificationJobs,intervalMs:Math.max(60_000,configuredInterval),logger});
-  }
 });
 
 let shuttingDown = false;
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
-  notificationScheduler?.stop();
   console.log(`Encerrando servidor após ${signal}...`);
   const timeout = setTimeout(() => process.exit(1), 10_000);
   timeout.unref();

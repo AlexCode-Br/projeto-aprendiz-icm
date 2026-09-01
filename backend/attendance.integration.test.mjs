@@ -18,7 +18,7 @@ async function waitForServer(baseUrl, state) {
   throw new Error(`Servidor não iniciou: ${state.logs}`);
 }
 
-test('chamada rápida exige a turma completa e elimina a pendência ao salvar', { timeout: 40_000 }, async () => {
+test('chamada exige a turma completa e permanece exclusiva do professor', { timeout: 40_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'projeto-aprendiz-attendance-'));
   const databasePath = join(directory, 'attendance.db');
   const port = 49_000 + (process.pid % 1_000);
@@ -50,17 +50,19 @@ test('chamada rápida exige a turma completa e elimina a pendência ao salvar', 
     const login=await call(null,'POST','/api/auth/login',{email:'professor@projetoaprendiz.local',password:'Professor@2026!'});
     assert.equal(login.status,200,JSON.stringify(login.data));
     const professor={cookie:String(login.headers.get('set-cookie')).split(';')[0],csrf:login.data.csrfToken};
+    const managerLogin=await call(null,'POST','/api/auth/login',{email:'gestor@projetoaprendiz.local',password:'Gestor@2026!'});
+    assert.equal(managerLogin.status,200,JSON.stringify(managerLogin.data));
+    const manager={cookie:String(managerLogin.headers.get('set-cookie')).split(';')[0],csrf:managerLogin.data.csrfToken};
     const courses=await call(professor,'GET','/professores/meus-cursos');
     assert.equal(courses.status,200);
+    const professorStudents=await call(professor,'GET','/api/professores/me/alunos');
+    assert.equal(professorStudents.status,200,JSON.stringify(professorStudents.data));
+    assert.ok(Array.isArray(professorStudents.data.alunos));
+    assert.equal((await call(manager,'GET','/api/professores/me/alunos')).status,403);
     const classId=Number(courses.data[0].id);
+    assert.equal((await call(manager,'GET',`/frequencia?curso_id=${classId}&data=2026-08-29`)).status,403);
     const today=new Date().toISOString().slice(0,10);
-    const weekday=['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][new Date(`${today}T12:00:00Z`).getUTCDay()];
     const database=new DatabaseSync(databasePath);
-    database.prepare("UPDATE classes SET weekday=?,start_time='00:00' WHERE id=?").run(weekday,classId);
-
-    const pendingBefore=await call(professor,'GET','/api/frequencia/pendentes');
-    assert.equal(pendingBefore.status,200);
-    assert.equal(pendingBefore.data.items.some(item=>item.classId===classId),true);
 
     const attendance=await call(professor,'GET',`/frequencia?curso_id=${classId}&data=${today}`);
     assert.equal(attendance.status,200,JSON.stringify(attendance.data));
@@ -80,8 +82,6 @@ test('chamada rápida exige a turma completa e elimina a pendência ao salvar', 
     const saved=await call(professor,'GET',`/frequencia?curso_id=${classId}&data=${today}`);
     assert.equal(saved.data.registrada,true);
     assert.equal(saved.data.alunos.filter(student=>student.status==='ausente').length,1);
-    const pendingAfter=await call(professor,'GET','/api/frequencia/pendentes');
-    assert.equal(pendingAfter.data.items.some(item=>item.classId===classId),false);
     assert.equal(database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action='attendance_saved'").get().total,1);
     database.close();
   } finally {

@@ -93,25 +93,6 @@ export function createApiHandler(context) {
       return json(response,200,{preferences});
     }
 
-    if(request.method==='GET'&&url.pathname==='/api/audit-log'){
-      if(!await authorize(request,response,['gestor']))return;
-      const requestedPage=Number(url.searchParams.get('page')||1),requestedLimit=Number(url.searchParams.get('limit')||20);
-      const page=Number.isInteger(requestedPage)&&requestedPage>0?requestedPage:1;
-      const limit=Number.isInteger(requestedLimit)&&requestedLimit>0?Math.min(50,requestedLimit):20;
-      const total=Number((await db.prepare('SELECT COUNT(*) AS total FROM audit_log').get())?.total||0);
-      const entries=await db.prepare(`
-        SELECT audit_log.id,audit_log.action,audit_log.created_at,users.name AS actor_name
-        FROM audit_log
-        LEFT JOIN users ON users.id=audit_log.user_id
-        ORDER BY audit_log.id DESC
-        LIMIT ? OFFSET ?
-      `).all(limit,(page-1)*limit);
-      return json(response,200,{
-        entries:entries.map(entry=>({id:Number(entry.id),action:entry.action,createdAt:entry.created_at,actor:entry.actor_name||'Sistema'})),
-        total,page,limit,
-      });
-    }
-  
     if(request.method==='GET'&&url.pathname==='/api/school-years'){
       if(!await authorize(request,response,['gestor','professor']))return;
       const periods=await db.prepare('SELECT * FROM school_years ORDER BY active DESC,start_date DESC,id DESC').all();
@@ -165,7 +146,7 @@ export function createApiHandler(context) {
       }
     }
   
-    if (url.pathname === '/alunos' || url.pathname.startsWith('/alunos/') || url.pathname.startsWith('/api/alunos/') || url.pathname.startsWith('/api/churches') || url.pathname === '/api/catalogos') {
+    if (url.pathname === '/alunos' || url.pathname.startsWith('/alunos/') || url.pathname.startsWith('/api/alunos/') || url.pathname.startsWith('/api/churches') || url.pathname === '/api/catalogos' || url.pathname === '/professores/meus-alunos' || url.pathname === '/api/professores/me/alunos') {
       return studentRoutes(request, response, url, ip);
     }
   
@@ -173,7 +154,7 @@ export function createApiHandler(context) {
       return classRoutes(request, response, url, ip);
     }
   
-    if (url.pathname === '/professores' || (url.pathname.startsWith('/professores/') && url.pathname !== '/professores/meus-cursos')) {
+    if (url.pathname === '/professores' || (url.pathname.startsWith('/professores/') && !['/professores/meus-cursos','/professores/meus-alunos'].includes(url.pathname))) {
       return professorRoutes(request, response, url, ip);
     }
   

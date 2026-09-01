@@ -8,13 +8,12 @@ Aplicação web com frontend React e backend Node.js para a gestão do Projeto A
 - Papéis de Gestor e Professor autorizados no backend, sem confiar em metadados editáveis do usuário.
 - Convites com tokens temporários, de uso único e armazenados somente como hash.
 - E-mails reais via Resend em produção e caixa local em `/dev-mail` durante o desenvolvimento.
-- Gestão de alunos, professores, cursos, turmas, matrículas, frequência, informativos com imagens/PDFs privados, suporte e relatórios.
-- Períodos letivos entre anos civis, com histórico imutável, seletor global e filtros consistentes em dashboards e relatórios.
-- Chamada rápida no celular, alerta de chamadas pendentes, identificação de alunos em risco e registro de contatos.
-- Dashboard gerencial com movimento de matrículas, evasão, tendência de frequência e ocupação das turmas.
-- Lembretes de chamada e resumo semanal por e-mail, com persistência, repetição segura e retentativa após falhas.
-- Exportações CSV protegidas contra fórmulas de planilha nas listas de alunos, chamada e relatórios de frequência/evasão.
-- Anonimização irreversível de alunos, consentimento de responsável para menores, logs JSON e histórico administrativo em Configurações.
+- Gestão de alunos, professores, cursos, turmas, matrículas, informativos com imagens/PDFs privados, suporte e relatórios administrativos.
+- Período acadêmico ativo mantido internamente para preservar a integridade das turmas, sem seletor na interface.
+- Chamada rápida e relatórios de frequência exclusivos para professores.
+- Dashboard do gestor sem dados de presença, com totais administrativos e gráfico de alunos por turma.
+- Exportações CSV protegidas contra fórmulas de planilha nas áreas operacionais do professor.
+- Anonimização irreversível de alunos, consentimento de responsável para menores, auditoria interna e logs JSON sem exposição desses registros na interface.
 - PostgreSQL do Supabase em um schema privado e isolado das tabelas antigas do projeto.
 - Migrações automáticas, endpoint de saúde e encerramento seguro do servidor.
 
@@ -54,8 +53,6 @@ O arquivo `render.yaml` descreve o serviço web gratuito no Render. O banco e a 
 
 O backend usa a conexão Supavisor compatível com IPv4. As tabelas da nova aplicação ficam fora do schema público e não são acessadas diretamente pelo navegador. O bucket privado `announcement-attachments` é criado sob demanda pelo backend; os professores acessam os arquivos apenas pela rota autenticada e autorizada da aplicação.
 
-Os jobs de lembretes e resumo semanal são ativados automaticamente em produção. Cada envio tem uma chave persistente de idempotência: reiniciar o serviço não duplica mensagens já enviadas, e falhas do provedor ficam disponíveis para nova tentativa.
-
 ## Variáveis de produção
 
 | Variável | Finalidade |
@@ -71,13 +68,11 @@ Os jobs de lembretes e resumo semanal são ativados automaticamente em produçã
 | `EMAIL_FROM` | Remetente validado, como `Projeto Aprendiz <acesso@dominio.com>`. |
 | `APP_URL` | Opcional; URL pública usada nos links. No Render ela é detectada automaticamente. |
 | `APP_TIMEZONE` | Fuso usado no agendamento; padrão `America/Sao_Paulo`. |
-| `ENABLE_SCHEDULED_JOBS` | Opcional. Use `false` para pausar jobs em produção ou `true` para ativá-los fora de produção. |
-| `SCHEDULED_JOB_INTERVAL_MS` | Intervalo de verificação dos jobs; padrão de uma hora e mínimo de um minuto. |
 | `DATABASE_SSL` | `true` para a conexão segura com o Supabase. |
 
 ## Privacidade e observabilidade
 
-A política aplicada de exclusão, anonimização e retenção está em [docs/LGPD.md](docs/LGPD.md). O gestor consulta as ações administrativas em **Configurações → Histórico de segurança**. Erros técnicos são escritos em `stderr` como um objeto JSON por linha, com identificador de requisição e sem cookies, tokens, senhas ou corpo da solicitação, facilitando a busca nos logs do Render.
+A política aplicada de exclusão, anonimização e retenção está em [docs/LGPD.md](docs/LGPD.md). A auditoria permanece interna e não é exibida ao gestor. Erros técnicos são escritos em `stderr` como um objeto JSON por linha, com identificador de requisição e sem cookies, tokens, senhas ou corpo da solicitação, facilitando a busca nos logs do Render.
 
 ## Validação
 
@@ -87,4 +82,4 @@ pnpm check
 
 O comando valida o backend, executa os testes do banco e compila o frontend. O mesmo processo roda em cada pull request pelo GitHub Actions.
 
-O conjunto automatizado cobre autenticação e rate limiting, períodos letivos, modelo acadêmico, chamada, risco, dashboard, suporte, informativos, jobs, LGPD, logs estruturados e geração segura de CSV.
+O conjunto automatizado cobre autenticação e rate limiting, modelo acadêmico, isolamento da frequência por função, dashboard administrativo, suporte, informativos, LGPD, logs estruturados e geração segura de CSV.

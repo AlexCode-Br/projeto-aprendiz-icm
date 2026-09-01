@@ -18,7 +18,7 @@ async function waitForServer(baseUrl,state){
   throw new Error(`Servidor não iniciou: ${state.logs}`);
 }
 
-test('duas faltas seguidas geram risco, contato auditável e justificativa encerra a sequência',{timeout:40_000},async()=>{
+test('dados de frequência e risco permanecem indisponíveis ao gestor',{timeout:40_000},async()=>{
   const directory=await mkdtemp(join(tmpdir(),'projeto-aprendiz-risk-')),databasePath=join(directory,'risk.db'),port=50_000+(process.pid%1_000),baseUrl=`http://127.0.0.1:${port}`;
   let logs='';
   const server=spawn(process.execPath,['backend/server.mjs'],{cwd:projectRoot,env:{...process.env,PORT:String(port),HOST:'127.0.0.1',APP_URL:baseUrl,SQLITE_PATH:databasePath,AUTH_PROVIDER:'local',SEED_DEMO_DATA:'true',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
@@ -47,27 +47,14 @@ test('duas faltas seguidas geram risco, contato auditável e justificativa encer
     await saveCall(professor,classId,'2026-08-30',studentId,'ausente');
 
     const risk=await call(manager,'GET','/api/alunos/risco');
-    assert.equal(risk.status,200);
-    const atRisk=risk.data.alunos.find(student=>student.id===studentId);
-    assert.equal(atRisk.faltasConsecutivas,2);
-    assert.equal(atRisk.ultimoContato,null);
-
-    const forbidden=await call(professor,'POST',`/api/alunos/${studentId}/contatos`,{note:'Tentativa indevida',outcome:'outro'});
-    assert.equal(forbidden.status,403);
-    const contact=await call(manager,'POST',`/api/alunos/${studentId}/contatos`,{note:'Responsável avisado e retorno combinado.',outcome:'retorno_agendado'});
-    assert.equal(contact.status,201,JSON.stringify(contact.data));
-    const history=await call(manager,'GET',`/api/alunos/${studentId}/contatos`);
-    assert.equal(history.data[0].outcome,'retorno_agendado');
-    assert.match(history.data[0].note,/Responsável avisado/);
-    const refreshed=(await call(manager,'GET','/api/alunos/risco')).data.alunos.find(student=>student.id===studentId);
-    assert.equal(refreshed.ultimoContato.outcome,'retorno_agendado');
-
-    await saveCall(professor,classId,'2026-08-31',studentId,'justificado');
-    const resolved=await call(manager,'GET','/api/alunos/risco');
-    assert.equal(resolved.data.alunos.some(student=>student.id===studentId),false);
+    assert.equal(risk.status,404);
+    const managerReport=await call(manager,'GET','/api/relatorios/frequencia');
+    assert.equal(managerReport.status,403);
+    const professorReport=await call(professor,'GET','/api/relatorios/frequencia');
+    assert.equal(professorReport.status,200,JSON.stringify(professorReport.data));
+    assert.ok(Array.isArray(professorReport.data));
     const database=new DatabaseSync(databasePath);
-    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM student_contacts WHERE student_id=?').get(studentId).total,1);
-    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action='student_contact_registered'").get().total,1);
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM attendance_records WHERE student_id=?').get(studentId).total,2);
     database.close();
   }finally{
     if(server.exitCode===null)server.kill('SIGTERM');

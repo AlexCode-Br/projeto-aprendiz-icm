@@ -49,7 +49,7 @@ const ProfessorDeletionImpactModal = ({ isOpen, onClose, onContinue, impact, loa
                 </div>
 
                 <div className="alert-warning" role="note">
-                    Exclusão definitiva: a conta, o perfil, as turmas, {impact.resumo.matriculas} matrícula(s), {impact.resumo.frequencias} registro(s) de frequência, convites, publicações e atendimentos vinculados serão apagados. Os cadastros dos alunos permanecerão, sem vínculo com este professor.
+                    Exclusão definitiva: a conta, o perfil, as turmas, {impact.resumo.matriculas} matrícula(s), convites, publicações e atendimentos vinculados serão apagados. Os cadastros dos alunos permanecerão, sem vínculo com este professor.
                 </div>
             </div>
         ) : null}

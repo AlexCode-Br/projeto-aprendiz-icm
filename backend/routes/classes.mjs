@@ -59,12 +59,9 @@ export function createClassRoutes(context) {
         if(historicalLink)return json(response,409,{message:`Este ${entity} faz parte de um período encerrado e não pode ser excluído. O histórico letivo é imutável.`});
         const summary = await db.prepare(`SELECT
           COUNT(DISTINCT classes.id) AS turmas,
-          COUNT(DISTINCT enrollments.id) AS matriculas,
-          COUNT(DISTINCT attendance_records.id) AS frequencias
+          COUNT(DISTINCT enrollments.id) AS matriculas
           FROM classes
           LEFT JOIN enrollments ON enrollments.class_id=classes.id
-          LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
-          LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
           WHERE classes.${classFilter}=?`).get(id);
         await db.transaction(async()=>{
           await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
@@ -89,7 +86,7 @@ export function createClassRoutes(context) {
         return json(response, 200, {
           success: true,
           permanentlyDeleted: true,
-          resumo: { turmas: Number(summary?.turmas || 0), matriculas: Number(summary?.matriculas || 0), frequencias: Number(summary?.frequencias || 0) },
+          resumo: { turmas: Number(summary?.turmas || 0), matriculas: Number(summary?.matriculas || 0) },
           message: `${entity[0].toUpperCase()}${entity.slice(1)} e todos os vínculos foram excluídos definitivamente.`,
         });
       }
@@ -161,4 +158,3 @@ export function createClassRoutes(context) {
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

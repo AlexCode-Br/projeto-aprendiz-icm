@@ -127,19 +127,17 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(deleted.status, 200, JSON.stringify(deleted.data));
     assert.equal(deleted.data.anonymized, true);
 
-    const auditView = await call(manager, 'GET', '/api/audit-log?limit=50');
-    assert.equal(auditView.status, 200, JSON.stringify(auditView.data));
-    assert.ok(auditView.data.entries.some(entry => entry.action === `student_anonymized:${second.data.id}`));
-    assert.equal(auditView.data.entries.some(entry => Object.hasOwn(entry, 'ip')), false);
+    assert.equal((await call(manager, 'GET', '/api/audit-log?limit=50')).status, 404);
     const professorLogin = await call(null, 'POST', '/api/auth/login', { email: 'professor@projetoaprendiz.local', password: 'Professor@2026!' });
     assert.equal(professorLogin.status, 200, JSON.stringify(professorLogin.data));
     const professorSession = { cookie: String(professorLogin.headers.get('set-cookie')).split(';')[0], csrf: professorLogin.data.csrfToken };
-    assert.equal((await call(professorSession, 'GET', '/api/audit-log')).status, 403);
+    assert.equal((await call(professorSession, 'GET', '/api/audit-log')).status, 404);
     const anonymousDropout = await call(manager, 'GET', '/api/relatorios/evasao?motivo=outro');
     assert.equal(anonymousDropout.status, 200, JSON.stringify(anonymousDropout.data));
     assert.ok(anonymousDropout.data.some(entry => entry.aluno === 'Aluno anonimizado' && entry.categoria === 'Outro'));
 
     const database = new DatabaseSync(databasePath);
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM audit_log WHERE action=?').get(`student_anonymized:${second.data.id}`).total, 1);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM students WHERE email IS NULL').get().total >= 3, true);
     assert.equal(database.prepare('SELECT church_id FROM students WHERE id=?').get(first.data.id).church_id, church.data.id);
     const teen = database.prepare('SELECT guardian_name,guardian_consent_at FROM students WHERE id=?').get(validTeen.data.id);

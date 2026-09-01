@@ -2,16 +2,16 @@
 
 Este documento é o guia de implementação das melhorias identificadas na auditoria do projeto. Serve como especificação para as próximas sessões de desenvolvimento (agente de código ou desenvolvimento manual). As melhorias visuais dos dashboards (ícones coerentes, skeleton loading, cartões alinhados à identidade vermelho/branco/cinza) já foram aplicadas.
 
+> **Decisão de produto de 01/09/2026:** o período acadêmico e a auditoria permanecem somente como mecanismos internos. Seus painéis foram removidos da interface. Dados de frequência, relatórios e chamada são exclusivos do professor; o dashboard do gestor mostra somente totais administrativos e alunos por turma. Esta decisão prevalece sobre os itens históricos abaixo.
+
 ## Status da implementação — concluída em 01/09/2026
 
 - [x] Rate limiting por IP e e-mail nas rotas sensíveis de autenticação.
-- [x] Períodos letivos entre anos civis, histórico imutável e seletor global.
+- [x] Período acadêmico interno para integridade dos vínculos, sem seletor global.
 - [x] Modelo acadêmico evoluído: responsáveis, igrejas, capacidade, evasão e transferências.
-- [x] Chamada rápida e sinalização de chamadas pendentes.
-- [x] Fila de alunos em risco e registro auditável de contato.
-- [x] Dashboard do gestor orientado a decisões.
+- [x] Chamada e relatórios de frequência exclusivos do professor.
+- [x] Dashboard do gestor limitado a dados administrativos e alunos por turma.
 - [x] Backend modularizado, mantendo `node:http` e os contratos existentes.
-- [x] Lembretes de chamada e resumo semanal idempotentes por e-mail.
 - [x] Consentimento de responsável, anonimização LGPD e política de retenção documentada.
 - [x] Exportações CSV seguras e logs de erro estruturados em JSON.
 

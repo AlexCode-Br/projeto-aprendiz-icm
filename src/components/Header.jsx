@@ -2,14 +2,12 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import useDarkMode from '../hooks/useDarkMode';
-import { useSchoolYear } from '../contexts/SchoolYearContext';
 
 const Header = ({ sidebarOpen, setSidebarOpen }) => {
     const { user, logout } = useContext(AuthContext);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
     const [isDark, setIsDark] = useDarkMode();
-    const { periods, selectedId, selectedPeriod, loading: loadingPeriods, selectPeriod } = useSchoolYear();
 
     useEffect(() => {
         const clickHandler = ({ target }) => {
@@ -31,22 +29,7 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
             <div className="flex min-w-0 flex-1 justify-start">
                 <p className="truncate text-lg font-semibold text-text-default sm:text-xl">Projeto Aprendiz</p>
             </div>
-            <div className="flex items-center gap-2 sm:gap-4">
-                <label className="min-w-0">
-                    <span className="sr-only">Período letivo selecionado</span>
-                    {loadingPeriods ? <span className="skeleton block h-10 w-28 rounded-lg sm:w-44" /> : (
-                        <select
-                            value={selectedId}
-                            onChange={event => selectPeriod(event.target.value)}
-                            aria-label="Período letivo selecionado"
-                            title={selectedPeriod?.datesConfirmed ? `${selectedPeriod.startDate} a ${selectedPeriod.endDate}` : 'Datas do período aguardando configuração'}
-                            className="h-10 max-w-32 rounded-lg border border-border bg-surface px-2 text-xs font-semibold text-text-default outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20 sm:max-w-56 sm:px-3 sm:text-sm"
-                        >
-                            {periods.map(period => <option key={period.id} value={period.id}>{period.label}{period.active ? ' · Atual' : ''}</option>)}
-                        </select>
-                    )}
-                </label>
-                <div className="relative flex items-center" ref={dropdownRef}>
+            <div className="relative flex items-center" ref={dropdownRef}>
                 <button type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen(!dropdownOpen)} className="group flex min-h-11 min-w-11 items-center justify-center rounded-full ring-2 ring-transparent transition hover:ring-primary/20">
                     <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-primary font-bold text-white shadow-sm ring-2 ring-primary/25 ring-offset-2 ring-offset-surface transition group-hover:ring-primary/60">{initial}</span>
                 </button>
@@ -87,7 +70,6 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
                             Sair
                         </button>
                     </div>
-                </div>
                 </div>
             </div>
         </header>

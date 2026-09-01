@@ -8,7 +8,6 @@ import AlunoFormModal from '../../components/AlunoFormModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import CatalogItemModal from '../../components/CatalogItemModal';
 import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
-import { downloadCsv } from '../../utils/csv.js';
 
 const Alunos = () => {
     // --- Estados ---
@@ -31,7 +30,6 @@ const Alunos = () => {
 
     // Estado de Busca
     const [searchTerm, setSearchTerm] = useState('');
-    const [exporting, setExporting] = useState(false);
 
     const { showToast } = useToast();
 
@@ -146,28 +144,6 @@ const Alunos = () => {
         setCurrentPage(1); // Reseta para a primeira página ao buscar
     };
 
-    const handleExportStudents = async () => {
-        setExporting(true);
-        try {
-            const firstResponse = await api.get('/alunos', { params: { page: 1, limit: 50, search: searchTerm } });
-            const total = Number(firstResponse.data.total || 0);
-            const totalPages = Math.ceil(total / 50);
-            const remaining = totalPages > 1
-                ? await Promise.all(Array.from({ length: totalPages - 1 }, (_, index) => api.get('/alunos', { params: { page: index + 2, limit: 50, search: searchTerm } })))
-                : [];
-            const records = [firstResponse, ...remaining].flatMap(response => response.data.alunos || []);
-            if (!records.length) return showToast('Não há alunos para exportar com o filtro atual.', 'warning');
-            downloadCsv(`alunos_${new Date().toISOString().slice(0, 10)}.csv`,
-                ['Nome', 'E-mail', 'Telefone', 'Igreja', 'Classe', 'Cursos'],
-                records.map(aluno => [aluno.nome, aluno.email || '', aluno.telefone || '', aluno.igreja || '', aluno.classe || '', (aluno.curso || []).join(', ')]));
-            showToast(`${records.length} aluno(s) exportado(s) em CSV.`, 'success');
-        } catch (requestError) {
-            showToast(requestError.response?.data?.message || 'Não foi possível exportar os alunos.', 'error');
-        } finally {
-            setExporting(false);
-        }
-    };
-
     return (
         <div>
             <div className="page-header"><div><h1 className="page-title">Alunos</h1><p className="page-description">Consulte cadastros e mantenha os dados dos alunos atualizados.</p></div></div>
@@ -184,7 +160,6 @@ const Alunos = () => {
                     className="form-control sm:max-w-sm"
                 />
                 <div className="flex flex-col gap-2 sm:flex-row">
-                    <button type="button" onClick={handleExportStudents} disabled={exporting} className="btn btn-secondary w-full sm:w-auto">{exporting ? 'Exportando...' : 'Exportar CSV'}</button>
                     <button type="button" onClick={() => setIsChurchModalOpen(true)} className="btn btn-secondary w-full sm:w-auto">Nova igreja de origem</button>
                     <button onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">Adicionar Aluno</button>
                 </div>
@@ -230,7 +205,7 @@ const Alunos = () => {
                     </tbody>
                 </table>
                  {!loading && !error && alunos.length === 0 && (
-                    <div className="px-6 py-10 text-center text-text-muted"><strong className="block text-text-default">Nenhum aluno encontrado</strong><span className="mt-1 block text-sm">Limpe a busca ou adicione o primeiro aluno deste período.</span></div>
+                    <div className="px-6 py-10 text-center text-text-muted"><strong className="block text-text-default">Nenhum aluno encontrado</strong><span className="mt-1 block text-sm">Limpe a busca ou adicione o primeiro aluno.</span></div>
                 )}
             </div>
 
@@ -256,7 +231,7 @@ const Alunos = () => {
                 onClose={handleCloseModals}
                 onConfirm={handleDeleteAluno}
                 title="Anonimizar dados do aluno?"
-                message={`O cadastro de ${selectedAluno?.nome || 'este aluno'} será removido das turmas e todos os dados pessoais serão apagados de forma irreversível. Matrículas e presenças permanecerão somente como registros anônimos para estatísticas.`}
+                message={`O cadastro de ${selectedAluno?.nome || 'este aluno'} será removido das turmas e todos os dados pessoais serão apagados de forma irreversível. O histórico acadêmico permanecerá apenas de forma anônima para estatísticas.`}
                 confirmLabel="Anonimizar e excluir"
             />
             <CatalogItemModal

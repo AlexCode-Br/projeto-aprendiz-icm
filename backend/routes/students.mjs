@@ -8,11 +8,9 @@ export function createStudentRoutes(context) {
     cleanText,
     hasValidationErrors,
     invalid,
-    schoolYearView,
     duplicateError,
     selectedSchoolYear,
     catalogNameError,
-    atRiskStudents,
     validateStudentContact,
     activeChurch,
     studentSelect,
@@ -66,12 +64,6 @@ export function createStudentRoutes(context) {
         return json(response,200,{success:true});
       }
     
-      if(request.method==='GET'&&url.pathname==='/api/alunos/risco'){
-        if(!await authorize(request,response,['gestor']))return;
-        const period=await selectedSchoolYear(request,response);if(!period)return;
-        const alunos=await atRiskStudents(period.id);
-        return json(response,200,{alunos,total:alunos.length,periodo:schoolYearView(period)});
-      }
       const studentContactMatch=url.pathname.match(/^\/api\/alunos\/(\d+)\/contatos$/);
       if(studentContactMatch&&request.method==='GET'){
         if(!await authorize(request,response,['gestor']))return;
@@ -213,13 +205,10 @@ export function createStudentRoutes(context) {
           SELECT courses.id,courses.name AS nome,courses.active,
             COUNT(DISTINCT classes.id) AS turmas_total,
             COUNT(DISTINCT CASE WHEN classes.active=1 THEN classes.id END) AS turmas_ativas,
-            COUNT(DISTINCT enrollments.id) AS matriculas_total,
-            COUNT(DISTINCT attendance_records.id) AS frequencias_total
+            COUNT(DISTINCT enrollments.id) AS matriculas_total
           FROM courses
           LEFT JOIN classes ON classes.course_id=courses.id AND classes.school_year_id=?
           LEFT JOIN enrollments ON enrollments.class_id=classes.id
-          LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
-          LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
           GROUP BY courses.id,courses.name,courses.active ORDER BY courses.name
         `).all(period.id);
         const locais = await db.prepare(`
@@ -227,20 +216,17 @@ export function createStudentRoutes(context) {
             COUNT(DISTINCT classes.id) AS turmas_total,
             COUNT(DISTINCT CASE WHEN classes.active=1 THEN classes.id END) AS turmas_ativas,
             COUNT(DISTINCT enrollments.id) AS matriculas_total,
-            COUNT(DISTINCT attendance_records.id) AS frequencias_total,
             COUNT(DISTINCT professor_profiles.id) AS professores_total,
             COUNT(DISTINCT CASE WHEN professor_profiles.active=1 THEN professor_profiles.id END) AS professores_ativos
           FROM locations
           LEFT JOIN classes ON classes.location_id=locations.id AND classes.school_year_id=?
           LEFT JOIN enrollments ON enrollments.class_id=classes.id
-          LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
-          LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
           LEFT JOIN professor_profiles ON professor_profiles.id=classes.professor_id
           GROUP BY locations.id,locations.name,locations.active ORDER BY locations.name
         `).all(period.id);
         return json(response, 200, {
-          cursos: cursos.map(row => ({ ...row, ativo: row.active === 1, turmas: Number(row.turmas_total || 0), turmasAtivas: Number(row.turmas_ativas || 0), matriculas: Number(row.matriculas_total || 0), frequencias: Number(row.frequencias_total || 0) })),
-          locais: locais.map(row => ({ ...row, ativo: row.active === 1, turmas: Number(row.turmas_total || 0), turmasAtivas: Number(row.turmas_ativas || 0), matriculas: Number(row.matriculas_total || 0), frequencias: Number(row.frequencias_total || 0), professores: Number(row.professores_total || 0), professoresAtivos: Number(row.professores_ativos || 0) })),
+          cursos: cursos.map(row => ({ ...row, ativo: row.active === 1, turmas: Number(row.turmas_total || 0), turmasAtivas: Number(row.turmas_ativas || 0), matriculas: Number(row.matriculas_total || 0) })),
+          locais: locais.map(row => ({ ...row, ativo: row.active === 1, turmas: Number(row.turmas_total || 0), turmasAtivas: Number(row.turmas_ativas || 0), matriculas: Number(row.matriculas_total || 0), professores: Number(row.professores_total || 0), professoresAtivos: Number(row.professores_ativos || 0) })),
         });
       }
     return json(response, 404, { message: 'Rota não encontrada.' });

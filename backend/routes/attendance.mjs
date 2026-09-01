@@ -5,7 +5,6 @@ export function createAttendanceRoutes(context) {
     readJson,
     authorize,
     selectedSchoolYear,
-    pendingAttendanceForProfessor,
     zonedTodayDate,
   } = context;
 
@@ -27,13 +26,6 @@ export function createAttendanceRoutes(context) {
         const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
         const rows=await db.prepare(`SELECT students.id,students.name AS nome,attendance_records.status AS status FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' LEFT JOIN attendance_sessions ON attendance_sessions.class_id=enrollments.class_id AND attendance_sessions.class_date=? LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE enrollments.class_id=? AND students.active=1 ORDER BY students.name`).all(date,classId);
         return json(response,200,{alunos:rows,registrada:Boolean(attendanceSession)});
-      }
-    
-      if(request.method==='GET'&&url.pathname==='/api/frequencia/pendentes'){
-        const session=await authorize(request,response,['professor']);if(!session)return;
-        const period=await selectedSchoolYear(request,response);if(!period)return;
-        const items=await pendingAttendanceForProfessor(session.user_id,period);
-        return json(response,200,{total:items.length,items});
       }
     
       if(request.method==='POST'&&url.pathname==='/frequencia'){
@@ -65,4 +57,3 @@ export function createAttendanceRoutes(context) {
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

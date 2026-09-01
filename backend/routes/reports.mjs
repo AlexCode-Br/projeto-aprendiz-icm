@@ -18,7 +18,7 @@ export function createReportRoutes(context) {
         return json(response,200,{cursos:courses.map(row=>row.name),locais:locations.map(row=>row.name),professores:professors.map(row=>row.name)});
       }
       if(request.method==='GET'&&url.pathname==='/api/relatorios/frequencia'){
-        const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+        const session=await authorize(request,response,['professor']);if(!session)return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
         const conditions=["enrollments.status='ativa'","students.active=1","classes.active=1","classes.school_year_id=?"],whereParams=[period.id],joinParams=[];
         const filters={curso:url.searchParams.get('curso'),local:url.searchParams.get('local'),professor:url.searchParams.get('professor'),classId:url.searchParams.get('curso_id')};
@@ -26,7 +26,7 @@ export function createReportRoutes(context) {
         if(filters.local){conditions.push('locations.name=?');whereParams.push(filters.local)}
         if(filters.professor){conditions.push('professor_profiles.name=?');whereParams.push(filters.professor)}
         if(filters.classId){conditions.push('classes.id=?');whereParams.push(Number(filters.classId))}
-        if(session.role==='professor'){conditions.push('professor_profiles.user_id=?');whereParams.push(session.user_id)}
+        conditions.push('professor_profiles.user_id=?');whereParams.push(session.user_id);
         const start=url.searchParams.get('dataInicio'),end=url.searchParams.get('dataFim');
         let dateJoin='';
         if(start){dateJoin+=' AND attendance_sessions.class_date>=?';joinParams.push(start)}

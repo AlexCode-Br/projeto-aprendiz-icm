@@ -19,7 +19,7 @@ async function waitForServer(baseUrl,state){
   throw new Error(`Servidor não iniciou: ${state.logs}`);
 }
 
-test('dashboard do gestor compara movimento, frequência e ocupação sem inflar agregações',{timeout:40_000},async()=>{
+test('dashboard do gestor mostra somente totais administrativos e alunos por turma',{timeout:40_000},async()=>{
   const directory=await mkdtemp(join(tmpdir(),'projeto-aprendiz-dashboard-')),databasePath=join(directory,'dashboard.db'),port=51_000+(process.pid%1_000),baseUrl=`http://127.0.0.1:${port}`;
   let logs='';
   const server=spawn(process.execPath,['backend/server.mjs'],{cwd:projectRoot,env:{...process.env,PORT:String(port),HOST:'127.0.0.1',APP_URL:baseUrl,SQLITE_PATH:databasePath,AUTH_PROVIDER:'local',SEED_DEMO_DATA:'true',NODE_ENV:'test',APP_TIMEZONE:'UTC'},stdio:['ignore','pipe','pipe']});
@@ -57,19 +57,17 @@ test('dashboard do gestor compara movimento, frequência e ocupação sem inflar
 
     const response=await call(manager,'GET','/api/dashboard/gestor');
     assert.equal(response.status,200,JSON.stringify(response.data));
-    assert.deepEqual(response.data.stats.novasMatriculas,{atual:2,anterior:1,variacaoPercentual:100});
-    assert.equal(response.data.stats.evasoes,1);
-    assert.deepEqual(response.data.stats.frequencia,{atual:50,anterior:0,tendencia:50});
-    const classMetric=response.data.stats.turmas.find(item=>item.id===Number(classRow.id));
-    assert.equal(classMetric.alunos,2);
-    assert.equal(classMetric.capacity,4);
-    assert.equal(classMetric.ocupacao,50);
-    assert.equal(classMetric.frequenciaAtual,50);
-    assert.equal(classMetric.frequenciaAnterior,0);
-    assert.equal(classMetric.tendencia,50);
-    assert.ok(Array.isArray(response.data.chamadasPendentes));
+    assert.equal(response.data.stats.totalAlunos>0,true);
+    assert.equal(response.data.stats.cursosAtivos>0,true);
+    assert.equal(Object.hasOwn(response.data.stats,'frequencia'),false);
+    assert.equal(Object.hasOwn(response.data,'baixaFrequencia'),false);
+    assert.equal(Object.hasOwn(response.data,'alunosRisco'),false);
+    assert.equal(Object.hasOwn(response.data,'chamadasPendentes'),false);
+    const classMetric=response.data.alunosPorTurma.find(item=>item.id===Number(classRow.id));
+    assert.equal(classMetric.total,2);
+    assert.equal(Object.hasOwn(classMetric,'frequencia'),false);
+    assert.equal(Object.hasOwn(classMetric,'frequenciaAtual'),false);
     assert.ok(Array.isArray(response.data.ultimasInscricoes));
-    assert.ok(Array.isArray(response.data.baixaFrequencia));
   }finally{
     if(server.exitCode===null)server.kill('SIGTERM');
     await new Promise(resolve=>server.once('exit',resolve));
