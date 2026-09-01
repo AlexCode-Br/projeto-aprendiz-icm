@@ -128,9 +128,9 @@ const Alunos = () => {
     const handleDeleteAluno = async () => {
         if (!selectedAluno) return;
         try {
-            await api.delete(`/alunos/${selectedAluno.id}`);
-            showToast('Aluno excluído com sucesso!', 'success');
-            fetchAlunos(); // Recarrega a lista
+            const response = await api.delete(`/alunos/${selectedAluno.id}`);
+            showToast(response.data?.message || 'Dados pessoais do aluno anonimizados com sucesso!', 'success');
+            await fetchAlunos();
         } catch (error) {
             showToast('Erro ao excluir aluno.', 'error');
             console.error("Erro ao excluir aluno:", error);
@@ -179,7 +179,7 @@ const Alunos = () => {
                     </thead>
                     <tbody className="divide-y divide-border">
                         {loading ? (
-                            Array.from({ length: 4 }, (_, index) => <tr key={index} className="animate-pulse"><td colSpan="5" className="px-6 py-4"><div className="h-10 rounded bg-surface-muted" /></td></tr>)
+                            Array.from({ length: 4 }, (_, index) => <tr key={index}><td colSpan="5" className="px-6 py-4"><div className="skeleton h-10 rounded" /></td></tr>)
                         ) : error ? (
                              <tr><td colSpan="5" className="text-center py-4 text-danger">{error}</td></tr>
                         ) : alunos.map((aluno) => (
@@ -230,8 +230,9 @@ const Alunos = () => {
                 isOpen={isConfirmModalOpen}
                 onClose={handleCloseModals}
                 onConfirm={handleDeleteAluno}
-                title="Confirmar Exclusão"
-                message={`Tem certeza de que deseja excluir o aluno ${selectedAluno?.nome}? Esta ação não pode ser desfeita.`}
+                title="Anonimizar dados do aluno?"
+                message={`O cadastro de ${selectedAluno?.nome || 'este aluno'} será removido das turmas e todos os dados pessoais serão apagados de forma irreversível. Matrículas e presenças permanecerão somente como registros anônimos para estatísticas.`}
+                confirmLabel="Anonimizar e excluir"
             />
             <CatalogItemModal
                 isOpen={isChurchModalOpen}

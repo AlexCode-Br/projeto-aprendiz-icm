@@ -92,6 +92,25 @@ export function createApiHandler(context) {
       await db.prepare(`INSERT INTO user_settings (user_id,preferences_json) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET preferences_json=excluded.preferences_json,updated_at=CURRENT_TIMESTAMP`).run(session.user_id,JSON.stringify(preferences));
       return json(response,200,{preferences});
     }
+
+    if(request.method==='GET'&&url.pathname==='/api/audit-log'){
+      if(!await authorize(request,response,['gestor']))return;
+      const requestedPage=Number(url.searchParams.get('page')||1),requestedLimit=Number(url.searchParams.get('limit')||20);
+      const page=Number.isInteger(requestedPage)&&requestedPage>0?requestedPage:1;
+      const limit=Number.isInteger(requestedLimit)&&requestedLimit>0?Math.min(50,requestedLimit):20;
+      const total=Number((await db.prepare('SELECT COUNT(*) AS total FROM audit_log').get())?.total||0);
+      const entries=await db.prepare(`
+        SELECT audit_log.id,audit_log.action,audit_log.created_at,users.name AS actor_name
+        FROM audit_log
+        LEFT JOIN users ON users.id=audit_log.user_id
+        ORDER BY audit_log.id DESC
+        LIMIT ? OFFSET ?
+      `).all(limit,(page-1)*limit);
+      return json(response,200,{
+        entries:entries.map(entry=>({id:Number(entry.id),action:entry.action,createdAt:entry.created_at,actor:entry.actor_name||'Sistema'})),
+        total,page,limit,
+      });
+    }
   
     if(request.method==='GET'&&url.pathname==='/api/school-years'){
       if(!await authorize(request,response,['gestor','professor']))return;

@@ -21,6 +21,7 @@ export function createAnnouncementRoutes(context) {
     securityHeaders,
     zonedScheduleIso,
     scheduleIsPast,
+    logger,
   } = context;
 
   return async function announcementRoutes(request, response, url, ip) {
@@ -161,9 +162,9 @@ export function createAnnouncementRoutes(context) {
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_created',ip);
           });
         }catch(error){
-          await removeStoredAttachments(stored.map(item=>item.storage_path)).catch(cleanupError=>console.error(cleanupError));
-          if(result?.lastInsertRowid)await db.prepare('DELETE FROM announcements WHERE id=?').run(Number(result.lastInsertRowid)).catch(cleanupError=>console.error(cleanupError));
-          console.error('Falha ao criar informativo:',error);
+          await removeStoredAttachments(stored.map(item=>item.storage_path)).catch(cleanupError=>logger.error('announcement_attachment_cleanup_failed',cleanupError,{announcementId:Number(result?.lastInsertRowid||0)}));
+          if(result?.lastInsertRowid)await db.prepare('DELETE FROM announcements WHERE id=?').run(Number(result.lastInsertRowid)).catch(cleanupError=>logger.error('announcement_rollback_failed',cleanupError,{announcementId:Number(result.lastInsertRowid)}));
+          logger.error('announcement_creation_failed',error,{announcementId:Number(result?.lastInsertRowid||0)});
           return json(response,502,{message:'Não foi possível armazenar os anexos. O informativo não foi publicado.'});
         }
         return json(response,201,{id:Number(result.lastInsertRowid),destinatarios:recipientResult.audience});
@@ -195,11 +196,11 @@ export function createAnnouncementRoutes(context) {
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
           });
         }catch(error){
-          await removeStoredAttachments(stored.map(item=>item.storage_path)).catch(cleanupError=>console.error(cleanupError));
-          console.error('Falha ao atualizar informativo:',error);
+          await removeStoredAttachments(stored.map(item=>item.storage_path)).catch(cleanupError=>logger.error('announcement_attachment_cleanup_failed',cleanupError,{announcementId}));
+          logger.error('announcement_update_failed',error,{announcementId});
           return json(response,502,{message:'Não foi possível atualizar os anexos. O informativo anterior foi preservado.'});
         }
-        await removeStoredAttachments(removed.map(item=>item.storage_path)).catch(error=>console.error('Cleanup de anexo pendente:',error));
+        await removeStoredAttachments(removed.map(item=>item.storage_path)).catch(error=>logger.error('announcement_attachment_cleanup_failed',error,{announcementId}));
         return json(response,200,{success:true,destinatarios:recipientResult.audience});
       }
       if(announcementMatch&&request.method==='DELETE'){
@@ -212,7 +213,7 @@ export function createAnnouncementRoutes(context) {
           return deleted;
         });
         if(!result.changes)return json(response,404,{message:'Informativo não encontrado.'});
-        await removeStoredAttachments(attachments.map(item=>item.storage_path)).catch(error=>console.error('Cleanup de anexo pendente:',error));
+        await removeStoredAttachments(attachments.map(item=>item.storage_path)).catch(error=>logger.error('announcement_attachment_cleanup_failed',error,{announcementId}));
         return json(response,200,{success:true});
       }
       const readMatch = url.pathname.match(/^\/api\/informativos\/(\d+)\/lida$/);
@@ -247,4 +248,3 @@ export function createAnnouncementRoutes(context) {
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

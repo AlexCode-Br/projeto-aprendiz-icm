@@ -110,10 +110,10 @@ export function createStudentRoutes(context) {
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const body = await readJson(request);
         const name = cleanText(body.nome,100), email = cleanEmail(body.contato || body.email), phone=cleanText(body.telefone,30);
-        const guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',church=await activeChurch(body.church_id||body.local);
+        const guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',guardianConsent=body.classe==='Adolescente'&&body.guardian_consent===true,church=await activeChurch(body.church_id||body.local);
         const rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
         const selections=rawClassIds.length?rawClassIds:courseNames;
-        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,turmas:selections,local:church?.id||''});
+        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,guardian_consent:guardianConsent,turmas:selections,local:church?.id||''});
         if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
@@ -121,7 +121,7 @@ export function createStudentRoutes(context) {
         if (classError) return invalid(response, { curso: classError });
         try {
           const studentId=await db.transaction(async()=>{
-            const result = await db.prepare('INSERT INTO students (name,email,phone,guardian_name,guardian_phone,church_id,age_group,has_instrument) VALUES (?,?,?,?,?,?,?,?)').run(name,email||null,phone,guardianName||null,guardianPhone||null,church.id,body.classe,body.instrumento === 'Sim' ? 1 : 0);
+            const result = await db.prepare('INSERT INTO students (name,email,phone,guardian_name,guardian_phone,guardian_consent_at,church_id,age_group,has_instrument) VALUES (?,?,?,?,?,?,?,?,?)').run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsent?new Date().toISOString():null,church.id,body.classe,body.instrumento === 'Sim' ? 1 : 0);
             for (const classRow of classRows) {
               await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
             }
@@ -140,20 +140,21 @@ export function createStudentRoutes(context) {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const id = Number(studentMatch[1]), body = await readJson(request);
-        const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',church=await activeChurch(body.church_id||body.local),rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
+        const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',guardianConsent=body.classe==='Adolescente'&&body.guardian_consent===true,church=await activeChurch(body.church_id||body.local),rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
         const selections=rawClassIds.length?rawClassIds:courseNames;
-        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,turmas:selections,local:church?.id||''});
+        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,guardian_consent:guardianConsent,turmas:selections,local:church?.id||''});
         if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
         const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id,id);
         if (classError) return invalid(response, { curso: classError });
-        const currentStudent=await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
+        const currentStudent=await db.prepare('SELECT id,guardian_consent_at FROM students WHERE id=? AND active=1').get(id);
         if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
         try {
           await db.transaction(async()=>{
-            await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
-              .run(name,email||null,phone,guardianName||null,guardianPhone||null,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
+            const guardianConsentAt=guardianConsent?(currentStudent.guardian_consent_at||new Date().toISOString()):currentStudent.guardian_consent_at;
+            await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,guardian_consent_at=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
+              .run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsentAt,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
             const currentEnrollments=await db.prepare("SELECT enrollments.id,enrollments.class_id,classes.course_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?").all(id,period.id);
             const selectedIds=new Set(classRows.map(classRow=>Number(classRow.id)));
             const selectedByCourse=new Map(classRows.map(classRow=>[Number(classRow.course_id),Number(classRow.id)]));
@@ -175,20 +176,21 @@ export function createStudentRoutes(context) {
       }
       if (studentMatch && request.method === 'DELETE') {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
-        const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const id = Number(studentMatch[1]);
         const student = await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
         if (!student) return json(response, 404, { message: 'Aluno ativo não encontrado.' });
         await db.transaction(async () => {
-          const enrollments = await db.prepare("SELECT enrollments.class_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?").all(id,period.id);
-          await db.prepare('UPDATE students SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
-          await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND class_id IN (SELECT id FROM classes WHERE school_year_id=?)").run(id,period.id);
+          const enrollments = await db.prepare("SELECT class_id FROM enrollments WHERE student_id=? AND status='ativa'").all(id);
+          await db.prepare('DELETE FROM student_contacts WHERE student_id=?').run(id);
+          await db.prepare("UPDATE dropout_events SET reason='Dados anonimizados por solicitação',reason_category='outro' WHERE student_id=?").run(id);
           for (const enrollment of enrollments) {
-            await db.prepare('INSERT INTO dropout_events (student_id,class_id,reason,reason_category,occurred_at) VALUES (?,?,?,?,?)').run(id,enrollment.class_id,'Excluído pelo gestor','outro',new Date().toISOString().slice(0,10));
+            await db.prepare('INSERT INTO dropout_events (student_id,class_id,reason,reason_category,occurred_at) VALUES (?,?,?,?,?)').run(id,enrollment.class_id,'Dados anonimizados por solicitação','outro',new Date().toISOString().slice(0,10));
           }
-          await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_deactivated',ip);
+          await db.prepare("UPDATE enrollments SET status='cancelada',transferred_to_class_id=NULL WHERE student_id=? AND status='ativa'").run(id);
+          await db.prepare(`UPDATE students SET name=?,email=NULL,phone=NULL,guardian_name=NULL,guardian_phone=NULL,guardian_consent_at=NULL,church_id=NULL,age_group=NULL,has_instrument=0,active=0,anonymized_at=CURRENT_TIMESTAMP,anonymized_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(`Aluno anonimizado #${id}`,session.user_id,id);
+          await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`student_anonymized:${id}`,ip);
         });
-        return json(response, 200, { success: true });
+        return json(response, 200, { success: true, anonymized: true, message: 'Os dados pessoais do aluno foram anonimizados de forma irreversível.' });
       }
     
       if (request.method === 'GET' && (url.pathname === '/professores/meus-alunos' || url.pathname === '/api/professores/me/alunos')) {
@@ -244,4 +246,3 @@ export function createStudentRoutes(context) {
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

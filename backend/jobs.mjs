@@ -85,7 +85,7 @@ export function startNotificationScheduler({ runAttendanceReminders, runWeeklyMa
     try{
       await runAttendanceReminders();
       await runWeeklyManagerSummary();
-    }catch(error){logger.error('Falha ao executar notificações agendadas:',error);}
+    }catch(error){logger.error('scheduled_notification_job_failed',error);}
     finally{running=false;schedule(intervalMs);}
   };
   schedule(startupDelayMs);

@@ -18,6 +18,7 @@ import {
 import { createApiHandler } from './routes/index.mjs';
 import { createEmailService } from './email.mjs';
 import { createNotificationJobs, startNotificationScheduler } from './jobs.mjs';
+import { createStructuredLogger } from './logger.mjs';
 import {
   ANNOUNCEMENT_ATTACHMENT_TOTAL_BYTES,
   ANNOUNCEMENT_ATTACHMENT_MAX_COUNT,
@@ -75,8 +76,9 @@ const supabaseAdmin = usesSupabaseAuth && supabaseSecretKey
     })
   : null;
 
+const logger = createStructuredLogger();
 await mkdir(dataRoot, { recursive: true });
-const db = await createDatabase({ sqlitePath });
+const db = await createDatabase({ sqlitePath, logger });
 const currentTimestampSql = db.dialect === 'sqlite' ? `strftime('%Y-%m-%dT%H:%M:%fZ','now')` : 'CURRENT_TIMESTAMP';
 const announcementScheduledCondition = column => `${column} <= ${currentTimestampSql}`;
 if (db.dialect === 'sqlite') await db.exec(`
@@ -166,15 +168,19 @@ if (db.dialect === 'sqlite') await db.exec(`
     phone TEXT,
     guardian_name TEXT,
     guardian_phone TEXT,
+    guardian_consent_at TEXT,
     church_id INTEGER REFERENCES churches(id),
     age_group TEXT,
     has_instrument INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
+    anonymized_at TEXT,
+    anonymized_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE UNIQUE INDEX IF NOT EXISTS students_email_lower_unique ON students(LOWER(email)) WHERE email IS NOT NULL;
   CREATE INDEX IF NOT EXISTS students_church_id_idx ON students(church_id);
+  CREATE INDEX IF NOT EXISTS students_anonymized_at_idx ON students(anonymized_at);
   CREATE TABLE IF NOT EXISTS courses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -433,10 +439,13 @@ if (db.dialect === 'sqlite') {
         phone TEXT,
         guardian_name TEXT,
         guardian_phone TEXT,
+        guardian_consent_at TEXT,
         church_id INTEGER REFERENCES churches(id),
         age_group TEXT,
         has_instrument INTEGER NOT NULL DEFAULT 0,
         active INTEGER NOT NULL DEFAULT 1,
+        anonymized_at TEXT,
+        anonymized_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
@@ -449,6 +458,11 @@ if (db.dialect === 'sqlite') {
     `);
   }
   await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS students_email_lower_unique ON students(LOWER(email)) WHERE email IS NOT NULL; CREATE INDEX IF NOT EXISTS students_church_id_idx ON students(church_id);');
+  const privacyStudentColumns=await db.prepare('PRAGMA table_info(students)').all();
+  if(!privacyStudentColumns.some(column=>column.name==='guardian_consent_at'))await db.exec('ALTER TABLE students ADD COLUMN guardian_consent_at TEXT;');
+  if(!privacyStudentColumns.some(column=>column.name==='anonymized_at'))await db.exec('ALTER TABLE students ADD COLUMN anonymized_at TEXT;');
+  if(!privacyStudentColumns.some(column=>column.name==='anonymized_by'))await db.exec('ALTER TABLE students ADD COLUMN anonymized_by INTEGER REFERENCES users(id) ON DELETE SET NULL;');
+  await db.exec('CREATE INDEX IF NOT EXISTS students_anonymized_at_idx ON students(anonymized_at);');
 
   const academicClassColumns=await db.prepare('PRAGMA table_info(classes)').all();
   const academicClassTable=await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='classes'").get();
@@ -527,7 +541,7 @@ async function issueProfessorInvite({ professorId, name, email, createdBy, ip, a
     await sendEmail(email, 'Convite de acesso — Projeto Aprendiz', emailBody, `professor-invite/${professorId}/${tokenHash.slice(0, 16)}`);
     return { inviteSent: true, expiresAt: expires };
   } catch (error) {
-    console.error('Não foi possível enviar o convite do professor:', error.message, error.providerMessage || '');
+    logger.error('professor_invite_email_failed', error, { professorId });
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy, 'professor_invite_email_failed', ip);
     return { inviteSent: false, expiresAt: expires };
   }
@@ -871,6 +885,7 @@ function studentView(row) {
     id: row.id, nome: row.name, email: row.email || '', contato: row.email || '',
     telefone: row.phone || '', igreja_id: row.church_id ? Number(row.church_id) : null, igreja: row.church_name || '', classe: row.age_group || '',
     guardian_name: row.guardian_name || '', guardian_phone: row.guardian_phone || '',
+    guardian_consent_at: row.guardian_consent_at || '',
     instrumento: row.has_instrument ? 'Sim' : 'Não', curso: courseNames,
     local: row.church_id ? Number(row.church_id) : '', foto_url: '',
     cursos: classes.map(({ nome, local }) => ({ nome, local })),
@@ -1052,7 +1067,7 @@ const {
   prepareStoredAttachments,
   insertAnnouncementAttachments,
   removeStoredAttachments,
-} = createAnnouncementStorage({ db, supabaseAdmin });
+} = createAnnouncementStorage({ db, supabaseAdmin, logger });
 const ANNOUNCEMENT_RECIPIENT_MAX_COUNT = 200;
 
 function recipientIds(value) {
@@ -1368,6 +1383,7 @@ const api = createApiHandler({
   securityHeaders,
   zonedScheduleIso,
   scheduleIsPast,
+  logger,
 });
 const notificationJobs=createNotificationJobs({db,sendEmail,pendingAttendance,atRiskStudents,zonedTodayDate,baseUrl});
 const scheduledJobsEnabled=process.env.ENABLE_SCHEDULED_JOBS==='true'||(isProduction&&process.env.ENABLE_SCHEDULED_JOBS!=='false');
@@ -1405,8 +1421,12 @@ const server = http.createServer(async (request, response) => {
     }
     return await serve(request, response, url);
   } catch (error) {
-    console.error(error);
-    json(response, error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 500, { message: 'Erro interno do servidor.' });
+    const requestId=randomUUID();
+    let pathname='desconhecido';
+    try{pathname=new URL(request.url,baseUrl).pathname}catch{}
+    logger.error('http_request_failed',error,{requestId,method:request.method,path:pathname});
+    if(!response.headersSent)json(response, error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 500, { message: 'Erro interno do servidor.', requestId }, { 'X-Request-Id': requestId });
+    else response.destroy();
   }
 });
 
@@ -1415,7 +1435,7 @@ server.listen(port, host, () => {
   if (!isProduction) console.log('Caixa de e-mail de testes em /dev-mail');
   if(scheduledJobsEnabled){
     const configuredInterval=Number(process.env.SCHEDULED_JOB_INTERVAL_MS||60*60_000);
-    notificationScheduler=startNotificationScheduler({...notificationJobs,intervalMs:Math.max(60_000,configuredInterval)});
+    notificationScheduler=startNotificationScheduler({...notificationJobs,intervalMs:Math.max(60_000,configuredInterval),logger});
   }
 });
 

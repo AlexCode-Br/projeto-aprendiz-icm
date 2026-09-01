@@ -83,7 +83,7 @@ export function normalizeAnnouncementAttachments(value, existingAttachments = ne
   return { items, existingItems: items.filter(item => item.existing), newItems: items.filter(item => !item.existing) };
 }
 
-export function createAnnouncementStorage({ db, supabaseAdmin }) {
+export function createAnnouncementStorage({ db, supabaseAdmin, logger = console }) {
   const announcementStorageBucket = process.env.SUPABASE_ANNOUNCEMENT_BUCKET || 'announcement-attachments';
   const useSupabaseAttachmentStorage = Boolean(supabaseAdmin) && process.env.ANNOUNCEMENT_STORAGE_PROVIDER !== 'database';
   let announcementBucketPromise;
@@ -133,7 +133,7 @@ export function createAnnouncementStorage({ db, supabaseAdmin }) {
       }
       return stored;
     } catch (error) {
-      await removeStoredAttachments(stored.map(item => item.storage_path)).catch(cleanupError => console.error(cleanupError));
+      await removeStoredAttachments(stored.map(item => item.storage_path)).catch(cleanupError => logger.error('announcement_storage_cleanup_failed', cleanupError, { announcementId }));
       throw error;
     }
   }
@@ -154,4 +154,3 @@ export function createAnnouncementStorage({ db, supabaseAdmin }) {
     removeStoredAttachments,
   };
 }
-

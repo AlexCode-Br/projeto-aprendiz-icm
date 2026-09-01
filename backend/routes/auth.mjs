@@ -23,6 +23,7 @@ export function createAuthRoutes(context) {
     supabaseAdmin,
     hashPassword,
     randomBytes,
+    logger,
   } = context;
 
   return async function authRoutes(request, response, url, ip) {
@@ -79,7 +80,7 @@ export function createAuthRoutes(context) {
           const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
           const body = `Olá, ${user.name}. Use este link em até 30 minutos para redefinir sua senha:\n\n${resetUrl}\n\nSe você não solicitou a alteração, ignore esta mensagem.`;
           try { await sendEmail(user.email, 'Recuperação de senha — Projeto Aprendiz', body, `password-reset-${sha256(token)}`); }
-          catch (error) { console.error('Não foi possível enviar recuperação de senha:', error.message, error.providerMessage || ''); }
+          catch (error) { logger.error('password_recovery_email_failed', error, { userId: user.id }); }
         } else if (!user) {
           const pendingProfessor = await db.prepare(`
             SELECT professor_profiles.id,professor_profiles.name,professor_profiles.email,professor_invites.created_by
@@ -121,7 +122,7 @@ export function createAuthRoutes(context) {
           if (!reset.auth_user_id) return json(response, 400, { message: 'Esta conta ainda não foi ativada. Solicite um novo convite.' });
           const { error } = await supabaseAdmin.auth.admin.updateUserById(reset.auth_user_id, { password });
           if (error) {
-            console.error('Não foi possível atualizar a senha no Supabase:', error.message);
+            logger.error('supabase_password_update_failed', error, { userId: reset.user_id });
             return json(response, 502, { message: 'Não foi possível alterar a senha agora. Tente novamente.' });
           }
         }
@@ -162,7 +163,7 @@ export function createAuthRoutes(context) {
             app_metadata: { role: 'professor' },
           });
           if (error) {
-            console.error('Não foi possível criar o usuário do professor no Supabase:', error.message);
+            logger.error('supabase_professor_creation_failed', error, { professorId: invitation.professor_profile_id });
             const duplicate = String(error.code || error.message).toLowerCase().includes('email') && String(error.code || error.message).toLowerCase().includes('exist');
             return json(response, duplicate ? 409 : 502, { message: duplicate ? 'Já existe uma conta de acesso com este e-mail. Use a recuperação de senha.' : 'Não foi possível ativar a conta agora. Tente novamente.' });
           }
@@ -187,4 +188,3 @@ export function createAuthRoutes(context) {
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

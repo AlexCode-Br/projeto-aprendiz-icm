@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import FormCheckbox from './FormCheckbox';
 import FormSelect from './FormSelect';
 import FormRadio from './FormRadio';
 import { cleanText, validateStudent } from '../../shared/validation.mjs';
@@ -10,6 +11,7 @@ const initialFormState = {
     telefone: '',
     guardian_name: '',
     guardian_phone: '',
+    guardian_consent: false,
     classe: '',
     turmas: [],
     local: '',
@@ -45,6 +47,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                 turmas: Array.isArray(aluno.turmas) ? aluno.turmas.slice(0, 3).map(item => item.id) : [],
                 guardian_name: aluno.guardian_name || '',
                 guardian_phone: aluno.guardian_phone || '',
+                guardian_consent: Boolean(aluno.guardian_consent_at),
                 local: aluno.igreja_id || aluno.local || '',
                 instrumento: aluno.instrumento || 'Não',
             });
@@ -154,6 +157,21 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                                     <label htmlFor="guardian_phone" className="form-label">Telefone do responsável</label>
                                     <input id="guardian_phone" name="guardian_phone" type="tel" inputMode="tel" value={formData.guardian_phone} onChange={handleChange} autoComplete="tel" maxLength="15" aria-invalid={Boolean(errors.guardian_phone)} className={`form-control ${errors.guardian_phone ? 'border-danger' : ''}`} />
                                     {errors.guardian_phone && <p className="mt-1 text-xs text-danger">{errors.guardian_phone}</p>}
+                                </div>
+                                <div className="rounded-lg border border-border bg-surface-muted/40 p-4 md:col-span-2">
+                                    <FormCheckbox
+                                        id="guardian_consent"
+                                        name="guardian_consent"
+                                        checked={formData.guardian_consent}
+                                        onChange={event => {
+                                            setFormData(previous => ({ ...previous, guardian_consent: event.target.checked }));
+                                            if (errors.guardian_consent) setErrors(previous => ({ ...previous, guardian_consent: null }));
+                                        }}
+                                        label="Autorização do responsável legal"
+                                        description="Confirmo que o responsável autorizou o cadastro e o uso destes dados para a gestão das atividades do projeto."
+                                        aria-invalid={Boolean(errors.guardian_consent)}
+                                    />
+                                    {errors.guardian_consent && <p className="mt-2 text-xs text-danger">{errors.guardian_consent}</p>}
                                 </div>
                             </>}
                             <div className="md:col-span-2">

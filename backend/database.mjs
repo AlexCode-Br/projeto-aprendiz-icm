@@ -129,7 +129,7 @@ class PostgresDatabase {
   async close() { await this.pool.end(); }
 }
 
-export async function createDatabase({ sqlitePath }) {
+export async function createDatabase({ sqlitePath, logger = console }) {
   if (process.env.DATABASE_URL) {
     const { Pool } = await import('pg');
     const pool = new Pool({
@@ -140,7 +140,7 @@ export async function createDatabase({ sqlitePath }) {
       options: '-c search_path=projeto_aprendiz,public -c idle_in_transaction_session_timeout=30000',
       ssl: process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false' },
     });
-    pool.on('error', error => console.error('Erro inesperado no pool PostgreSQL:', error));
+    pool.on('error', error => logger.error('postgres_pool_error', error));
     const database = new PostgresDatabase(pool);
     await database.migrate();
     return database;

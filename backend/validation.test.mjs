@@ -52,7 +52,21 @@ test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () =
     instrumento: 'Não',
     guardian_name: 'Joana de Souza',
     guardian_phone: '(71) 98888-1234',
+    guardian_consent: true,
   }), {});
+
+  assert.match(validateStudent({
+    nome: 'Maria de Souza',
+    contato: '',
+    telefone: '(71) 99999-1234',
+    classe: 'Adolescente',
+    turmas: [11],
+    local: 'Guarani',
+    instrumento: 'Não',
+    guardian_name: 'Joana de Souza',
+    guardian_phone: '(71) 98888-1234',
+    guardian_consent: false,
+  }).guardian_consent, /autorização/i);
 
   assert.equal(validateStudent({
     nome: 'Maria de Souza',

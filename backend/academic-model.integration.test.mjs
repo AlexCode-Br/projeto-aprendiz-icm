@@ -76,11 +76,13 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(invalidTeen.status, 400);
     assert.ok(invalidTeen.data.errors.guardian_name);
     assert.ok(invalidTeen.data.errors.guardian_phone);
+    assert.ok(invalidTeen.data.errors.guardian_consent);
     const validTeen = await call(manager, 'POST', '/alunos', {
       ...studentPayload('Adolescente Com Responsável'),
       classe: 'Adolescente',
       guardian_name: 'Responsável Modelo',
       guardian_phone: '(71) 98888-7777',
+      guardian_consent: true,
     });
     assert.equal(validTeen.status, 201, JSON.stringify(validTeen.data));
 
@@ -114,18 +116,44 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     const updated = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um', destination.data.id));
     assert.equal(updated.status, 200, JSON.stringify(updated.data));
 
+    const contact = await call(manager, 'POST', `/api/alunos/${second.data.id}/contatos`, { note: 'Responsável pediu retorno amanhã.', outcome: 'retorno_agendado' });
+    assert.equal(contact.status, 201, JSON.stringify(contact.data));
     const deleted = await call(manager, 'DELETE', `/alunos/${second.data.id}`);
     assert.equal(deleted.status, 200, JSON.stringify(deleted.data));
+    assert.equal(deleted.data.anonymized, true);
+
+    const auditView = await call(manager, 'GET', '/api/audit-log?limit=50');
+    assert.equal(auditView.status, 200, JSON.stringify(auditView.data));
+    assert.ok(auditView.data.entries.some(entry => entry.action === `student_anonymized:${second.data.id}`));
+    assert.equal(auditView.data.entries.some(entry => Object.hasOwn(entry, 'ip')), false);
+    const professorLogin = await call(null, 'POST', '/api/auth/login', { email: 'professor@projetoaprendiz.local', password: 'Professor@2026!' });
+    assert.equal(professorLogin.status, 200, JSON.stringify(professorLogin.data));
+    const professorSession = { cookie: String(professorLogin.headers.get('set-cookie')).split(';')[0], csrf: professorLogin.data.csrfToken };
+    assert.equal((await call(professorSession, 'GET', '/api/audit-log')).status, 403);
 
     const database = new DatabaseSync(databasePath);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM students WHERE email IS NULL').get().total >= 3, true);
     assert.equal(database.prepare('SELECT church_id FROM students WHERE id=?').get(first.data.id).church_id, church.data.id);
-    assert.equal(database.prepare('SELECT guardian_name FROM students WHERE id=?').get(validTeen.data.id).guardian_name, 'Responsável Modelo');
+    const teen = database.prepare('SELECT guardian_name,guardian_consent_at FROM students WHERE id=?').get(validTeen.data.id);
+    assert.equal(teen.guardian_name, 'Responsável Modelo');
+    assert.ok(teen.guardian_consent_at);
     const oldEnrollment = database.prepare('SELECT status,transferred_to_class_id FROM enrollments WHERE student_id=? AND class_id=?').get(first.data.id, offering.id);
     assert.equal(oldEnrollment.status, 'cancelada');
     assert.equal(oldEnrollment.transferred_to_class_id, destination.data.id);
     assert.equal(database.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE student_id=? AND class_id=? AND status='ativa'").get(first.data.id, destination.data.id).total, 1);
-    assert.equal(database.prepare('SELECT reason_category FROM dropout_events WHERE student_id=? ORDER BY id DESC LIMIT 1').get(second.data.id).reason_category, 'outro');
+    const anonymized = database.prepare('SELECT * FROM students WHERE id=?').get(second.data.id);
+    assert.equal(anonymized.name, `Aluno anonimizado #${second.data.id}`);
+    for (const field of ['email','phone','guardian_name','guardian_phone','guardian_consent_at','church_id','age_group']) assert.equal(anonymized[field], null);
+    assert.equal(anonymized.active, 0);
+    assert.ok(anonymized.anonymized_at);
+    assert.ok(anonymized.anonymized_by);
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM student_contacts WHERE student_id=?').get(second.data.id).total, 0);
+    assert.ok(database.prepare('SELECT COUNT(*) AS total FROM enrollments WHERE student_id=?').get(second.data.id).total > 0);
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE student_id=? AND status='ativa'").get(second.data.id).total, 0);
+    const dropout = database.prepare('SELECT reason,reason_category FROM dropout_events WHERE student_id=? ORDER BY id DESC LIMIT 1').get(second.data.id);
+    assert.equal(dropout.reason, 'Dados anonimizados por solicitação');
+    assert.equal(dropout.reason_category, 'outro');
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM audit_log WHERE action=?').get(`student_anonymized:${second.data.id}`).total, 1);
     database.close();
   } finally {
     if (server.exitCode === null) server.kill('SIGTERM');

@@ -16,6 +16,7 @@ export function createProfessorRoutes(context) {
     selectedSchoolYear,
     professorDeletionImpact,
     validateProfessor,
+    logger,
   } = context;
 
   return async function professorRoutes(request, response, url, ip) {
@@ -176,7 +177,7 @@ export function createProfessorRoutes(context) {
           const { error }=await supabaseAdmin.auth.admin.deleteUser(professor.auth_user_id,false);
           const authAlreadyAbsent=error&&(error.status===404||/not found|does not exist/i.test(error.message || ''));
           if(error&&!authAlreadyAbsent){
-            console.error('Não foi possível excluir definitivamente o usuário do Supabase:',error.message);
+            logger.error('supabase_professor_deletion_failed',error,{professorId:id,userId:professor.user_id});
             return json(response,502,{message:'Não foi possível apagar a conta de autenticação. Nenhum dado local foi excluído; tente novamente.'});
           }
         }
@@ -236,4 +237,3 @@ export function createProfessorRoutes(context) {
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

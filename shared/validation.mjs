@@ -90,6 +90,7 @@ export function validateStudent(values) {
     const guardianPhoneMessage = phoneError(values.guardian_phone);
     if (guardianNameMessage) errors.guardian_name = guardianNameMessage;
     if (guardianPhoneMessage) errors.guardian_phone = guardianPhoneMessage;
+    if (values.guardian_consent !== true) errors.guardian_consent = 'Confirme a autorização do responsável legal.';
   }
   return errors;
 }
