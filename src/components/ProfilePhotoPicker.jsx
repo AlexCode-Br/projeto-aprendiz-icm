@@ -1,0 +1,41 @@
+import React, { useEffect, useRef, useState } from 'react';
+import ProfileAvatar from './ProfileAvatar';
+
+const MAX_BYTES = 5 * 1024 * 1024;
+const TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+export default function ProfilePhotoPicker({ name, currentUrl = '', value, onChange, disabled = false }) {
+    const inputRef = useRef(null);
+    const [error, setError] = useState('');
+    const [cacheKey, setCacheKey] = useState(0);
+    useEffect(() => { setError(''); setCacheKey(key => key + 1); }, [currentUrl, name]);
+    const preview = typeof value === 'string' ? value : value === null ? '' : currentUrl ? `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}preview=${cacheKey}` : '';
+
+    const selectFile = event => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+        if (!TYPES.has(file.type)) return setError('Use uma imagem PNG, JPG/JPEG ou WEBP.');
+        if (file.size > MAX_BYTES) return setError('A foto deve ter no máximo 5 MB.');
+        const reader = new FileReader();
+        reader.onerror = () => setError('Não foi possível ler esta imagem.');
+        reader.onload = () => { setError(''); onChange(String(reader.result || '')); };
+        reader.readAsDataURL(file);
+    };
+
+    return <div className="rounded-xl border border-border bg-surface-muted/30 p-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <ProfileAvatar name={name} src={preview} className="h-20 w-20" textClassName="text-2xl" />
+            <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-text-default">Foto de perfil</p>
+                <p className="mt-1 text-xs text-text-muted">PNG, JPG/JPEG ou WEBP, com no máximo 5 MB.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="btn btn-secondary">{preview ? 'Trocar foto' : 'Adicionar foto'}</button>
+                    {preview && <button type="button" disabled={disabled} onClick={() => { setError(''); onChange(null); }} className="btn btn-secondary text-danger">Remover</button>}
+                </div>
+                <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={selectFile} className="sr-only" />
+                {error && <p role="alert" className="mt-2 text-xs text-danger">{error}</p>}
+            </div>
+        </div>
+    </div>;
+}

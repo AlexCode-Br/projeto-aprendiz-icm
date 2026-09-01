@@ -19,6 +19,7 @@ export function createSupportRoutes(context) {
     supportClientMessageIdError,
     SUPPORT_STATUSES,
     supportStatusFromDatabase,
+    notificationService,
   } = context;
 
   return async function supportRoutes(request, response, url, ip) {
@@ -63,6 +64,7 @@ export function createSupportRoutes(context) {
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_created:${ticketId}`,ip);
             return ticketId;
           });
+          await notificationService.notifyManagers('newTicket','Novo chamado de suporte',`${session.name} abriu o chamado #${created}: ${subject}.`,`support-ticket-created/${created}`);
           return json(response,201,{id:created});
         }catch(error){
           if(duplicateError(error)&&suppliedClientId){
@@ -148,6 +150,8 @@ export function createSupportRoutes(context) {
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_replied:${ticketId}`,ip);
             return id;
           });
+          if(session.role==='gestor')await notificationService.notifyUser(ticket.requester_user_id,'newTicket',`Nova resposta no chamado #${ticketId}`,`O gestor respondeu ao chamado “${ticket.subject}”. Acesse a Central de Suporte para acompanhar.`,`support-reply/${messageId}`);
+          else await notificationService.notifyManagers('newTicket',`Nova resposta no chamado #${ticketId}`,`${session.name} respondeu ao chamado “${ticket.subject}”.`,`support-reply/${messageId}`);
           return json(response,201,{success:true,id:messageId,status:supportStatusFromDatabase(nextStatus)});
         }catch(error){
           if(duplicateError(error)&&suppliedClientId){
@@ -174,4 +178,3 @@ export function createSupportRoutes(context) {
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

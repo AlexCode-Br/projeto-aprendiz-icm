@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import ProfileAvatar from '../../components/ProfileAvatar';
 import { useToast } from '../../contexts/ToastContext';
 import Pagination from '../../components/Pagination';
 import { downloadCsv } from '../../utils/csv.js';
@@ -112,7 +113,7 @@ const ProfessorAlunos = () => {
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className="hover:bg-border/50">
                                 <td className="px-6 py-4">
-                                    <img className="h-10 w-10 rounded-full object-cover" src={aluno.foto_url || `https://ui-avatars.com/api/?name=${aluno.nome}`} alt={aluno.nome} />
+                                    <ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" />
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-default">{aluno.nome}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email}</td>

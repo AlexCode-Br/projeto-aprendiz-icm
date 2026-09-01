@@ -24,6 +24,8 @@ import {
   createAnnouncementStorage,
   normalizeAnnouncementAttachments,
 } from './storage.mjs';
+import { createProfilePhotoStorage, normalizeProfilePhoto } from './profile-photos.mjs';
+import { createNotificationService, normalizeNotificationPreferences } from './notifications.mjs';
 import {
   catalogNameError,
   cleanText,
@@ -115,6 +117,20 @@ if (db.dialect === 'sqlite') await db.exec(`
     preferences_json TEXT NOT NULL DEFAULT '{}',
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS profile_photos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_type TEXT NOT NULL CHECK(owner_type IN ('user','professor','student')),
+    owner_id INTEGER NOT NULL CHECK(owner_id > 0),
+    mime_type TEXT NOT NULL CHECK(mime_type IN ('image/png','image/jpeg','image/webp')),
+    size_bytes INTEGER NOT NULL CHECK(size_bytes > 0 AND size_bytes <= 5242880),
+    data_url TEXT,
+    storage_path TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(owner_type,owner_id),
+    CHECK((data_url IS NOT NULL AND storage_path IS NULL) OR (data_url IS NULL AND storage_path IS NOT NULL))
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS profile_photos_storage_path_unique ON profile_photos(storage_path) WHERE storage_path IS NOT NULL;
   CREATE TABLE IF NOT EXISTS dev_emails (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     recipient TEXT NOT NULL,
@@ -516,6 +532,7 @@ function duplicateError(error) {
 }
 
 const { sendEmail } = createEmailService({ db, isProduction });
+const notificationService = createNotificationService({ db, sendEmail, logger });
 
 function requireSupabaseAdmin(response) {
   if (!usesSupabaseAuth || supabaseAdmin) return true;
@@ -878,7 +895,7 @@ function studentView(row) {
     guardian_name: row.guardian_name || '', guardian_phone: row.guardian_phone || '',
     guardian_consent_at: row.guardian_consent_at || '',
     instrumento: row.has_instrument ? 'Sim' : 'Não', curso: courseNames,
-    local: row.church_id ? Number(row.church_id) : '', foto_url: '',
+    local: row.church_id ? Number(row.church_id) : '', foto_url: row.photo_updated_at ? `/api/alunos/${row.id}/foto?v=${encodeURIComponent(row.photo_updated_at)}` : '',
     cursos: classes.map(({ nome, local }) => ({ nome, local })),
     turmas: classes,
     created_at: row.created_at,
@@ -900,7 +917,7 @@ async function activeClassesForStudent(classIds, legacyCourseNames = [], schoolY
   if (classIds.length) {
     const placeholders = classIds.map(() => '?').join(',');
     classes = await db.prepare(`
-      SELECT classes.id,classes.course_id,classes.capacity,courses.name AS course_name
+      SELECT classes.id,classes.course_id,classes.professor_id,classes.capacity,courses.name AS course_name
       FROM classes
       JOIN courses ON courses.id=classes.course_id
       JOIN locations ON locations.id=classes.location_id
@@ -912,7 +929,7 @@ async function activeClassesForStudent(classIds, legacyCourseNames = [], schoolY
   } else if (legacyCourseNames.length) {
     const placeholders = legacyCourseNames.map(() => '?').join(',');
     classes = await db.prepare(`
-      SELECT MIN(classes.id) AS id,courses.id AS course_id,MAX(classes.capacity) AS capacity,courses.name AS course_name
+      SELECT MIN(classes.id) AS id,courses.id AS course_id,MIN(classes.professor_id) AS professor_id,MAX(classes.capacity) AS capacity,courses.name AS course_name
       FROM classes
       JOIN courses ON courses.id=classes.course_id
       JOIN locations ON locations.id=classes.location_id
@@ -943,9 +960,11 @@ async function activeChurch(value) {
 
 const studentSelect = `
   SELECT students.*,MAX(churches.name) AS church_name,
+    MAX(profile_photos.updated_at) AS photo_updated_at,
     GROUP_CONCAT(classes.id || '::' || courses.name || '::' || locations.name, '||') AS class_offerings
   FROM students
   LEFT JOIN churches ON churches.id=students.church_id
+  LEFT JOIN profile_photos ON profile_photos.owner_type='student' AND profile_photos.owner_id=students.id
   LEFT JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa'
   LEFT JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=?
   LEFT JOIN courses ON courses.id=classes.course_id
@@ -1005,6 +1024,7 @@ const {
   insertAnnouncementAttachments,
   removeStoredAttachments,
 } = createAnnouncementStorage({ db, supabaseAdmin, logger });
+const profilePhotoStorage = createProfilePhotoStorage({ db, supabaseAdmin, logger });
 const ANNOUNCEMENT_RECIPIENT_MAX_COUNT = 200;
 
 function recipientIds(value) {
@@ -1175,6 +1195,8 @@ const api = createApiHandler({
   userFromSupabaseToken,
   baseUrl,
   sendEmail,
+  notificationService,
+  normalizeNotificationPreferences,
   sha256,
   isProduction,
   issueProfessorInvite,
@@ -1218,6 +1240,8 @@ const api = createApiHandler({
   removeStoredAttachments,
   announcementStorageBucket,
   useSupabaseAttachmentStorage,
+  profilePhotoStorage,
+  normalizeProfilePhoto,
   ANNOUNCEMENT_ATTACHMENT_TOTAL_BYTES,
   ANNOUNCEMENT_ATTACHMENT_MAX_COUNT,
   supportTicketForSession,

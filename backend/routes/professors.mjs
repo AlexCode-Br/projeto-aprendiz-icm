@@ -17,6 +17,7 @@ export function createProfessorRoutes(context) {
     professorDeletionImpact,
     validateProfessor,
     logger,
+    profilePhotoStorage,
   } = context;
 
   return async function professorRoutes(request, response, url, ip) {
@@ -28,11 +29,13 @@ export function createProfessorRoutes(context) {
             professor_profiles.phone AS telefone,locations.name AS local,
             CASE professor_profiles.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,
             users.active AS user_active,
+            MAX(profile_photos.updated_at) AS photo_updated_at,
             MAX(CASE WHEN professor_invites.accepted_at IS NULL AND professor_invites.expires_at>CURRENT_TIMESTAMP THEN 1 ELSE 0 END) AS has_valid_invite,
             GROUP_CONCAT(DISTINCT courses.name) AS course_names
           FROM professor_profiles
           LEFT JOIN locations ON locations.id=professor_profiles.home_location_id
           LEFT JOIN users ON users.id=professor_profiles.user_id
+          LEFT JOIN profile_photos ON profile_photos.owner_type='professor' AND profile_photos.owner_id=professor_profiles.id
           LEFT JOIN professor_invites ON professor_invites.professor_profile_id=professor_profiles.id
           LEFT JOIN classes ON classes.professor_id=professor_profiles.id AND classes.active=1 AND classes.school_year_id=?
           LEFT JOIN courses ON courses.id=classes.course_id
@@ -41,6 +44,7 @@ export function createProfessorRoutes(context) {
         `).all(period.id)).map(row=>({
           ...row,
           cursos:row.course_names?row.course_names.split(','):[],
+          foto_url:row.photo_updated_at?`/api/professores/${row.id}/foto?v=${encodeURIComponent(row.photo_updated_at)}`:'',
           acesso:row.status==='Inativo'?'Desativado':row.user_active===1?'Ativo':row.has_valid_invite===1?'Convite pendente':'Envio pendente',
         }));
         const cursos=(await db.prepare('SELECT name FROM courses WHERE active=1 ORDER BY name').all()).map(row=>row.name);
@@ -181,6 +185,8 @@ export function createProfessorRoutes(context) {
             return json(response,502,{message:'Não foi possível apagar a conta de autenticação. Nenhum dado local foi excluído; tente novamente.'});
           }
         }
+
+        await profilePhotoStorage.remove('professor',id);
     
         await db.transaction(async()=>{
           if(professor.user_id){

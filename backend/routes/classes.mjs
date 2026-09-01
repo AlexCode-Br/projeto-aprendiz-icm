@@ -11,6 +11,7 @@ export function createClassRoutes(context) {
     selectedSchoolYear,
     catalogNameError,
     validateClassDetails,
+    notificationService,
   } = context;
 
   return async function classRoutes(request, response, url, ip) {
@@ -121,6 +122,8 @@ export function createClassRoutes(context) {
         try {
           const result=await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,weekday,start_time,capacity) VALUES (?,?,?,?,?,?,?,?)').run(period.id,course.id,professor.id,location.id,classLabel||`${courseName} — ${locationName}`,weekday||null,startTime||null,capacity);
           await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_created',ip);
+          await notificationService.notifyProfessor(professor.id,'courseUpdates','Nova turma atribuída',`A turma ${classLabel||courseName}, em ${locationName}, foi atribuída a você.`,`class-created/${Number(result.lastInsertRowid)}`);
+          await notificationService.notifyManagers('courseUpdates','Nova turma cadastrada',`${session.name} cadastrou a turma ${classLabel||courseName}, em ${locationName}.`,`class-created/${Number(result.lastInsertRowid)}`);
           return json(response,201,{id:Number(result.lastInsertRowid)});
         } catch (error) {
           if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response,409,{message:'Esta turma já existe.'});
@@ -146,13 +149,19 @@ export function createClassRoutes(context) {
           if(!result.changes)return json(response,404,{message:'Turma não encontrada.'});
         }catch(error){if(duplicateError(error))return json(response,409,{message:'Esta turma já existe.'});throw error;}
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
+        await notificationService.notifyProfessor(professor.id,'courseUpdates','Turma atualizada',`A turma ${classLabel||courseName}, em ${locationName}, teve seus dados atualizados.`,`class-updated/${id}/${Date.now()}`);
+        await notificationService.notifyManagers('courseUpdates','Turma atualizada',`${session.name} atualizou a turma ${classLabel||courseName}, em ${locationName}.`,`class-updated/${id}/${Date.now()}`);
         return json(response,200,{success:true});
       }
       if(courseMatch&&request.method==='DELETE'){
         const session=await authorize(request,response,['gestor']);if(!session)return;
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
-        await db.prepare('UPDATE classes SET active=0 WHERE id=? AND school_year_id=?').run(Number(courseMatch[1]),period.id);
+        const classId=Number(courseMatch[1]);
+        const existingClass=await db.prepare('SELECT professor_id,label FROM classes WHERE id=? AND school_year_id=?').get(classId,period.id);
+        await db.prepare('UPDATE classes SET active=0 WHERE id=? AND school_year_id=?').run(classId,period.id);
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_deactivated',ip);
+        if(existingClass)await notificationService.notifyProfessor(existingClass.professor_id,'courseUpdates','Turma encerrada',`A turma ${existingClass.label||`#${classId}`} foi encerrada.`,`class-deactivated/${classId}`);
+        if(existingClass)await notificationService.notifyManagers('courseUpdates','Turma encerrada',`${session.name} encerrou a turma ${existingClass.label||`#${classId}`}.`,`class-deactivated/${classId}`);
         return json(response,200,{success:true});
       }
     return json(response, 404, { message: 'Rota não encontrada.' });

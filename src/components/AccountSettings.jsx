@@ -1,24 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import FormCheckbox from './FormCheckbox';
+import ProfilePhotoPicker from './ProfilePhotoPicker';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { friendlyAuthError, supabase } from '../services/supabase';
-import { emailError, personNameError } from '../../shared/validation.mjs';
+import { personNameError } from '../../shared/validation.mjs';
 
 const fieldClass = 'form-control mt-1';
 
 export default function AccountSettings() {
     const { user, refreshUser, usesSupabaseAuth } = useAuth();
     const { showToast } = useToast();
-    const [profile, setProfile] = useState({ nome: user?.nome || '', email: user?.email || '' });
+    const [profile, setProfile] = useState({ nome: user?.nome || '' });
+    const [photoChange, setPhotoChange] = useState(undefined);
+    const [photoVersion, setPhotoVersion] = useState(Date.now());
+    const [photoUrl, setPhotoUrl] = useState('');
     const [password, setPassword] = useState({ currentPassword: '', newPassword: '', confirmation: '' });
     const [preferences, setPreferences] = useState({ newStudent: true, newTicket: true, courseUpdates: true, systemAlerts: true });
     const [saving, setSaving] = useState('');
 
     useEffect(() => {
         api.get('/api/account').then(({ data }) => {
-            setProfile({ nome: data.user.nome, email: data.user.email });
+            setProfile({ nome: data.user.nome });
+            setPhotoUrl(data.photoUrl || '');
             setPreferences(previous => ({ ...previous, ...data.preferences }));
         }).catch(error => showToast(error.message, 'error'));
     }, [showToast]);
@@ -27,12 +32,16 @@ export default function AccountSettings() {
 
     const saveProfile = async event => {
         event.preventDefault();
-        const profileError = personNameError(profile.nome, 'nome completo') || emailError(profile.email);
+        const profileError = personNameError(profile.nome, 'nome completo');
         if (profileError) return showToast(profileError, 'warning');
         setSaving('profile');
         try {
-            const nextProfile = usesSupabaseAuth ? { ...profile, email: user.email } : profile;
-            await api.put('/api/account/profile', nextProfile);
+            await api.put('/api/account/profile', profile);
+            if (typeof photoChange === 'string') { await api.put('/api/profile-photo', { dataUrl: photoChange }); setPhotoUrl('/api/profile-photo'); }
+            else if (photoChange === null) { await api.delete('/api/profile-photo'); setPhotoUrl(''); }
+            setPhotoChange(undefined);
+            setPhotoVersion(Date.now());
+            window.dispatchEvent(new CustomEvent('profile-photo:updated'));
             await refreshUser();
             showToast('Dados pessoais atualizados.', 'success');
         }
@@ -49,6 +58,7 @@ export default function AccountSettings() {
                 if (signInError) throw new Error(friendlyAuthError(signInError));
                 const { error: updateError } = await supabase.auth.updateUser({ password: password.newPassword });
                 if (updateError) throw new Error(friendlyAuthError(updateError));
+                await api.post('/api/account/security-alert', {}).catch(() => {});
             } else {
                 await api.put('/api/account/password', { currentPassword: password.currentPassword, newPassword: password.newPassword });
             }
@@ -59,8 +69,13 @@ export default function AccountSettings() {
     };
     const savePreferences = async () => {
         setSaving('preferences');
-        try { await api.put('/api/account/preferences', { preferences }); showToast('Preferências salvas.', 'success'); }
+        try { const { data } = await api.put('/api/account/preferences', { preferences }); setPreferences(data.preferences); showToast('Preferências salvas e ativas.', 'success'); }
         catch (error) { showToast(error.message, 'error'); } finally { setSaving(''); }
+    };
+    const testNotifications = async () => {
+        setSaving('test-notification');
+        try { const { data } = await api.post('/api/account/preferences/test', {}); showToast(data.message, 'success', 6000); }
+        catch (error) { showToast(error.message, 'error', 6000); } finally { setSaving(''); }
     };
     const options = user?.role === 'gestor' ? [
         ['newStudent', 'Novas inscrições', 'Avisar quando um aluno for cadastrado.'], ['newTicket', 'Novos tickets', 'Avisar sobre solicitações de suporte.'], ['courseUpdates', 'Alterações em turmas', 'Receber atualizações de cursos e professores.'], ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
@@ -72,7 +87,10 @@ export default function AccountSettings() {
         <div><h1 className="page-title">Configurações da conta</h1><p className="page-description">Seus dados são salvos com segurança e usados no acesso ao sistema.</p></div>
         <form onSubmit={saveProfile} className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Dados pessoais</h3>
-            <div className="grid md:grid-cols-2 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Nome completo<input required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">E-mail de acesso<input required maxLength="254" autoComplete="email" readOnly={usesSupabaseAuth} type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} className={`${fieldClass} ${usesSupabaseAuth ? 'opacity-70 cursor-not-allowed' : ''}`} />{usesSupabaseAuth && <span className="block mt-1 text-xs text-text-muted">Para trocar o e-mail de acesso, fale com o Gestor.</span>}</label></div>
+            <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,1fr)]">
+                <label className="text-sm font-medium text-text-default">Nome completo<input required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label>
+                <ProfilePhotoPicker name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={setPhotoChange} disabled={saving === 'profile'} />
+            </div>
             <div className="mt-5 flex justify-end"><button disabled={saving === 'profile'} className="submit-btn disabled:opacity-60">{saving === 'profile' ? 'Salvando...' : 'Salvar dados'}</button></div>
         </form>
         <form onSubmit={changePassword} className="panel p-5 md:p-7">
@@ -83,8 +101,9 @@ export default function AccountSettings() {
         </form>
         <section className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Notificações</h3>
+            <p className="mt-1 text-sm text-text-muted">Escolha quais atualizações serão enviadas ao e-mail de acesso cadastrado.</p>
             <div className="mt-4 divide-y divide-border">{options.map(([key, title, description]) => <div key={key} className="py-4"><FormCheckbox checked={Boolean(preferences[key])} onChange={event => setPreferences({ ...preferences, [key]: event.target.checked })} label={title} description={description} className="justify-between flex-row-reverse w-full" /></div>)}</div>
-            <div className="mt-4 flex justify-end"><button type="button" onClick={savePreferences} disabled={saving === 'preferences'} className="submit-btn disabled:opacity-60">{saving === 'preferences' ? 'Salvando...' : 'Salvar preferências'}</button></div>
+            <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={testNotifications} disabled={Boolean(saving)} className="btn btn-secondary disabled:opacity-60">{saving === 'test-notification' ? 'Enviando...' : 'Enviar teste'}</button><button type="button" onClick={savePreferences} disabled={Boolean(saving)} className="submit-btn disabled:opacity-60">{saving === 'preferences' ? 'Salvando...' : 'Salvar preferências'}</button></div>
         </section>
     </div>;
 }

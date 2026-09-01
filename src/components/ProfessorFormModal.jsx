@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
 import FormCheckbox from './FormCheckbox';
+import ProfilePhotoPicker from './ProfilePhotoPicker';
 import { cleanText, hasValidationErrors, normalizeEmail, phoneDigits, validateProfessor } from '../../shared/validation.mjs';
 
 const initialFormState = { nome: '', contato: '', telefone: '', local: '', cursos: [] };
@@ -18,6 +19,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [photoChange, setPhotoChange] = useState(undefined);
 
     useEffect(() => {
         setFormData(professor ? {
@@ -28,6 +30,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
             cursos: (professor.cursos || []).filter(course => courses.includes(course)),
         } : initialFormState);
         setErrors({});
+        setPhotoChange(undefined);
         setIsSubmitting(false);
     }, [professor, isOpen, courses]);
 
@@ -49,7 +52,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
         if (normalized.cursos.some(course => !courses.includes(course))) validationErrors.cursos = 'Selecione somente cursos cadastrados.';
         if (hasValidationErrors(validationErrors)) return setErrors(validationErrors);
         setIsSubmitting(true);
-        try { await onSave(normalized); } finally { setIsSubmitting(false); }
+        try { await onSave(normalized, photoChange); } finally { setIsSubmitting(false); }
     };
 
     if (!isOpen) return null;
@@ -60,6 +63,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
             <form onSubmit={handleSubmit} noValidate>
                 {!catalogsReady && <div className="alert-warning mb-4" role="alert">Cadastre pelo menos um curso e uma igreja na área “Cursos e igrejas” antes de adicionar professores.</div>}
                 <div className="space-y-4">
+                    <ProfilePhotoPicker name={formData.nome} currentUrl={professor?.foto_url || ''} value={photoChange} onChange={setPhotoChange} disabled={isSubmitting} />
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div>
                             <label htmlFor="professor-nome" className="form-label">Nome completo</label>

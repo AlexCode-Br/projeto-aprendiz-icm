@@ -3,6 +3,7 @@ import Modal from './Modal';
 import FormCheckbox from './FormCheckbox';
 import FormSelect from './FormSelect';
 import FormRadio from './FormRadio';
+import ProfilePhotoPicker from './ProfilePhotoPicker';
 import { cleanText, validateStudent } from '../../shared/validation.mjs';
 
 const initialFormState = {
@@ -30,6 +31,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
     const [saving, setSaving] = useState(false);
+    const [photoChange, setPhotoChange] = useState(undefined);
 
     const offeringOptions = React.useMemo(() => offerings.map(item => ({
         value: item.id,
@@ -55,6 +57,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
             setFormData(initialFormState);
         }
         setErrors({});
+        setPhotoChange(undefined);
         setSaving(false);
     }, [aluno, isOpen, offerings]);
 
@@ -90,7 +93,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                 church_id: formData.local,
                 nome: cleanText(formData.nome, 100),
                 contato: cleanText(formData.contato, 254),
-            }, aluno?.id);
+            }, aluno?.id, photoChange);
         } finally {
             setSaving(false);
         }
@@ -102,6 +105,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
         <Modal isOpen={isOpen} onClose={onClose} title={aluno ? 'Editar aluno' : 'Adicionar aluno'} maxWidth="max-w-2xl">
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="space-y-4">
+                        <ProfilePhotoPicker name={formData.nome} currentUrl={aluno?.foto_url || ''} value={photoChange} onChange={setPhotoChange} disabled={saving} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {Object.entries({ nome: 'Nome completo', contato: 'E-mail (opcional)', telefone: 'Telefone (WhatsApp)' }).map(([key, label]) => (
                                 <div key={key}>

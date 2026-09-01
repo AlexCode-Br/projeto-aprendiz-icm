@@ -8,6 +8,7 @@ import AlunoFormModal from '../../components/AlunoFormModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import CatalogItemModal from '../../components/CatalogItemModal';
 import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
+import ProfileAvatar from '../../components/ProfileAvatar';
 
 const Alunos = () => {
     // --- Estados ---
@@ -107,15 +108,23 @@ const Alunos = () => {
         setSelectedAluno(null);
     };
 
-    const handleSaveAluno = async (formData, alunoId) => {
+    const handleSaveAluno = async (formData, alunoId, photoChange) => {
         try {
+            let savedId = alunoId;
             if (alunoId) {
                 await api.put(`/alunos/${alunoId}`, formData);
-                showToast('Aluno atualizado com sucesso!', 'success');
             } else {
-                await api.post('/alunos', formData);
-                showToast('Aluno adicionado com sucesso!', 'success');
+                const response = await api.post('/alunos', formData);
+                savedId = response.data.id;
             }
+            let photoFailed = false;
+            try {
+                if (typeof photoChange === 'string') await api.put(`/api/alunos/${savedId}/foto`, { dataUrl: photoChange });
+                else if (photoChange === null) await api.delete(`/api/alunos/${savedId}/foto`);
+            } catch {
+                photoFailed = true;
+            }
+            showToast(photoFailed ? 'Aluno salvo, mas não foi possível atualizar a foto.' : alunoId ? 'Aluno atualizado com sucesso!' : 'Aluno adicionado com sucesso!', photoFailed ? 'warning' : 'success', photoFailed ? 6000 : undefined);
             handleCloseModals();
             await fetchAlunos();
         } catch (error) {
@@ -185,7 +194,7 @@ const Alunos = () => {
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className="hover:bg-border/50">
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <img className="h-10 w-10 rounded-full object-cover" src={aluno.foto_url || `https://ui-avatars.com/api/?name=${aluno.nome}&background=random`} alt={aluno.nome} />
+                                    <ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" />
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-default">{aluno.nome}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email || 'Não informado'}</td>

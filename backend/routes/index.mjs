@@ -29,6 +29,12 @@ export function createApiHandler(context) {
     validateSchoolYear,
     schoolYearView,
     duplicateError,
+    notificationService,
+    normalizeNotificationPreferences,
+    profilePhotoStorage,
+    normalizeProfilePhoto,
+    securityHeaders,
+    logger,
   } = context;
   const authRoutes = createAuthRoutes(context);
   const announcementRoutes = createAnnouncementRoutes(context);
@@ -57,23 +63,26 @@ export function createApiHandler(context) {
   
     if(request.method==='GET'&&url.pathname==='/api/account'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
-      const row=await db.prepare('SELECT preferences_json FROM user_settings WHERE user_id=?').get(session.user_id);
-      let preferences={};try{preferences=JSON.parse(row?.preferences_json||'{}')}catch{}
-      return json(response,200,{user:publicUser({id:session.user_id,...session}),preferences});
+      const preferences=await notificationService.preferencesFor(session.user_id);
+      let photoOwnerType='user',photoOwnerId=Number(session.user_id);
+      if(session.role==='professor'){
+        const profile=await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
+        photoOwnerType='professor';photoOwnerId=Number(profile?.id||0);
+      }
+      const photo=photoOwnerId?await db.prepare('SELECT updated_at FROM profile_photos WHERE owner_type=? AND owner_id=?').get(photoOwnerType,photoOwnerId):null;
+      return json(response,200,{user:publicUser({id:session.user_id,...session}),preferences,photoUrl:photo?`/api/profile-photo?v=${encodeURIComponent(photo.updated_at)}`:''});
     }
     if(request.method==='PUT'&&url.pathname==='/api/account/profile'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
-      const body=await readJson(request),name=cleanText(body.nome,100),email=cleanEmail(body.email);
-      const errors={nome:personNameError(name,'nome completo'),email:emailError(email)};
+      const body=await readJson(request),name=cleanText(body.nome,100);
+      const errors={nome:personNameError(name,'nome completo')};
       if(hasValidationErrors(errors))return invalid(response,errors);
-      try{
-        await db.transaction(async () => {
-          await db.prepare('UPDATE users SET name=?,email=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(name,email,session.user_id);
-          if(session.role==='professor')await db.prepare('UPDATE professor_profiles SET name=?,email=? WHERE user_id=?').run(name,email,session.user_id);
-          await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'profile_updated',ip);
-        });
-      }catch(error){if(String(error).includes('UNIQUE'))return json(response,409,{message:'Este e-mail já está em uso.'});throw error;}
-      return json(response,200,{user:{id:session.user_id,nome:name,email,role:session.role}});
+      await db.transaction(async () => {
+        await db.prepare('UPDATE users SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(name,session.user_id);
+        if(session.role==='professor')await db.prepare('UPDATE professor_profiles SET name=? WHERE user_id=?').run(name,session.user_id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'profile_updated',ip);
+      });
+      return json(response,200,{user:{id:session.user_id,nome:name,email:session.email,role:session.role}});
     }
     if(request.method==='PUT'&&url.pathname==='/api/account/password'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
@@ -84,13 +93,80 @@ export function createApiHandler(context) {
       await db.prepare('UPDATE users SET password_hash=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(await hashPassword(body.newPassword),session.user_id);
       await db.prepare('DELETE FROM sessions WHERE user_id=? AND id<>?').run(session.user_id,session.id);
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'password_changed',ip);
+      await notificationService.notifyUser(session.user_id,'systemAlerts','Sua senha foi alterada','A senha de acesso da sua conta foi alterada. Se não reconhece esta ação, entre em contato com a administração imediatamente.',`password-change/${session.user_id}/${Date.now()}`);
       return json(response,200,{message:'Senha alterada com sucesso.'});
     }
     if(request.method==='PUT'&&url.pathname==='/api/account/preferences'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
-      const body=await readJson(request),preferences=body.preferences&&typeof body.preferences==='object'?body.preferences:{};
+      const body=await readJson(request),preferences=normalizeNotificationPreferences(body.preferences);
       await db.prepare(`INSERT INTO user_settings (user_id,preferences_json) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET preferences_json=excluded.preferences_json,updated_at=CURRENT_TIMESTAMP`).run(session.user_id,JSON.stringify(preferences));
       return json(response,200,{preferences});
+    }
+    if(request.method==='POST'&&url.pathname==='/api/account/preferences/test'){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      try{
+        await context.sendEmail(session.email,'Teste de notificações — Projeto Aprendiz',`Olá, ${session.name}.\n\nAs notificações por e-mail da sua conta estão funcionando corretamente.\n\nProjeto Aprendiz`,`notification-test/${session.user_id}/${Date.now()}`);
+        return json(response,200,{message:'E-mail de teste enviado com sucesso.'});
+      }catch(error){logger.error('notification_test_failed',error,{userId:session.user_id});return json(response,502,{message:'Não foi possível enviar o e-mail de teste. Revise a configuração do remetente.'});}
+    }
+    if(request.method==='POST'&&url.pathname==='/api/account/security-alert'){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'password_changed',ip);
+      await notificationService.notifyUser(session.user_id,'systemAlerts','Sua senha foi alterada','A senha de acesso da sua conta foi alterada. Se não reconhece esta ação, entre em contato com a administração imediatamente.',`supabase-password-change/${session.user_id}/${Date.now()}`);
+      return json(response,200,{success:true});
+    }
+
+    const accountPhoto=url.pathname==='/api/profile-photo';
+    const professorPhoto=url.pathname.match(/^\/api\/professores\/(\d+)\/foto$/);
+    const studentPhoto=url.pathname.match(/^\/api\/alunos\/(\d+)\/foto$/);
+    if(accountPhoto||professorPhoto||studentPhoto){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      let ownerType='user',ownerId=Number(session.user_id);
+      if(accountPhoto&&session.role==='professor'){
+        const profile=await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
+        if(!profile)return json(response,404,{message:'Perfil de professor não encontrado.'});
+        ownerType='professor';ownerId=Number(profile.id);
+      }else if(professorPhoto){
+        ownerType='professor';ownerId=Number(professorPhoto[1]);
+        const profile=await db.prepare('SELECT id,user_id FROM professor_profiles WHERE id=? AND active=1').get(ownerId);
+        if(!profile)return json(response,404,{message:'Professor não encontrado.'});
+        if(session.role!=='gestor'&&Number(profile.user_id)!==Number(session.user_id))return json(response,403,{message:'Você não tem permissão para acessar esta foto.'});
+      }else if(studentPhoto){
+        ownerType='student';ownerId=Number(studentPhoto[1]);
+        const student=await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(ownerId);
+        if(!student)return json(response,404,{message:'Aluno não encontrado.'});
+        if(session.role==='professor'){
+          const allowed=await db.prepare(`SELECT students.id FROM students
+            JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa'
+            JOIN classes ON classes.id=enrollments.class_id AND classes.active=1
+            JOIN professor_profiles ON professor_profiles.id=classes.professor_id AND professor_profiles.active=1
+            WHERE students.id=? AND students.active=1 AND professor_profiles.user_id=? LIMIT 1`).get(ownerId,session.user_id);
+          if(!allowed)return json(response,403,{message:'Você não tem permissão para acessar esta foto.'});
+        }
+      }
+      if(['PUT','DELETE'].includes(request.method)&&!accountPhoto&&session.role!=='gestor')return json(response,403,{message:'Somente o gestor pode alterar esta foto.'});
+      if(request.method==='GET'){
+        try{
+          const photo=await profilePhotoStorage.load(ownerType,ownerId);
+          if(!photo)return json(response,404,{message:'Foto não cadastrada.'});
+          response.writeHead(200,{...securityHeaders(photo.mime_type),'Content-Length':String(photo.buffer.length),'Cache-Control':'private, no-cache','Content-Disposition':'inline'});
+          return response.end(photo.buffer);
+        }catch(error){logger.error('profile_photo_load_failed',error,{ownerType,ownerId});return json(response,502,{message:'Não foi possível carregar a foto.'});}
+      }
+      if(request.method==='PUT'){
+        const body=await readJson(request,8*1024*1024),normalized=normalizeProfilePhoto(body.dataUrl);
+        if(normalized.error)return invalid(response,{foto:normalized.error});
+        try{
+          const saved=await profilePhotoStorage.save(ownerType,ownerId,normalized);
+          await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`profile_photo_updated:${ownerType}:${ownerId}`,ip);
+          return json(response,200,{success:true,updatedAt:saved?.updated_at,url:accountPhoto?'/api/profile-photo':`/api/${ownerType==='student'?'alunos':'professores'}/${ownerId}/foto`});
+        }catch(error){logger.error('profile_photo_save_failed',error,{ownerType,ownerId});return json(response,502,{message:'Não foi possível salvar a foto. Tente novamente.'});}
+      }
+      if(request.method==='DELETE'){
+        await profilePhotoStorage.remove(ownerType,ownerId);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`profile_photo_deleted:${ownerType}:${ownerId}`,ip);
+        return json(response,200,{success:true});
+      }
     }
 
     if(request.method==='GET'&&url.pathname==='/api/school-years'){

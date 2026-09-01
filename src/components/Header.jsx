@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import useDarkMode from '../hooks/useDarkMode';
+import ProfileAvatar from './ProfileAvatar';
 
 const Header = ({ sidebarOpen, setSidebarOpen }) => {
     const { user, logout } = useContext(AuthContext);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
     const [isDark, setIsDark] = useDarkMode();
+    const [photoVersion, setPhotoVersion] = useState(Date.now());
 
     useEffect(() => {
         const clickHandler = ({ target }) => {
@@ -18,7 +20,11 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
         return () => document.removeEventListener('click', clickHandler);
     }, []);
 
-    const initial = user?.nome?.trim()?.charAt(0)?.toUpperCase() || 'U';
+    useEffect(() => {
+        const refreshPhoto = () => setPhotoVersion(Date.now());
+        window.addEventListener('profile-photo:updated', refreshPhoto);
+        return () => window.removeEventListener('profile-photo:updated', refreshPhoto);
+    }, []);
 
     return (
         <header className="relative sticky top-0 z-20 flex h-20 shrink-0 items-center justify-between border-b border-border bg-surface/90 px-3 backdrop-blur-md sm:px-5 lg:px-6">
@@ -31,7 +37,7 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
             </div>
             <div className="relative flex items-center" ref={dropdownRef}>
                 <button type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen(!dropdownOpen)} className="group flex min-h-11 min-w-11 items-center justify-center rounded-full ring-2 ring-transparent transition hover:ring-primary/20">
-                    <span aria-hidden="true" className="flex h-10 w-10 items-center justify-center rounded-full bg-primary font-bold text-white shadow-sm ring-2 ring-primary/25 ring-offset-2 ring-offset-surface transition group-hover:ring-primary/60">{initial}</span>
+                    <ProfileAvatar name={user?.nome} src={`/api/profile-photo?v=${photoVersion}`} className="h-10 w-10" />
                 </button>
                 <div
                     id="profile-dropdown"

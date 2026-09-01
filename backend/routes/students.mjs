@@ -12,6 +12,8 @@ export function createStudentRoutes(context) {
     selectedSchoolYear,
     catalogNameError,
     validateStudentContact,
+    notificationService,
+    profilePhotoStorage,
     activeChurch,
     studentSelect,
     studentView,
@@ -120,6 +122,11 @@ export function createStudentRoutes(context) {
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_created',ip);
             return Number(result.lastInsertRowid);
           });
+          const classSummary=classRows.map(item=>item.course_name).join(', ');
+          await notificationService.notifyManagers('newStudent','Novo aluno cadastrado',`${name} foi cadastrado${classSummary?` nas turmas de ${classSummary}`:''}.`,`student-created/${studentId}`);
+          for(const professorId of [...new Set(classRows.map(item=>Number(item.professor_id)).filter(Boolean))]){
+            await notificationService.notifyProfessor(professorId,'newStudent','Novo aluno em sua turma',`${name} foi incluído em uma de suas turmas.`,`student-created/${studentId}`);
+          }
           return json(response, 201, { id: studentId });
         } catch (error) {
           if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response, 409, { message: 'Já existe um aluno com este e-mail.' });
@@ -171,6 +178,7 @@ export function createStudentRoutes(context) {
         const id = Number(studentMatch[1]);
         const student = await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
         if (!student) return json(response, 404, { message: 'Aluno ativo não encontrado.' });
+        await profilePhotoStorage.remove('student',id);
         await db.transaction(async () => {
           const enrollments = await db.prepare("SELECT class_id FROM enrollments WHERE student_id=? AND status='ativa'").all(id);
           await db.prepare('DELETE FROM student_contacts WHERE student_id=?').run(id);

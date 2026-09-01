@@ -7,6 +7,7 @@ import FormSelect from '../../components/FormSelect';
 import KebabMenu from '../../components/KebabMenu'; // Importando o novo componente
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
+import ProfileAvatar from '../../components/ProfileAvatar';
 
 // Ícones de Ação
 const DetailsIcon = () => <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>;
@@ -76,15 +77,23 @@ const Professores = () => {
         setConfirmModalOpen(true);
     };
 
-    const handleSaveProfessor = async (profData) => {
+    const handleSaveProfessor = async (profData, photoChange) => {
         try {
+            let savedId = currentProfessor?.id;
+            let response;
             if (currentProfessor) {
                 await api.put(`/professores/${currentProfessor.id}`, profData);
-                showToast('Professor atualizado com sucesso!', 'success');
             } else {
-                const response = await api.post('/professores', profData);
-                showToast(response.data.message || 'Professor cadastrado com sucesso!', response.data.inviteSent === false ? 'warning' : 'success', 6000);
+                response = await api.post('/professores', profData);
+                savedId = response.data.id;
             }
+            let photoFailed = false;
+            try {
+                if (typeof photoChange === 'string') await api.put(`/api/professores/${savedId}/foto`, { dataUrl: photoChange });
+                else if (photoChange === null) await api.delete(`/api/professores/${savedId}/foto`);
+            } catch { photoFailed = true; }
+            const defaultMessage = currentProfessor ? 'Professor atualizado com sucesso!' : response?.data?.message || 'Professor cadastrado com sucesso!';
+            showToast(photoFailed ? `${defaultMessage} A foto não pôde ser atualizada.` : defaultMessage, photoFailed || response?.data?.inviteSent === false ? 'warning' : 'success', 6000);
             setFormModalOpen(false);
             await fetchProfessores();
         } catch (error) {
@@ -181,7 +190,7 @@ const Professores = () => {
                         <tbody>
                             {filteredProfessores.map(prof => (
                                 <tr key={prof.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-                                    <td className="px-6 py-4 font-medium">{prof.nome}</td>
+                                    <td className="px-6 py-4 font-medium"><div className="flex items-center gap-3"><ProfileAvatar name={prof.nome} src={prof.foto_url} className="h-10 w-10" /><span>{prof.nome}</span></div></td>
                                     <td className="px-6 py-4">{prof.cursos.join(', ')}</td>
                                     <td className="px-6 py-4">{prof.local}</td>
                                     <td className="px-6 py-4">
