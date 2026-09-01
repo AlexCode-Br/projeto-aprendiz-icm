@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const StatCard = ({ to, title, value, icon, colorClass = 'primary', delay, loading = false }) => {
+const StatCard = ({ to, title, value, detail, icon, colorClass = 'primary', delay, loading = false }) => {
     const iconColorClass = {
         primary: 'bg-primary/10 text-primary',
         success: 'bg-success/10 text-success',
@@ -21,7 +21,10 @@ const StatCard = ({ to, title, value, icon, colorClass = 'primary', delay, loadi
                     {loading ? (
                         <div className="skeleton mt-2 h-8 w-16" aria-hidden="true" />
                     ) : (
-                        <p className="mt-1 text-3xl font-bold tracking-tight text-text-default">{value}</p>
+                        <>
+                            <p className={`${String(value ?? '').length > 8 ? 'text-xl' : 'text-3xl'} mt-1 font-bold tracking-tight text-text-default`}>{value}</p>
+                            {detail && <p className="mt-2 text-xs leading-5 text-text-muted">{detail}</p>}
+                        </>
                     )}
                 </div>
                 <div className={`rounded-xl p-3 ${iconColorClass[colorClass] || iconColorClass.primary}`}>

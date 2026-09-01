@@ -1324,27 +1324,69 @@ function mostRecentScheduledDate(weekday, startTime, now = new Date()) {
   return '';
 }
 
-async function pendingAttendanceForProfessor(userId, period) {
+function shiftDate(date, days) {
+  const shifted=new Date(Date.parse(`${date}T12:00:00Z`)+days*86_400_000);
+  return shifted.toISOString().slice(0,10);
+}
+
+async function pendingAttendance(period, userId = null) {
   if (period.active!==1 || period.closed_at) return [];
+  const userFilter=userId===null?'':'AND professor_profiles.user_id=?';
+  const params=userId===null?[period.id]:[userId,period.id];
   const classes = await db.prepare(`
-    SELECT classes.id,courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time
+    SELECT classes.id,courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time,
+      professor_profiles.id AS professor_id,professor_profiles.name AS professor,professor_profiles.email AS professor_email
     FROM classes
     JOIN courses ON courses.id=classes.course_id
     JOIN locations ON locations.id=classes.location_id
     JOIN professor_profiles ON professor_profiles.id=classes.professor_id
-    WHERE professor_profiles.user_id=? AND professor_profiles.active=1
+    WHERE professor_profiles.active=1 ${userFilter}
       AND classes.active=1 AND classes.school_year_id=? AND classes.weekday IS NOT NULL
     ORDER BY courses.name,classes.id
-  `).all(userId,period.id);
+  `).all(...params);
   const pending = [];
   for (const classRow of classes) {
     const date = mostRecentScheduledDate(classRow.weekday,classRow.start_time);
     if (!date) continue;
     if (period.dates_confirmed===1 && (date<period.start_date || date>period.end_date)) continue;
     const recorded = await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classRow.id,date);
-    if (!recorded) pending.push({ classId:Number(classRow.id), curso:classRow.curso, local:classRow.local, weekday:classRow.weekday, data:date });
+    if (!recorded) pending.push({ classId:Number(classRow.id), curso:classRow.curso, local:classRow.local, weekday:classRow.weekday, data:date,professorId:Number(classRow.professor_id),professor:classRow.professor,professorEmail:classRow.professor_email });
   }
   return pending;
+}
+
+const pendingAttendanceForProfessor=(userId,period)=>pendingAttendance(period,userId);
+
+async function managerDecisionMetrics(period) {
+  const today=zonedTodayDate(),tomorrow=shiftDate(today,1),current30=shiftDate(today,-29),previous30=shiftDate(current30,-30),current4=shiftDate(today,-27),previous4=shiftDate(current4,-28);
+  const enrollmentCounts=await db.prepare(`SELECT
+    COALESCE(SUM(CASE WHEN enrollments.enrolled_at>=? AND enrollments.enrolled_at<? THEN 1 ELSE 0 END),0) AS current_total,
+    COALESCE(SUM(CASE WHEN enrollments.enrolled_at>=? AND enrollments.enrolled_at<? THEN 1 ELSE 0 END),0) AS previous_total
+    FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE classes.school_year_id=?`).get(current30,tomorrow,previous30,current30,period.id);
+  const currentEnrollments=Number(enrollmentCounts.current_total||0),previousEnrollments=Number(enrollmentCounts.previous_total||0);
+  const enrollmentVariation=previousEnrollments?Math.round(100*(currentEnrollments-previousEnrollments)/previousEnrollments):(currentEnrollments?100:0);
+  const dropouts=Number((await db.prepare('SELECT COUNT(DISTINCT dropout_events.student_id) AS total FROM dropout_events JOIN classes ON classes.id=dropout_events.class_id WHERE classes.school_year_id=? AND dropout_events.occurred_at>=? AND dropout_events.occurred_at<?').get(period.id,period.start_date,tomorrow)).total||0);
+  const classRows=await db.prepare(`SELECT classes.id,classes.label,classes.capacity,courses.name AS curso,locations.name AS local,professor_profiles.name AS professor,
+    COUNT(DISTINCT CASE WHEN enrollments.status='ativa' AND students.active=1 THEN enrollments.id END) AS alunos
+    FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id
+    LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id
+    WHERE classes.school_year_id=? AND classes.active=1
+    GROUP BY classes.id,classes.label,classes.capacity,courses.name,locations.name,professor_profiles.name ORDER BY courses.name,classes.label`).all(period.id);
+  const attendanceRows=await db.prepare(`SELECT classes.id,
+    COUNT(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? THEN attendance_records.id END) AS current_records,
+    COALESCE(SUM(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? AND attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS current_presence,
+    COUNT(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? THEN attendance_records.id END) AS previous_records,
+    COALESCE(SUM(CASE WHEN attendance_sessions.class_date>=? AND attendance_sessions.class_date<? AND attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS previous_presence
+    FROM classes LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
+    WHERE classes.school_year_id=? AND classes.active=1 GROUP BY classes.id`).all(current4,tomorrow,current4,tomorrow,previous4,current4,previous4,current4,period.id);
+  const attendanceByClass=new Map(attendanceRows.map(row=>[Number(row.id),row]));
+  const turmas=classRows.map(row=>{
+    const attendance=attendanceByClass.get(Number(row.id))||{},currentRecords=Number(attendance.current_records||0),previousRecords=Number(attendance.previous_records||0),currentFrequency=currentRecords?Math.round(100*Number(attendance.current_presence||0)/currentRecords):null,previousFrequency=previousRecords?Math.round(100*Number(attendance.previous_presence||0)/previousRecords):null,capacity=row.capacity==null?null:Number(row.capacity),students=Number(row.alunos||0);
+    return{id:Number(row.id),label:row.label||row.curso,curso:row.curso,local:row.local,professor:row.professor,alunos:students,capacity,ocupacao:capacity?Math.round(100*students/capacity):null,frequenciaAtual:currentFrequency,frequenciaAnterior:previousFrequency,tendencia:currentFrequency!==null&&previousFrequency!==null?currentFrequency-previousFrequency:null};
+  });
+  const currentRecords=attendanceRows.reduce((sum,row)=>sum+Number(row.current_records||0),0),currentPresence=attendanceRows.reduce((sum,row)=>sum+Number(row.current_presence||0),0),previousRecords=attendanceRows.reduce((sum,row)=>sum+Number(row.previous_records||0),0),previousPresence=attendanceRows.reduce((sum,row)=>sum+Number(row.previous_presence||0),0);
+  const frequencyCurrent=currentRecords?Math.round(100*currentPresence/currentRecords):null,frequencyPrevious=previousRecords?Math.round(100*previousPresence/previousRecords):null;
+  return{novasMatriculas:{atual:currentEnrollments,anterior:previousEnrollments,variacaoPercentual:enrollmentVariation},evasoes:dropouts,frequencia:{atual:frequencyCurrent,anterior:frequencyPrevious,tendencia:frequencyCurrent!==null&&frequencyPrevious!==null?frequencyCurrent-frequencyPrevious:null},turmas,janelas:{matriculasInicio:current30,frequenciaInicio:current4}};
 }
 
 function announcementScheduleParts(value) {
@@ -2700,18 +2742,13 @@ async function api(request, response, url) {
   if(request.method==='GET'&&url.pathname==='/api/dashboard/gestor'){
     if(!await authorize(request,response,['gestor']))return;
     const period=await selectedSchoolYear(request,response);if(!period)return;
-    const stats={
-      totalAlunos:(await db.prepare("SELECT COUNT(DISTINCT enrollments.student_id) AS total FROM enrollments JOIN classes ON classes.id=enrollments.class_id JOIN students ON students.id=enrollments.student_id WHERE classes.school_year_id=? AND classes.active=1 AND enrollments.status='ativa' AND students.active=1").get(period.id)).total,
-      cursosAtivos:(await db.prepare('SELECT COUNT(*) AS total FROM classes WHERE active=1 AND school_year_id=?').get(period.id)).total,
-      professores:(await db.prepare('SELECT COUNT(DISTINCT professor_id) AS total FROM classes WHERE active=1 AND school_year_id=?').get(period.id)).total,
-      ticketsPendentes:(await db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE status<>'Resolvido'").get()).total,
-    };
     const alunosRisco=await atRiskStudents(period.id);
-    stats.alunosRisco=alunosRisco.length;
+    const [decisionMetrics,chamadasPendentes]=await Promise.all([managerDecisionMetrics(period),pendingAttendance(period)]);
+    const stats={...decisionMetrics,alunosRisco:alunosRisco.length,chamadasPendentes:chamadasPendentes.length};
     const inscricoesPorCurso=await db.prepare("SELECT courses.name AS curso,COUNT(enrollments.id) AS total FROM courses LEFT JOIN classes ON classes.course_id=courses.id AND classes.active=1 AND classes.school_year_id=? LEFT JOIN enrollments ON enrollments.class_id=classes.id AND enrollments.status='ativa' WHERE courses.active=1 GROUP BY courses.id ORDER BY total DESC,courses.name").all(period.id);
     const ultimasInscricoes=await db.prepare("SELECT students.name AS nome,courses.name AS curso,locations.name AS local,enrollments.enrolled_at FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.status='ativa' AND classes.school_year_id=? ORDER BY enrollments.enrolled_at DESC,enrollments.id DESC LIMIT 6").all(period.id);
     const baixaFrequencia=(await db.prepare(`SELECT students.id,students.name AS nome,students.email AS contato,students.phone AS telefone,churches.name AS igreja,students.age_group AS classe,students.has_instrument,courses.name AS curso,locations.name AS local,ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0)) AS frequencia FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN students ON students.id=attendance_records.student_id LEFT JOIN churches ON churches.id=students.church_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE students.active=1 AND classes.school_year_id=? GROUP BY students.id,classes.id,churches.name,courses.name,locations.name HAVING ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0))<75 ORDER BY frequencia,students.name`).all(period.id)).map(row=>({...row,curso:[row.curso],instrumento:row.has_instrument?'Sim':'Não',status:'Ativo'}));
-    return json(response,200,{stats,inscricoesPorCurso,ultimasInscricoes,baixaFrequencia,alunosRisco,periodo:schoolYearView(period)});
+    return json(response,200,{stats,inscricoesPorCurso,ultimasInscricoes,baixaFrequencia,alunosRisco,chamadasPendentes,periodo:schoolYearView(period)});
   }
   if(request.method==='GET'&&url.pathname==='/api/dashboard/professor'){
     const session=await authorize(request,response,['professor']);if(!session)return;

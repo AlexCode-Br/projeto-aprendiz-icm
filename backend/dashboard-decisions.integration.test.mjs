@@ -1,0 +1,78 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { DatabaseSync } from 'node:sqlite';
+import test from 'node:test';
+
+const projectRoot=join(dirname(fileURLToPath(import.meta.url)),'..');
+const shiftDate=(date,days)=>new Date(Date.parse(`${date}T12:00:00Z`)+days*86_400_000).toISOString().slice(0,10);
+
+async function waitForServer(baseUrl,state){
+  for(let attempt=0;attempt<60;attempt+=1){
+    if(state.exitCode!==null)throw new Error(`Servidor encerrou antes do teste: ${state.logs}`);
+    try{if((await fetch(`${baseUrl}/api/health`)).ok)return;}catch{}
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  throw new Error(`Servidor não iniciou: ${state.logs}`);
+}
+
+test('dashboard do gestor compara movimento, frequência e ocupação sem inflar agregações',{timeout:40_000},async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'projeto-aprendiz-dashboard-')),databasePath=join(directory,'dashboard.db'),port=51_000+(process.pid%1_000),baseUrl=`http://127.0.0.1:${port}`;
+  let logs='';
+  const server=spawn(process.execPath,['backend/server.mjs'],{cwd:projectRoot,env:{...process.env,PORT:String(port),HOST:'127.0.0.1',APP_URL:baseUrl,SQLITE_PATH:databasePath,AUTH_PROVIDER:'local',SEED_DEMO_DATA:'true',NODE_ENV:'test',APP_TIMEZONE:'UTC'},stdio:['ignore','pipe','pipe']});
+  server.stdout.on('data',chunk=>{logs+=chunk;});server.stderr.on('data',chunk=>{logs+=chunk;});
+  const state={get exitCode(){return server.exitCode;},get logs(){return logs;}};
+  const call=async(session,method,path,body)=>{
+    const response=await fetch(`${baseUrl}${path}`,{method,headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(session?.cookie?{Cookie:session.cookie}:{}),...(session?.csrf?{'X-CSRF-Token':session.csrf}:{})},body:body===undefined?undefined:JSON.stringify(body)});
+    return{status:response.status,data:await response.json().catch(()=>({})),headers:response.headers};
+  };
+
+  try{
+    await waitForServer(baseUrl,state);
+    const login=await call(null,'POST','/api/auth/login',{email:'gestor@projetoaprendiz.local',password:'Gestor@2026!'});
+    assert.equal(login.status,200,JSON.stringify(login.data));
+    const manager={cookie:String(login.headers.get('set-cookie')).split(';')[0],csrf:login.data.csrfToken};
+    const today=new Date().toISOString().slice(0,10),database=new DatabaseSync(databasePath);
+    database.prepare("UPDATE school_years SET start_date=?,end_date=?,dates_confirmed=1 WHERE active=1").run(shiftDate(today,-180),shiftDate(today,180));
+    database.exec("UPDATE enrollments SET enrolled_at='2000-01-01'; UPDATE dropout_events SET occurred_at='2000-01-01'; DELETE FROM attendance_records; DELETE FROM attendance_sessions;");
+    const enrollmentIds=database.prepare('SELECT id FROM enrollments ORDER BY id LIMIT 3').all();
+    assert.equal(enrollmentIds.length,3);
+    database.prepare('UPDATE enrollments SET enrolled_at=? WHERE id=?').run(shiftDate(today,-1),enrollmentIds[0].id);
+    database.prepare('UPDATE enrollments SET enrolled_at=? WHERE id=?').run(shiftDate(today,-2),enrollmentIds[1].id);
+    database.prepare('UPDATE enrollments SET enrolled_at=? WHERE id=?').run(shiftDate(today,-35),enrollmentIds[2].id);
+    const classRow=database.prepare(`SELECT classes.id,professor_profiles.user_id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id JOIN enrollments ON enrollments.class_id=classes.id WHERE enrollments.status='ativa' AND professor_profiles.user_id IS NOT NULL GROUP BY classes.id,professor_profiles.user_id HAVING COUNT(enrollments.id)>=2 LIMIT 1`).get();
+    assert.ok(classRow);
+    database.prepare('UPDATE classes SET capacity=4 WHERE id=?').run(classRow.id);
+    const students=database.prepare("SELECT student_id FROM enrollments WHERE class_id=? AND status='ativa' ORDER BY id LIMIT 2").all(classRow.id);
+    const currentSession=database.prepare('INSERT INTO attendance_sessions (class_id,class_date,recorded_by) VALUES (?,?,?)').run(classRow.id,shiftDate(today,-7),classRow.user_id).lastInsertRowid;
+    database.prepare("INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?)").run(currentSession,students[0].student_id,'presente');
+    database.prepare("INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?)").run(currentSession,students[1].student_id,'ausente');
+    const previousSession=database.prepare('INSERT INTO attendance_sessions (class_id,class_date,recorded_by) VALUES (?,?,?)').run(classRow.id,shiftDate(today,-35),classRow.user_id).lastInsertRowid;
+    for(const student of students)database.prepare("INSERT INTO attendance_records (session_id,student_id,status) VALUES (?,?,?)").run(previousSession,student.student_id,'ausente');
+    database.prepare("INSERT INTO dropout_events (student_id,class_id,reason,reason_category,occurred_at) VALUES (?,?,?,?,?)").run(students[0].student_id,classRow.id,'Mudança de cidade','mudanca',shiftDate(today,-3));
+    database.close();
+
+    const response=await call(manager,'GET','/api/dashboard/gestor');
+    assert.equal(response.status,200,JSON.stringify(response.data));
+    assert.deepEqual(response.data.stats.novasMatriculas,{atual:2,anterior:1,variacaoPercentual:100});
+    assert.equal(response.data.stats.evasoes,1);
+    assert.deepEqual(response.data.stats.frequencia,{atual:50,anterior:0,tendencia:50});
+    const classMetric=response.data.stats.turmas.find(item=>item.id===Number(classRow.id));
+    assert.equal(classMetric.alunos,2);
+    assert.equal(classMetric.capacity,4);
+    assert.equal(classMetric.ocupacao,50);
+    assert.equal(classMetric.frequenciaAtual,50);
+    assert.equal(classMetric.frequenciaAnterior,0);
+    assert.equal(classMetric.tendencia,50);
+    assert.ok(Array.isArray(response.data.chamadasPendentes));
+    assert.ok(Array.isArray(response.data.ultimasInscricoes));
+    assert.ok(Array.isArray(response.data.baixaFrequencia));
+  }finally{
+    if(server.exitCode===null)server.kill('SIGTERM');
+    await new Promise(resolve=>server.once('exit',resolve));
+    await rm(directory,{recursive:true,force:true});
+  }
+});
