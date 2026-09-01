@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './contexts/AuthContext.jsx';
 import { ToastProvider } from './contexts/ToastContext.jsx';
+import { SchoolYearProvider } from './contexts/SchoolYearContext.jsx';
 import MainLayout from './layouts/MainLayout.jsx';
 import PrivateRoute from './components/PrivateRoute.jsx';
 import './index.css'; // Importando o CSS global
@@ -115,7 +116,9 @@ function App() {
     return (
         <AuthProvider>
             <ToastProvider>
-                <React.Suspense fallback={<PageLoading />}><AppRoutes /></React.Suspense>
+                <SchoolYearProvider>
+                    <React.Suspense fallback={<PageLoading />}><AppRoutes /></React.Suspense>
+                </SchoolYearProvider>
             </ToastProvider>
         </AuthProvider>
     );

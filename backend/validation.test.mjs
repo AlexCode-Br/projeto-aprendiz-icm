@@ -8,6 +8,7 @@ import {
   validateProfessor,
   validateStudent,
   validateClassSchedule,
+  validateSchoolYear,
   validateSupportTicket,
   supportClientMessageIdError,
   supportMessageError,
@@ -85,6 +86,12 @@ test('valida dia e horário da turma como um único agendamento opcional', () =>
   assert.equal(validateClassSchedule({ weekday: 'Quarta-feira', start_time: '' }).start_time, 'Informe o horário da turma.');
   assert.equal(validateClassSchedule({ weekday: '', start_time: '19:30' }).weekday, 'Selecione o dia da semana.');
   assert.equal(validateClassSchedule({ weekday: 'Feriado', start_time: '25:99' }).weekday, 'Selecione um dia da semana válido.');
+});
+
+test('valida período letivo por intervalo de datas, inclusive entre anos civis', () => {
+  assert.deepEqual(validateSchoolYear({ label: '2026/2027', start_date: '2026-08-10', end_date: '2027-06-30' }), {});
+  assert.equal(validateSchoolYear({ label: '2026', start_date: '2027-06-30', end_date: '2026-08-10' }).end_date, 'A data final deve ser posterior à data inicial.');
+  assert.equal(validateSchoolYear({ label: 'x', start_date: '2026-02-30', end_date: '2027-06-30' }).start_date, 'Informe uma data inicial válida.');
 });
 
 test('valida chamados, mensagens e identificadores idempotentes', () => {

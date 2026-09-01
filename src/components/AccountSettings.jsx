@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { friendlyAuthError, supabase } from '../services/supabase';
 import { emailError, personNameError } from '../../shared/validation.mjs';
+import SchoolYearSettings from './SchoolYearSettings';
 
 const fieldClass = 'form-control mt-1';
 
@@ -70,6 +71,7 @@ export default function AccountSettings() {
 
     return <div className="space-y-6">
         <div><h1 className="page-title">Configurações da conta</h1><p className="page-description">Seus dados são salvos com segurança e usados no acesso ao sistema.</p></div>
+        {user?.role === 'gestor' && <SchoolYearSettings />}
         <form onSubmit={saveProfile} className="panel p-5 md:p-7">
             <h3 className="text-lg font-semibold text-text-default">Dados pessoais</h3>
             <div className="grid md:grid-cols-2 gap-5 mt-5"><label className="text-sm font-medium text-text-default">Nome completo<input required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label><label className="text-sm font-medium text-text-default">E-mail de acesso<input required maxLength="254" autoComplete="email" readOnly={usesSupabaseAuth} type="email" value={profile.email} onChange={event => setProfile({ ...profile, email: event.target.value })} className={`${fieldClass} ${usesSupabaseAuth ? 'opacity-70 cursor-not-allowed' : ''}`} />{usesSupabaseAuth && <span className="block mt-1 text-xs text-text-muted">Para trocar o e-mail de acesso, fale com o Gestor.</span>}</label></div>

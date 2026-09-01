@@ -10,6 +10,7 @@ test('converte a sintaxe compartilhada para PostgreSQL com parâmetros seguros',
   assert.equal(sql, 'INSERT INTO courses (name) VALUES ($1) ON CONFLICT DO NOTHING');
   assert.equal(databaseInternals.postgresSql("SELECT * FROM users WHERE email LIKE ? LIMIT ?"), 'SELECT * FROM users WHERE email ILIKE $1 LIMIT $2');
   assert.equal(databaseInternals.postgresSql("SELECT GROUP_CONCAT(DISTINCT courses.name) FROM courses"), "SELECT STRING_AGG(DISTINCT courses.name, ',') FROM courses");
+  assert.match(databaseInternals.returningId('INSERT INTO school_years (label) VALUES ($1)'), /RETURNING id$/);
 });
 
 test('SQLite preserva transações e desfaz uma operação com erro', async () => {
