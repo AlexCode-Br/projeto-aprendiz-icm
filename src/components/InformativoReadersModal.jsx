@@ -38,7 +38,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Quem visualizou" maxWidth="max-w-2xl">
             {loading ? (
-                <div className="py-8 text-center text-text-muted">Carregando visualizações...</div>
+                <div className="space-y-3 py-4" role="status" aria-label="Carregando visualizações">{[1,2,3].map(item=><div key={item} className="skeleton h-12 rounded-lg"/>)}</div>
             ) : error ? (
                 <div className="py-8 text-center text-danger">{error}</div>
             ) : (
@@ -66,7 +66,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
                             ) : (
                                 <tr>
                                     <td colSpan={3} className="px-4 py-8 text-center text-text-muted">
-                                        Nenhum professor visualizou este informativo ainda.
+                                        <strong className="block text-text-default">Nenhuma visualização ainda</strong><span className="mt-1 block text-sm">Os professores aparecerão aqui após abrirem o informativo.</span>
                                     </td>
                                 </tr>
                             )}

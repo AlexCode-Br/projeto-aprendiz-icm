@@ -142,7 +142,7 @@ const Cursos = () => {
                                     <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}>✎</button><button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Excluir definitivamente ${item.nome}`}>×</button></td>
                                 </tr>)}</tbody>
                             </table>
-                            {!catalogos[type].length && <p className="p-8 text-center text-sm text-text-muted">Nenhum cadastro encontrado.</p>}
+                            {!catalogos[type].length && <div className="p-8 text-center text-sm text-text-muted"><strong className="block text-text-default">Nenhum cadastro encontrado</strong><span className="mt-1 block">Use “Adicionar” para criar a primeira opção deste catálogo.</span></div>}
                         </div>
                     </section>
                 ))}
@@ -217,7 +217,7 @@ const Cursos = () => {
                                     </td>
                                 </tr>
                             ))}
-                            {!filteredCursos.length && <tr><td colSpan="7" className="px-6 py-10 text-center text-sm text-text-muted">Nenhuma turma encontrada com estes filtros.</td></tr>}
+                            {!filteredCursos.length && <tr><td colSpan="7" className="px-6 py-10 text-center text-sm text-text-muted"><strong className="block text-text-default">Nenhuma turma encontrada</strong><span className="mt-1 block">Limpe os filtros ou use “Adicionar” para montar uma nova turma.</span></td></tr>}
                         </tbody>
                     </table>
                 </div>

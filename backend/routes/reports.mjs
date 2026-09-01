@@ -38,14 +38,14 @@ export function createReportRoutes(context) {
       if(request.method==='GET'&&url.pathname==='/api/relatorios/evasao'){
         if(!await authorize(request,response,['gestor']))return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
-        const conditions=['classes.school_year_id=?'],params=[period.id],course=url.searchParams.get('curso'),start=url.searchParams.get('dataInicio'),end=url.searchParams.get('dataFim');
+        const conditions=['classes.school_year_id=?'],params=[period.id],course=url.searchParams.get('curso'),reasonCategory=url.searchParams.get('motivo'),start=url.searchParams.get('dataInicio'),end=url.searchParams.get('dataFim');
         if(course){conditions.push('courses.name=?');params.push(course)}
+        if(reasonCategory){conditions.push('dropout_events.reason_category=?');params.push(reasonCategory)}
         if(start){conditions.push('dropout_events.occurred_at>=?');params.push(start)}
         if(end){conditions.push('dropout_events.occurred_at<=?');params.push(end)}
-        const sql="SELECT courses.name AS curso,students.name AS aluno,enrollments.enrolled_at AS dataInscricao,dropout_events.occurred_at AS dataEvasao,dropout_events.reason AS motivo FROM dropout_events JOIN students ON students.id=dropout_events.student_id JOIN classes ON classes.id=dropout_events.class_id JOIN courses ON courses.id=classes.course_id LEFT JOIN enrollments ON enrollments.student_id=students.id AND enrollments.class_id=classes.id WHERE "+conditions.join(' AND ')+" ORDER BY dropout_events.occurred_at DESC";
+        const sql="SELECT courses.name AS curso,CASE WHEN students.anonymized_at IS NOT NULL THEN 'Aluno anonimizado' ELSE students.name END AS aluno,enrollments.enrolled_at AS dataInscricao,dropout_events.occurred_at AS dataEvasao,CASE dropout_events.reason_category WHEN 'mudanca' THEN 'Mudança' WHEN 'desinteresse' THEN 'Desinteresse' WHEN 'horario' THEN 'Conflito de horário' WHEN 'saude' THEN 'Saúde' WHEN 'familia' THEN 'Questões familiares' ELSE 'Outro' END AS categoria,dropout_events.reason AS motivo FROM dropout_events JOIN students ON students.id=dropout_events.student_id JOIN classes ON classes.id=dropout_events.class_id JOIN courses ON courses.id=classes.course_id LEFT JOIN enrollments ON enrollments.student_id=students.id AND enrollments.class_id=classes.id WHERE "+conditions.join(' AND ')+" ORDER BY dropout_events.occurred_at DESC";
         return json(response,200,await db.prepare(sql).all(...params));
       }
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }
-

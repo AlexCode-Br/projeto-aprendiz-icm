@@ -85,7 +85,7 @@ const LowFrequencyTable = ({ students = [], onSelectStudent }) => {
                                 </td>
                             </tr>
                         )) : (
-                            <tr><td colSpan="4" className="text-center py-10 text-text-muted">Nenhum aluno encontrado.</td></tr>
+                            <tr><td colSpan="4" className="px-6 py-10 text-center text-text-muted"><strong className="block text-text-default">Nenhum aluno com baixa frequência</strong><span className="mt-1 block text-sm">Alunos que precisarem de acompanhamento aparecerão aqui.</span></td></tr>
                         )}
                     </tbody>
                 </table>

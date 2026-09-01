@@ -27,7 +27,7 @@ const ProfessorSuporte = React.lazy(() => import('./pages/professor/ProfessorSup
 const Configuracoes = React.lazy(() => import('./pages/gestor/Configuracoes.jsx'));
 const ProfessorConfiguracoes = React.lazy(() => import('./pages/professor/ProfessorConfiguracoes.jsx'));
 
-const PageLoading = () => <div className="flex min-h-64 items-center justify-center text-sm text-text-muted" role="status">Carregando página...</div>;
+const PageLoading = () => <div className="space-y-5 py-8" role="status" aria-label="Carregando página"><div className="skeleton h-9 w-72 max-w-full" /><div className="skeleton h-4 w-96 max-w-full" /><div className="grid gap-4 sm:grid-cols-2"><div className="skeleton h-32 rounded-xl" /><div className="skeleton h-32 rounded-xl" /></div></div>;
 
 
 const NotFound = () => (

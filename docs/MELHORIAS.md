@@ -2,6 +2,21 @@
 
 Este documento é o guia de implementação das melhorias identificadas na auditoria do projeto. Serve como especificação para as próximas sessões de desenvolvimento (agente de código ou desenvolvimento manual). As melhorias visuais dos dashboards (ícones coerentes, skeleton loading, cartões alinhados à identidade vermelho/branco/cinza) já foram aplicadas.
 
+## Status da implementação — concluída em 01/09/2026
+
+- [x] Rate limiting por IP e e-mail nas rotas sensíveis de autenticação.
+- [x] Períodos letivos entre anos civis, histórico imutável e seletor global.
+- [x] Modelo acadêmico evoluído: responsáveis, igrejas, capacidade, evasão e transferências.
+- [x] Chamada rápida e sinalização de chamadas pendentes.
+- [x] Fila de alunos em risco e registro auditável de contato.
+- [x] Dashboard do gestor orientado a decisões.
+- [x] Backend modularizado, mantendo `node:http` e os contratos existentes.
+- [x] Lembretes de chamada e resumo semanal idempotentes por e-mail.
+- [x] Consentimento de responsável, anonimização LGPD e política de retenção documentada.
+- [x] Exportações CSV seguras e logs de erro estruturados em JSON.
+
+Todas as etapas possuem commits separados e foram validadas pela suíte automatizada, lint e build de produção. A publicação permanece uma operação separada e deve ser feita somente após aprovação.
+
 ## Identidade visual (regra permanente)
 
 - Paleta: **vermelho** (`--color-primary: #b71c1c` e variações), **branco** (superfícies) e **cinza** (textos, bordas, fundos). Verde/amarelo apenas para semântica (sucesso/alerta), nunca como cor decorativa.

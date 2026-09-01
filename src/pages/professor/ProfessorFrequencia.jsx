@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import FormSelect from '../../components/FormSelect';
+import { downloadCsv } from '../../utils/csv.js';
 
 const localToday = () => {
     const now = new Date();
@@ -122,6 +123,14 @@ const ProfessorFrequencia = () => {
         }
     };
 
+    const handleExportAttendance = () => {
+        const statusLabels = Object.fromEntries(attendanceOptions.map(option => [option.value, option.label]));
+        downloadCsv(`chamada_${dataAula}.csv`,
+            ['Data da aula', 'Turma', 'Aluno', 'Status', 'Chamada registrada'],
+            alunos.map(aluno => [dataAula, selectedCurso?.label || '', aluno.nome, statusLabels[frequencias[aluno.id]] || 'Não informado', chamadaRegistrada ? 'Sim' : 'Não']));
+        showToast(`${alunos.length} registro(s) de frequência exportado(s).`, 'success');
+    };
+
     return (
         <div>
             <div className="page-header"><div><h1 className="page-title">Chamada</h1><p className="page-description">Todos começam como presentes. Altere apenas ausências e justificativas antes de salvar.</p></div></div>
@@ -198,8 +207,10 @@ const ProfessorFrequencia = () => {
 
             {/* Botão de Salvar */}
             {alunos.length > 0 && (
-                <div className="mt-6 flex justify-end">
+                <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <button type="button" onClick={handleExportAttendance} className="btn btn-secondary px-6">Exportar CSV</button>
                     <button
+                        type="button"
                         onClick={handleSalvarFrequencia}
                         disabled={loading}
                         className="btn btn-primary px-6"

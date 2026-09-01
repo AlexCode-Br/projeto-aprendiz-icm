@@ -189,8 +189,8 @@ const Informativos = () => {
                         </div>
                     </article>
                 ))}
-                {loading && <div className="panel col-span-full px-6 py-14 text-center text-text-muted" role="status">Carregando informativos...</div>}
-                {!loading && !visibleInformativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">{informativos.length ? 'Nenhum informativo encontrado.' : <><p>Nenhum informativo criado ainda.</p><button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary mt-4">Criar informativo</button></>}</div>}
+                {loading && Array.from({length:3},(_,index)=><div key={index} className="panel p-5" role="status" aria-label="Carregando informativo"><div className="skeleton h-5 w-24"/><div className="skeleton mt-4 h-7 w-3/4"/><div className="skeleton mt-4 h-20 rounded-lg"/></div>)}
+                {!loading && !visibleInformativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">{informativos.length ? <><strong className="block text-text-default">Nenhum informativo encontrado</strong><span className="mt-1 block text-sm">Limpe a busca ou altere os filtros para ver outros avisos.</span></> : <><strong className="block text-text-default">Nenhum informativo criado ainda</strong><span className="mt-1 block text-sm">Crie o primeiro aviso para manter os professores informados.</span><button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary mt-4">Criar informativo</button></>}</div>}
             </div>
 
             <InformativoModal

@@ -24,7 +24,7 @@ export function formatSupportDate(value, includeDate = false) {
 }
 
 export function SupportTicketList({ tickets, selectedId, onSelect, loading, emptyMessage, role }) {
-  if (loading && !tickets.length) return <div className="space-y-3 p-4" role="status" aria-label="Carregando chamados">{[1,2,3].map(item=><div key={item} className="h-28 animate-pulse rounded-xl bg-surface-muted" />)}</div>;
+  if (loading && !tickets.length) return <div className="space-y-3 p-4" role="status" aria-label="Carregando chamados">{[1,2,3].map(item=><div key={item} className="skeleton h-28 rounded-xl" />)}</div>;
   if (!tickets.length) return <div className="flex min-h-56 flex-col items-center justify-center px-6 text-center"><span className="mb-3 text-3xl" aria-hidden="true">✓</span><p className="font-semibold text-text-default">{emptyMessage}</p><p className="mt-1 text-sm leading-6 text-text-muted">Os chamados aparecerão aqui quando houver atividade.</p></div>;
   return <div className="divide-y divide-border" role="list" aria-label="Lista de chamados">
     {tickets.map(ticket=>{
@@ -86,7 +86,7 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
     }
   };
 
-  if (loading) return <section className="flex min-h-[36rem] items-center justify-center bg-surface" role="status"><p className="text-sm text-text-muted">Carregando conversa...</p></section>;
+  if (loading) return <section className="min-h-[36rem] space-y-4 bg-surface p-6" role="status" aria-label="Carregando conversa"><div className="skeleton h-20 w-3/4 rounded-xl"/><div className="skeleton ml-auto h-20 w-2/3 rounded-xl"/><div className="skeleton h-28 w-full rounded-xl"/></section>;
   if (error) return <section className="flex min-h-[36rem] flex-col items-center justify-center bg-surface p-6 text-center"><p className="text-sm text-danger" role="alert">{error}</p><button type="button" onClick={onRetry} className="btn btn-secondary mt-4">Tentar novamente</button></section>;
   if (!ticket) return <section className="flex min-h-[36rem] flex-col items-center justify-center bg-surface p-8 text-center"><span className="text-4xl text-text-muted" aria-hidden="true">◌</span><h2 className="mt-4 text-lg font-semibold text-text-default">Selecione um chamado</h2><p className="mt-2 max-w-sm text-sm leading-6 text-text-muted">Escolha um item da lista para visualizar todo o histórico e continuar o atendimento.</p></section>;
 

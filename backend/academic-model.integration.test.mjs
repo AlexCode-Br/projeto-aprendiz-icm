@@ -130,6 +130,9 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(professorLogin.status, 200, JSON.stringify(professorLogin.data));
     const professorSession = { cookie: String(professorLogin.headers.get('set-cookie')).split(';')[0], csrf: professorLogin.data.csrfToken };
     assert.equal((await call(professorSession, 'GET', '/api/audit-log')).status, 403);
+    const anonymousDropout = await call(manager, 'GET', '/api/relatorios/evasao?motivo=outro');
+    assert.equal(anonymousDropout.status, 200, JSON.stringify(anonymousDropout.data));
+    assert.ok(anonymousDropout.data.some(entry => entry.aluno === 'Aluno anonimizado' && entry.categoria === 'Outro'));
 
     const database = new DatabaseSync(databasePath);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM students WHERE email IS NULL').get().total >= 3, true);

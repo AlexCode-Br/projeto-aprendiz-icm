@@ -2,11 +2,11 @@ import React from 'react';
 
 const DynamicReportTable = ({ columns, data, loading }) => {
     if (loading) {
-        return <div className="p-6 text-center text-text-muted">Carregando dados do relatório...</div>;
+        return <div className="space-y-3 p-6" role="status" aria-label="Carregando dados do relatório">{[1,2,3,4].map(item=><div key={item} className="skeleton h-11 rounded-lg"/>)}</div>;
     }
 
     if (!data || data.length === 0) {
-        return <div className="p-6 text-center text-text-muted">Nenhum dado para exibir. Por favor, ajuste os filtros e gere um novo relatório.</div>;
+        return <div className="p-8 text-center text-text-muted"><strong className="block text-text-default">Nenhum dado para exibir</strong><span className="mt-1 block text-sm">Ajuste os filtros e gere um novo relatório.</span></div>;
     }
 
     return (

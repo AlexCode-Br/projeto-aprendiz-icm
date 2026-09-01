@@ -156,9 +156,9 @@ const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, l
                         <label htmlFor="announcement-professor-search" className="sr-only">Pesquisar professor</label>
                         <input id="announcement-professor-search" type="search" value={professorSearch} onChange={event => setProfessorSearch(event.target.value)} placeholder="Pesquisar professor..." className="form-control mt-3" />
                         <div className="mt-3 max-h-56 space-y-1 overflow-y-auto pr-1">
-                            {loading && <p className="text-sm text-text-muted">Carregando professores…</p>}
-                            {!loading && !professors.length && <p className="text-sm text-text-muted">Nenhum professor ativo cadastrado.</p>}
-                            {!loading && professors.length > 0 && !filteredProfessors.length && <p className="py-2 text-sm text-text-muted">Nenhum professor encontrado.</p>}
+                            {loading && <div className="space-y-2" role="status" aria-label="Carregando professores">{[1,2,3].map(item=><div key={item} className="skeleton h-10 rounded-md"/>)}</div>}
+                            {!loading && !professors.length && <p className="text-sm text-text-muted"><strong className="block text-text-default">Nenhum professor ativo</strong>Cadastre ou reative um professor antes de selecionar destinatários.</p>}
+                            {!loading && professors.length > 0 && !filteredProfessors.length && <p className="py-2 text-sm text-text-muted"><strong className="block text-text-default">Nenhum professor encontrado</strong>Limpe a pesquisa para ver todos.</p>}
                             {!loading && filteredProfessors.map(professor => {
                                 const id = Number(professor.id);
                                 return <FormCheckbox key={id} id={`announcement-professor-${id}`} checked={selection.selectedProfessors.includes(id)} onChange={() => toggleProfessor(id)} label={professor.nome || professor.name || 'Professor'} className="min-h-11 items-center rounded-md px-2 py-2 hover:bg-surface-hover" />;
@@ -174,9 +174,9 @@ const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, l
                         <label htmlFor="announcement-course-search" className="sr-only">Pesquisar curso</label>
                         <input id="announcement-course-search" type="search" value={courseSearch} onChange={event => setCourseSearch(event.target.value)} placeholder="Pesquisar curso..." className="form-control mt-3" />
                         <div className="mt-3 max-h-56 space-y-1 overflow-y-auto pr-1">
-                            {loading && <p className="text-sm text-text-muted">Carregando cursos…</p>}
-                            {!loading && !courses.length && <p className="text-sm text-text-muted">Nenhum curso ativo cadastrado.</p>}
-                            {!loading && courses.length > 0 && !filteredCourses.length && <p className="py-2 text-sm text-text-muted">Nenhum curso encontrado.</p>}
+                            {loading && <div className="space-y-2" role="status" aria-label="Carregando cursos">{[1,2,3].map(item=><div key={item} className="skeleton h-10 rounded-md"/>)}</div>}
+                            {!loading && !courses.length && <p className="text-sm text-text-muted"><strong className="block text-text-default">Nenhum curso ativo</strong>Cadastre um curso antes de selecionar destinatários.</p>}
+                            {!loading && courses.length > 0 && !filteredCourses.length && <p className="py-2 text-sm text-text-muted"><strong className="block text-text-default">Nenhum curso encontrado</strong>Limpe a pesquisa para ver todos.</p>}
                             {!loading && filteredCourses.map(course => {
                                 const id = Number(course.id);
                                 return <FormCheckbox key={id} id={`announcement-course-${id}`} checked={selection.selectedCourses.includes(id)} onChange={() => toggleCourse(id)} label={course.nome || course.name || 'Curso'} className="min-h-11 items-center rounded-md px-2 py-2 hover:bg-surface-hover" />;

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { exportToPdf } from '../../utils/exportUtils.js';
+import { downloadCsv } from '../../utils/csv.js';
 import FormSelect from '../../components/FormSelect';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
@@ -9,6 +10,8 @@ const ReportTable = ({ headers, data, itemsPerPage = 5 }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const totalPages = Math.ceil(data.length / itemsPerPage);
 
+    useEffect(() => { setCurrentPage(1); }, [data]);
+
     const paginatedData = useMemo(() => {
         const startIndex = (currentPage - 1) * itemsPerPage;
         return data.slice(startIndex, startIndex + itemsPerPage);
@@ -16,6 +19,7 @@ const ReportTable = ({ headers, data, itemsPerPage = 5 }) => {
 
     return (
         <div className="mt-4">
+            {data.length === 0 ? <div className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-text-muted"><strong className="block text-text-default">Nenhum registro encontrado</strong><span className="mt-1 block text-sm">Ajuste os filtros ou escolha outro período letivo para consultar dados.</span></div> : <>
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-text-default">
                     <thead className="bg-surface-muted text-xs uppercase text-text-muted">
@@ -46,6 +50,7 @@ const ReportTable = ({ headers, data, itemsPerPage = 5 }) => {
                     </div>
                 </div>
             )}
+            </>}
         </div>
     );
 };
@@ -77,8 +82,7 @@ const Relatorios = () => {
     const handleGenerateDropoutReport = async () => {
         try {
             const response = await api.get('/api/relatorios/evasao', { params: dropoutFilters });
-            const filtered = dropoutFilters.motivo ? response.data.filter(item => item.motivo === dropoutFilters.motivo) : response.data;
-            setGeneratedDropoutData(filtered);
+            setGeneratedDropoutData(response.data);
         } catch (error) { showToast(error.message || 'Erro ao gerar relatório de evasão.', 'error'); }
     };
 
@@ -89,9 +93,21 @@ const Relatorios = () => {
     };
 
     const handleExportDropout = () => {
-        const headers = ["Curso", "Aluno", "Data Inscrição", "Data Evasão", "Motivo"];
+        const headers = ["Curso", "Aluno", "Data Inscrição", "Data Evasão", "Categoria", "Motivo"];
         const data = generatedDropoutData.map(Object.values);
         exportToPdf("Relatório de Evasão", headers, data);
+    };
+
+    const handleExportFrequencyCsv = () => {
+        downloadCsv(`frequencia_${new Date().toISOString().slice(0, 10)}.csv`,
+            ['Curso', 'Aluno', 'Professor', 'Igreja', 'Frequência'],
+            generatedFreqData.map(row => [row.curso, row.aluno, row.professor, row.local, row.frequencia]));
+    };
+
+    const handleExportDropoutCsv = () => {
+        downloadCsv(`evasao_${new Date().toISOString().slice(0, 10)}.csv`,
+            ['Curso', 'Aluno', 'Data da inscrição', 'Data da evasão', 'Categoria', 'Motivo'],
+            generatedDropoutData.map(row => [row.curso, row.aluno, row.dataInscricao, row.dataEvasao, row.categoria, row.motivo]));
     };
 
     return (
@@ -126,9 +142,9 @@ const Relatorios = () => {
                 </div>
                 {generatedFreqData && (
                     <div className="p-4 md:p-6 border-t border-border">
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                             <h4 className="font-semibold">Resultados</h4>
-                            <button type="button" onClick={handleExportFrequency} className="btn btn-secondary">Exportar PDF</button>
+                            {generatedFreqData.length > 0 && <div className="flex flex-wrap gap-2"><button type="button" onClick={handleExportFrequencyCsv} className="btn btn-secondary">Exportar CSV</button><button type="button" onClick={handleExportFrequency} className="btn btn-secondary">Exportar PDF</button></div>}
                         </div>
                         <ReportTable headers={["Curso", "Aluno", "Professor", "Igreja", "Frequência (%)"]} data={generatedFreqData} />
                     </div>
@@ -149,7 +165,7 @@ const Relatorios = () => {
                     </div>
                     <div>
                         <label className="form-label">Motivo</label>
-                        <FormSelect value={dropoutFilters.motivo} onChange={event => setDropoutFilters({...dropoutFilters,motivo:event.target.value})} options={['Conflito de horários', 'Questões pessoais', 'Excluído pelo gestor']} placeholder="Todos os motivos" />
+                        <FormSelect value={dropoutFilters.motivo} onChange={event => setDropoutFilters({...dropoutFilters,motivo:event.target.value})} options={[{value:'mudanca',label:'Mudança'},{value:'desinteresse',label:'Desinteresse'},{value:'horario',label:'Conflito de horário'},{value:'saude',label:'Saúde'},{value:'familia',label:'Questões familiares'},{value:'outro',label:'Outro'}]} placeholder="Todas as categorias" />
                     </div>
                     <label><span className="form-label">Data inicial</span><input type="date" value={dropoutFilters.dataInicio} onChange={event => setDropoutFilters({...dropoutFilters,dataInicio:event.target.value})} className="form-control" /></label>
                     <label><span className="form-label">Data final</span><input type="date" value={dropoutFilters.dataFim} onChange={event => setDropoutFilters({...dropoutFilters,dataFim:event.target.value})} className="form-control" /></label>
@@ -159,11 +175,11 @@ const Relatorios = () => {
                 </div>
                  {generatedDropoutData && (
                     <div className="p-4 md:p-6 border-t border-border">
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                             <h4 className="font-semibold">Resultados</h4>
-                            <button type="button" onClick={handleExportDropout} className="btn btn-secondary">Exportar PDF</button>
+                            {generatedDropoutData.length > 0 && <div className="flex flex-wrap gap-2"><button type="button" onClick={handleExportDropoutCsv} className="btn btn-secondary">Exportar CSV</button><button type="button" onClick={handleExportDropout} className="btn btn-secondary">Exportar PDF</button></div>}
                         </div>
-                        <ReportTable headers={["Curso", "Aluno", "Data Inscrição", "Data Evasão", "Motivo"]} data={generatedDropoutData} />
+                        <ReportTable headers={["Curso", "Aluno", "Data Inscrição", "Data Evasão", "Categoria", "Motivo"]} data={generatedDropoutData} />
                     </div>
                 )}
             </section>

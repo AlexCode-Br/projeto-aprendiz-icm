@@ -127,7 +127,7 @@ const ProfessorDashboard = () => {
                                 <span className="text-xs text-text-muted">{new Date(student.created_at).toLocaleDateString()}</span>
                             </li>
                         )) : (
-                            <li className="p-4 text-center text-text-muted">Nenhum aluno recente.</li>
+                            <li className="p-5 text-center text-text-muted"><strong className="block text-text-default">Nenhum aluno recente</strong><span className="mt-1 block text-sm">Novas matrículas nas suas turmas aparecerão aqui.</span></li>
                         )}
                     </ul>
                 </div>
@@ -148,7 +148,7 @@ const ProfessorDashboard = () => {
                                <p className="text-xs text-text-muted mt-2">{new Date(info.data_publicacao).toLocaleDateString()}</p>
                            </li>
                        )) : (
-                           <li className="p-4 text-center text-text-muted">Nenhum informativo recente.</li>
+                           <li className="p-5 text-center text-text-muted"><strong className="block text-text-default">Nenhum informativo recente</strong><span className="mt-1 block text-sm">Os próximos avisos da gestão aparecerão aqui.</span></li>
                        )}
                     </ul>
                 </div>

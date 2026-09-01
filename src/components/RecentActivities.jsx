@@ -21,7 +21,7 @@ const RecentActivities = ({ students = [] }) => {
                         </Link>
                     </li>
                 ))}
-                {!students.length && <li className="p-4 text-sm text-text-muted text-center">Nenhuma inscrição recente.</li>}
+                {!students.length && <li className="p-5 text-sm text-text-muted text-center"><strong className="block text-text-default">Nenhuma inscrição recente</strong><span className="mt-1 block">Os novos alunos do período aparecerão aqui.</span></li>}
             </ul>
         </div>
     );

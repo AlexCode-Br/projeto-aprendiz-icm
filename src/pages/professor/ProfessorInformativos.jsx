@@ -59,7 +59,7 @@ const ProfessorInformativos = () => {
 
     const unread = informativos.filter(info => !info.hasRead).length;
 
-    if (loading) return <div className="panel p-10 text-center text-text-muted" role="status">Carregando informativos...</div>;
+    if (loading) return <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Carregando informativos">{[1,2,3].map(item=><div key={item} className="panel p-5"><div className="skeleton h-5 w-24"/><div className="skeleton mt-4 h-7 w-3/4"/><div className="skeleton mt-4 h-20 rounded-lg"/></div>)}</div>;
     if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={() => void fetchInformativos()} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
 
     return (
@@ -98,7 +98,7 @@ const ProfessorInformativos = () => {
                         </div>
                     </article>
                 ))}
-                {!visible.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">{informativos.length ? 'Nenhum informativo encontrado.' : 'Nenhum informativo disponível no momento.'}</div>}
+                {!visible.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted"><strong className="block text-text-default">{informativos.length ? 'Nenhum informativo encontrado' : 'Nenhum informativo disponível'}</strong><span className="mt-1 block text-sm">{informativos.length ? 'Limpe a busca ou altere os filtros.' : 'Os avisos enviados para você aparecerão aqui.'}</span></div>}
             </div>
 
             <AnnouncementDetailModal isOpen={Boolean(selected)} onClose={() => setSelected(null)} announcement={selected} />
