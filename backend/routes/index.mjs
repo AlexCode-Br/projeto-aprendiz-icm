@@ -165,7 +165,7 @@ export function createApiHandler(context) {
       }
     }
   
-    if (url.pathname === '/alunos' || url.pathname.startsWith('/alunos/') || url.pathname.startsWith('/api/alunos/') || url.pathname.startsWith('/api/churches')) {
+    if (url.pathname === '/alunos' || url.pathname.startsWith('/alunos/') || url.pathname.startsWith('/api/alunos/') || url.pathname.startsWith('/api/churches') || url.pathname === '/api/catalogos') {
       return studentRoutes(request, response, url, ip);
     }
   

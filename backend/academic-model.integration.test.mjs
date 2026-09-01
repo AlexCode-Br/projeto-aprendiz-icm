@@ -52,6 +52,11 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(login.status, 200, JSON.stringify(login.data));
     const manager = { cookie: String(login.headers.get('set-cookie')).split(';')[0], csrf: login.data.csrfToken };
 
+    const catalogs = await call(manager, 'GET', '/api/catalogos');
+    assert.equal(catalogs.status, 200, JSON.stringify(catalogs.data));
+    assert.ok(Array.isArray(catalogs.data.cursos));
+    assert.ok(Array.isArray(catalogs.data.locais));
+
     const classes = await call(manager, 'GET', '/cursos');
     const offering = classes.data.cursos[0];
     assert.ok(offering);
