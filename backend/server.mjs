@@ -6,6 +6,7 @@ import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSa
 import { promisify } from 'node:util';
 import { createClient } from '@supabase/supabase-js';
 import { createDatabase } from './database.mjs';
+import { createSlidingWindowRateLimiter, opaqueRateLimitKey } from './security.mjs';
 import {
   catalogNameError,
   cleanText,
@@ -522,13 +523,41 @@ if (seedDemoData) await seedCommunicationData();
 await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
 await db.prepare('DELETE FROM password_resets WHERE expires_at <= ? OR used_at IS NOT NULL').run(new Date().toISOString());
 
-const attempts = new Map();
-function limited(key, maximum, windowMs) {
-  const now = Date.now();
-  const recent = (attempts.get(key) || []).filter(time => now - time < windowMs);
-  recent.push(now);
-  attempts.set(key, recent);
-  return recent.length > maximum;
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60_000;
+const AUTH_RATE_LIMIT_MESSAGE = 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.';
+const authRateLimiter = createSlidingWindowRateLimiter();
+
+async function consumeAuthRateLimit({ route, ip, email = '', includeIp = true, includeEmail = true }) {
+  const blockedScopes = [];
+  let retryAfterMs = 0;
+  if (includeIp) {
+    const result = authRateLimiter.consume({
+      key: opaqueRateLimitKey(`auth:${route}:ip`, ip),
+      limit: 20,
+      windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    });
+    if (result.blocked) blockedScopes.push('ip');
+    retryAfterMs = Math.max(retryAfterMs, result.retryAfterMs);
+  }
+  if (includeEmail && email) {
+    const result = authRateLimiter.consume({
+      key: opaqueRateLimitKey(`auth:${route}:email`, email),
+      limit: 5,
+      windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    });
+    if (result.blocked) blockedScopes.push('email');
+    retryAfterMs = Math.max(retryAfterMs, result.retryAfterMs);
+  }
+  if (!blockedScopes.length) return { blocked: false, retryAfterMs: 0 };
+  await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)')
+    .run(null, `auth_rate_limited:${route}:${blockedScopes.join('+')}`, ip);
+  return { blocked: true, retryAfterMs };
+}
+
+function rateLimitResponse(response, result) {
+  return json(response, 429, { message: AUTH_RATE_LIMIT_MESSAGE }, {
+    'Retry-After': String(Math.max(1, Math.ceil(result.retryAfterMs / 1000))),
+  });
 }
 
 function cookies(request) {
@@ -1118,7 +1147,8 @@ async function api(request, response, url) {
     if (usesSupabaseAuth) return json(response, 409, { message: 'Use o login seguro do Supabase.' });
     const { email, password, remember = false } = await readJson(request);
     const normalized = cleanEmail(email);
-    if (limited(`login:${ip}:${normalized}`, 5, 15 * 60_000)) return json(response, 429, { message: 'Muitas tentativas. Aguarde alguns minutos.' });
+    const rateLimit = await consumeAuthRateLimit({ route: 'login', ip, email: normalized });
+    if (rateLimit.blocked) return rateLimitResponse(response, rateLimit);
     const user = await db.prepare('SELECT * FROM users WHERE email = ? AND active = 1').get(normalized);
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       await new Promise(resolve => setTimeout(resolve, 350));
@@ -1155,35 +1185,35 @@ async function api(request, response, url) {
   if (request.method === 'POST' && url.pathname === '/api/auth/forgot-password') {
     const { email } = await readJson(request);
     const normalized = cleanEmail(email);
-    if (!limited(`reset:${ip}:${normalized}`, 3, 30 * 60_000)) {
-      const user = await db.prepare('SELECT * FROM users WHERE email = ? AND active = 1').get(normalized);
-      if (user && (!usesSupabaseAuth || user.auth_user_id)) {
-        const token = randomBytes(32).toString('base64url');
-        const expires = new Date(Date.now() + 30 * 60_000).toISOString();
-        await db.prepare('UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND used_at IS NULL').run(user.id);
-        await db.prepare('INSERT INTO password_resets (user_id,token_hash,expires_at) VALUES (?,?,?)').run(user.id, sha256(token), expires);
-        const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
-        const body = `Olá, ${user.name}. Use este link em até 30 minutos para redefinir sua senha:\n\n${resetUrl}\n\nSe você não solicitou a alteração, ignore esta mensagem.`;
-        try { await sendEmail(user.email, 'Recuperação de senha — Projeto Aprendiz', body, `password-reset-${sha256(token)}`); }
-        catch (error) { console.error('Não foi possível enviar recuperação de senha:', error.message, error.providerMessage || ''); }
-      } else if (!user) {
-        const pendingProfessor = await db.prepare(`
-          SELECT professor_profiles.id,professor_profiles.name,professor_profiles.email,professor_invites.created_by
-          FROM professor_profiles
-          JOIN professor_invites ON professor_invites.professor_profile_id=professor_profiles.id
-          WHERE professor_profiles.email=? AND professor_profiles.active=1 AND professor_profiles.user_id IS NULL
-          ORDER BY professor_invites.id DESC LIMIT 1
-        `).get(normalized);
-        if (pendingProfessor) {
-          await issueProfessorInvite({
-            professorId: pendingProfessor.id,
-            name: pendingProfessor.name,
-            email: pendingProfessor.email,
-            createdBy: pendingProfessor.created_by,
-            ip,
-            auditAction: 'professor_invite_requested_from_recovery',
-          });
-        }
+    const rateLimit = await consumeAuthRateLimit({ route: 'forgot_password', ip, email: normalized });
+    if (rateLimit.blocked) return rateLimitResponse(response, rateLimit);
+    const user = await db.prepare('SELECT * FROM users WHERE email = ? AND active = 1').get(normalized);
+    if (user && (!usesSupabaseAuth || user.auth_user_id)) {
+      const token = randomBytes(32).toString('base64url');
+      const expires = new Date(Date.now() + 30 * 60_000).toISOString();
+      await db.prepare('UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND used_at IS NULL').run(user.id);
+      await db.prepare('INSERT INTO password_resets (user_id,token_hash,expires_at) VALUES (?,?,?)').run(user.id, sha256(token), expires);
+      const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+      const body = `Olá, ${user.name}. Use este link em até 30 minutos para redefinir sua senha:\n\n${resetUrl}\n\nSe você não solicitou a alteração, ignore esta mensagem.`;
+      try { await sendEmail(user.email, 'Recuperação de senha — Projeto Aprendiz', body, `password-reset-${sha256(token)}`); }
+      catch (error) { console.error('Não foi possível enviar recuperação de senha:', error.message, error.providerMessage || ''); }
+    } else if (!user) {
+      const pendingProfessor = await db.prepare(`
+        SELECT professor_profiles.id,professor_profiles.name,professor_profiles.email,professor_invites.created_by
+        FROM professor_profiles
+        JOIN professor_invites ON professor_invites.professor_profile_id=professor_profiles.id
+        WHERE professor_profiles.email=? AND professor_profiles.active=1 AND professor_profiles.user_id IS NULL
+        ORDER BY professor_invites.id DESC LIMIT 1
+      `).get(normalized);
+      if (pendingProfessor) {
+        await issueProfessorInvite({
+          professorId: pendingProfessor.id,
+          name: pendingProfessor.name,
+          email: pendingProfessor.email,
+          createdBy: pendingProfessor.created_by,
+          ip,
+          auditAction: 'professor_invite_requested_from_recovery',
+        });
       }
     }
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -1192,13 +1222,17 @@ async function api(request, response, url) {
 
   if (request.method === 'POST' && url.pathname === '/api/auth/reset-password') {
     const { token, password } = await readJson(request);
-    if (!strongPassword(password)) return json(response, 400, { message: 'A senha não atende aos requisitos de segurança.' });
+    const ipRateLimit = await consumeAuthRateLimit({ route: 'reset_password', ip, includeEmail: false });
+    if (ipRateLimit.blocked) return rateLimitResponse(response, ipRateLimit);
     const reset = await db.prepare(`
-      SELECT password_resets.*,users.auth_user_id
+      SELECT password_resets.*,users.auth_user_id,users.email
       FROM password_resets JOIN users ON users.id=password_resets.user_id
       WHERE password_resets.token_hash=? AND password_resets.used_at IS NULL AND password_resets.expires_at>?
     `).get(sha256(String(token || '')), new Date().toISOString());
     if (!reset) return json(response, 400, { message: 'Este link é inválido, expirou ou já foi utilizado.' });
+    const emailRateLimit = await consumeAuthRateLimit({ route: 'reset_password', ip, email: reset.email, includeIp: false });
+    if (emailRateLimit.blocked) return rateLimitResponse(response, emailRateLimit);
+    if (!strongPassword(password)) return json(response, 400, { message: 'A senha não atende aos requisitos de segurança.' });
     if (usesSupabaseAuth) {
       if (!requireSupabaseAdmin(response)) return;
       if (!reset.auth_user_id) return json(response, 400, { message: 'Esta conta ainda não foi ativada. Solicite um novo convite.' });
@@ -1226,9 +1260,13 @@ async function api(request, response, url) {
 
   if (request.method === 'POST' && url.pathname === '/api/invitations/accept') {
     const body=await readJson(request),token=String(body.token||'');
-    if(!strongPassword(body.password))return json(response,400,{message:'A senha não atende aos requisitos de segurança.'});
+    const ipRateLimit=await consumeAuthRateLimit({route:'invitation_accept',ip,includeEmail:false});
+    if(ipRateLimit.blocked)return rateLimitResponse(response,ipRateLimit);
     const invitation=await db.prepare(`SELECT professor_invites.*,professor_profiles.name FROM professor_invites JOIN professor_profiles ON professor_profiles.id=professor_invites.professor_profile_id WHERE token_hash=? AND accepted_at IS NULL AND expires_at>?`).get(sha256(token),new Date().toISOString());
     if(!invitation)return json(response,400,{message:'Este convite é inválido, expirou ou já foi utilizado.'});
+    const emailRateLimit=await consumeAuthRateLimit({route:'invitation_accept',ip,email:invitation.email,includeIp:false});
+    if(emailRateLimit.blocked)return rateLimitResponse(response,emailRateLimit);
+    if(!strongPassword(body.password))return json(response,400,{message:'A senha não atende aos requisitos de segurança.'});
     if(await db.prepare('SELECT id FROM users WHERE email=?').get(invitation.email))return json(response,409,{message:'Já existe uma conta com este e-mail.'});
     if (usesSupabaseAuth && !requireSupabaseAdmin(response)) return;
     let authUserId = null;
