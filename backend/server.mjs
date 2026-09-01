@@ -17,6 +17,7 @@ import {
 } from './security.mjs';
 import { createApiHandler } from './routes/index.mjs';
 import { createEmailService } from './email.mjs';
+import { createNotificationJobs, startNotificationScheduler } from './jobs.mjs';
 import {
   ANNOUNCEMENT_ATTACHMENT_TOTAL_BYTES,
   ANNOUNCEMENT_ATTACHMENT_MAX_COUNT,
@@ -327,6 +328,20 @@ if (db.dialect === 'sqlite') await db.exec(`
   );
   CREATE INDEX IF NOT EXISTS student_contacts_student_date_idx ON student_contacts(student_id,contacted_at DESC,id DESC);
   CREATE INDEX IF NOT EXISTS student_contacts_user_id_idx ON student_contacts(user_id);
+  CREATE TABLE IF NOT EXISTS scheduled_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    notification_type TEXT NOT NULL CHECK(notification_type IN ('attendance_reminder','weekly_manager_summary')),
+    reference_key TEXT NOT NULL,
+    recipient TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','sent','failed')),
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+    last_error TEXT,
+    sent_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(notification_type,reference_key,recipient)
+  );
+  CREATE INDEX IF NOT EXISTS scheduled_notifications_status_idx ON scheduled_notifications(status,updated_at);
 `);
 if (db.dialect === 'sqlite') {
   const userColumns = await db.prepare('PRAGMA table_info(users)').all();
@@ -1354,6 +1369,9 @@ const api = createApiHandler({
   zonedScheduleIso,
   scheduleIsPast,
 });
+const notificationJobs=createNotificationJobs({db,sendEmail,pendingAttendance,atRiskStudents,zonedTodayDate,baseUrl});
+const scheduledJobsEnabled=process.env.ENABLE_SCHEDULED_JOBS==='true'||(isProduction&&process.env.ENABLE_SCHEDULED_JOBS!=='false');
+let notificationScheduler=null;
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
 }
@@ -1395,12 +1413,17 @@ const server = http.createServer(async (request, response) => {
 server.listen(port, host, () => {
   console.log(`Projeto Aprendiz Aprimorado em ${baseUrl}`);
   if (!isProduction) console.log('Caixa de e-mail de testes em /dev-mail');
+  if(scheduledJobsEnabled){
+    const configuredInterval=Number(process.env.SCHEDULED_JOB_INTERVAL_MS||60*60_000);
+    notificationScheduler=startNotificationScheduler({...notificationJobs,intervalMs:Math.max(60_000,configuredInterval)});
+  }
 });
 
 let shuttingDown = false;
 async function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+  notificationScheduler?.stop();
   console.log(`Encerrando servidor após ${signal}...`);
   const timeout = setTimeout(() => process.exit(1), 10_000);
   timeout.unref();
