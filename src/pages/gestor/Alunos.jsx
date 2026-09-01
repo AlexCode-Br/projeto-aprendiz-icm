@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import Pagination from '../../components/Pagination';
 import AlunoFormModal from '../../components/AlunoFormModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import CatalogItemModal from '../../components/CatalogItemModal';
 import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
 
 const Alunos = () => {
@@ -25,6 +26,7 @@ const Alunos = () => {
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [selectedAluno, setSelectedAluno] = useState(null);
+    const [isChurchModalOpen, setIsChurchModalOpen] = useState(false);
 
     // Estado de Busca
     const [searchTerm, setSearchTerm] = useState('');
@@ -61,15 +63,32 @@ const Alunos = () => {
         return () => clearTimeout(timer);
     }, [fetchAlunos]);
 
-    useEffect(() => {
-        api.get('/cursos').then(response => {
-            setOfferings(response.data.cursos.filter(item => item.status === 'Ativo'));
-            setChurches(response.data.locais || []);
-        }).catch(() => {
+    const fetchAcademicOptions = useCallback(async () => {
+        try {
+            const [classesResponse, churchesResponse] = await Promise.all([api.get('/cursos'), api.get('/api/churches')]);
+            setOfferings(classesResponse.data.cursos.filter(item => item.status === 'Ativo'));
+            setChurches(churchesResponse.data.map(item => ({ value: item.id, label: item.nome })));
+        } catch {
             setOfferings([]);
             setChurches([]);
-        });
+        }
     }, []);
+
+    useEffect(() => {
+        fetchAcademicOptions();
+    }, [fetchAcademicOptions]);
+
+    const handleSaveChurch = async data => {
+        try {
+            await api.post('/api/churches', data);
+            showToast('Igreja de origem cadastrada com sucesso!', 'success');
+            setIsChurchModalOpen(false);
+            await fetchAcademicOptions();
+        } catch (error) {
+            showToast(error.response?.data?.message || error.message || 'Erro ao cadastrar a igreja.', 'error');
+            throw error;
+        }
+    };
 
     // --- Handlers de Ações ---
     const handleOpenFormModal = (aluno = null) => {
@@ -140,12 +159,10 @@ const Alunos = () => {
                     onChange={handleSearchChange}
                     className="form-control sm:max-w-sm"
                 />
-                <button
-                    onClick={() => handleOpenFormModal()}
-                    className="btn btn-primary w-full sm:w-auto"
-                >
-                    Adicionar Aluno
-                </button>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                    <button type="button" onClick={() => setIsChurchModalOpen(true)} className="btn btn-secondary w-full sm:w-auto">Nova igreja de origem</button>
+                    <button onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">Adicionar Aluno</button>
+                </div>
             </div>
 
             {/* Tabela de Alunos */}
@@ -162,7 +179,7 @@ const Alunos = () => {
                     </thead>
                     <tbody className="divide-y divide-border">
                         {loading ? (
-                            <tr><td colSpan="5" className="text-center py-4">Carregando...</td></tr>
+                            Array.from({ length: 4 }, (_, index) => <tr key={index} className="animate-pulse"><td colSpan="5" className="px-6 py-4"><div className="h-10 rounded bg-surface-muted" /></td></tr>)
                         ) : error ? (
                              <tr><td colSpan="5" className="text-center py-4 text-danger">{error}</td></tr>
                         ) : alunos.map((aluno) => (
@@ -171,7 +188,7 @@ const Alunos = () => {
                                     <img className="h-10 w-10 rounded-full object-cover" src={aluno.foto_url || `https://ui-avatars.com/api/?name=${aluno.nome}&background=random`} alt={aluno.nome} />
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-default">{aluno.nome}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email || 'Não informado'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.telefone}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex justify-end space-x-2">
@@ -215,6 +232,13 @@ const Alunos = () => {
                 onConfirm={handleDeleteAluno}
                 title="Confirmar Exclusão"
                 message={`Tem certeza de que deseja excluir o aluno ${selectedAluno?.nome}? Esta ação não pode ser desfeita.`}
+            />
+            <CatalogItemModal
+                isOpen={isChurchModalOpen}
+                onClose={() => setIsChurchModalOpen(false)}
+                onSave={handleSaveChurch}
+                item={null}
+                type="locais"
             />
         </div>
     );

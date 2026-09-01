@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
-import { validateClassSchedule } from '../../shared/validation.mjs';
+import { validateClassDetails } from '../../shared/validation.mjs';
+
+const emptyForm = { nome: '', local: '', professor: '', label: '', weekday: '', start_time: '', capacity: '' };
 
 const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLocais = [], allCursos = [] }) => {
-    const [formData, setFormData] = useState({ nome: '', local: '', professor: '', weekday: '', start_time: '' });
+    const [formData, setFormData] = useState(emptyForm);
     const [errors, setErrors] = useState({});
 
     useEffect(() => {
@@ -13,11 +15,13 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                 nome: curso.nome || '',
                 local: curso.local || '',
                 professor: curso.professor || '',
+                label: curso.label || '',
                 weekday: curso.weekday || '',
-                start_time: curso.start_time || ''
+                start_time: curso.start_time || '',
+                capacity: curso.capacity ?? '',
             });
         } else {
-            setFormData({ nome: '', local: '', professor: '', weekday: '', start_time: '' });
+            setFormData(emptyForm);
         }
         setErrors({});
     }, [curso, isOpen]);
@@ -27,7 +31,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
         if (!formData.nome.trim()) newErrors.nome = 'O nome do curso é obrigatório.';
         if (!formData.local) newErrors.local = 'A igreja é obrigatória.';
         if (!formData.professor) newErrors.professor = 'O professor é obrigatório.';
-        Object.assign(newErrors, validateClassSchedule(formData));
+        Object.assign(newErrors, validateClassDetails(formData));
         return newErrors;
     };
 
@@ -97,6 +101,18 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                                 invalid={Boolean(errors.professor)}
                             />
                             {errors.professor && <p className="text-danger text-xs mt-1">{errors.professor}</p>}
+                        </div>
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                            <div>
+                                <label htmlFor="label" className="form-label">Identificação da turma (opcional)</label>
+                                <input id="label" name="label" value={formData.label} onChange={handleChange} maxLength="100" placeholder="Ex.: Turma B" aria-invalid={Boolean(errors.label)} className={`form-control ${errors.label ? 'border-danger' : ''}`} />
+                                {errors.label && <p className="text-danger text-xs mt-1">{errors.label}</p>}
+                            </div>
+                            <div>
+                                <label htmlFor="capacity" className="form-label">Capacidade (opcional)</label>
+                                <input id="capacity" name="capacity" type="number" min="1" max="500" value={formData.capacity} onChange={handleChange} placeholder="Sem limite" aria-invalid={Boolean(errors.capacity)} className={`form-control ${errors.capacity ? 'border-danger' : ''}`} />
+                                {errors.capacity && <p className="text-danger text-xs mt-1">{errors.capacity}</p>}
+                            </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             <div>

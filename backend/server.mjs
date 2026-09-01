@@ -18,7 +18,7 @@ import {
   requiredTextError,
   validateStudent,
   validateProfessor,
-  validateClassSchedule,
+  validateClassDetails,
   validateSchoolYear,
   validateSupportTicket,
   supportMessageError,
@@ -136,18 +136,28 @@ if (db.dialect === 'sqlite') await db.exec(`
     created_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS churches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
   CREATE TABLE IF NOT EXISTS students (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    email TEXT COLLATE NOCASE,
     phone TEXT,
-    church TEXT,
+    guardian_name TEXT,
+    guardian_phone TEXT,
+    church_id INTEGER REFERENCES churches(id),
     age_group TEXT,
     has_instrument INTEGER NOT NULL DEFAULT 0,
     active INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE UNIQUE INDEX IF NOT EXISTS students_email_lower_unique ON students(LOWER(email)) WHERE email IS NOT NULL;
+  CREATE INDEX IF NOT EXISTS students_church_id_idx ON students(church_id);
   CREATE TABLE IF NOT EXISTS courses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE COLLATE NOCASE,
@@ -176,18 +186,22 @@ if (db.dialect === 'sqlite') await db.exec(`
     label TEXT,
     weekday TEXT,
     start_time TEXT,
+    capacity INTEGER CHECK(capacity IS NULL OR (capacity BETWEEN 1 AND 500)),
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(school_year_id, course_id, professor_id, location_id)
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE UNIQUE INDEX IF NOT EXISTS classes_distinct_offering_unique ON classes(school_year_id,course_id,professor_id,location_id,LOWER(COALESCE(label,'')),COALESCE(weekday,''),COALESCE(start_time,''));
   CREATE TABLE IF NOT EXISTS enrollments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL REFERENCES students(id),
     class_id INTEGER NOT NULL REFERENCES classes(id),
     status TEXT NOT NULL DEFAULT 'ativa' CHECK(status IN ('ativa','concluida','cancelada')),
     enrolled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    transferred_to_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL,
     UNIQUE(student_id, class_id)
   );
+  CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);
   CREATE TABLE IF NOT EXISTS attendance_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     class_id INTEGER NOT NULL REFERENCES classes(id),
@@ -283,6 +297,7 @@ if (db.dialect === 'sqlite') await db.exec(`
     student_id INTEGER NOT NULL REFERENCES students(id),
     class_id INTEGER NOT NULL REFERENCES classes(id),
     reason TEXT NOT NULL,
+    reason_category TEXT NOT NULL DEFAULT 'outro' CHECK(reason_category IN ('mudanca','desinteresse','horario','saude','familia','outro')),
     occurred_at TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
@@ -308,7 +323,7 @@ if (db.dialect === 'sqlite') {
   }
   await db.prepare('UPDATE classes SET school_year_id=(SELECT id FROM school_years WHERE active=1 LIMIT 1) WHERE school_year_id IS NULL').run();
   const classTable = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='classes'").get();
-  if (!String(classTable?.sql || '').replace(/\s+/g,'').includes('UNIQUE(school_year_id,course_id,professor_id,location_id)')) {
+  if (!classColumns.some(column=>column.name==='capacity') && !String(classTable?.sql || '').replace(/\s+/g,'').includes('UNIQUE(school_year_id,course_id,professor_id,location_id)')) {
     await db.exec(`
       PRAGMA foreign_keys=OFF;
       CREATE TABLE classes_period_migration (
@@ -331,7 +346,8 @@ if (db.dialect === 'sqlite') {
       PRAGMA foreign_keys=ON;
     `);
   }
-  await db.exec('CREATE INDEX IF NOT EXISTS classes_school_year_id_idx ON classes(school_year_id); CREATE UNIQUE INDEX IF NOT EXISTS classes_period_offering_unique ON classes(school_year_id,course_id,professor_id,location_id);');
+  await db.exec('CREATE INDEX IF NOT EXISTS classes_school_year_id_idx ON classes(school_year_id);');
+  if(!classColumns.some(column=>column.name==='capacity'))await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS classes_period_offering_unique ON classes(school_year_id,course_id,professor_id,location_id);');
   await db.exec(`
     CREATE UNIQUE INDEX IF NOT EXISTS support_messages_author_client_message_unique ON support_messages(author_user_id,client_message_id) WHERE client_message_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS support_messages_ticket_activity_idx ON support_messages(ticket_id,created_at,id);
@@ -360,6 +376,78 @@ if (db.dialect === 'sqlite') {
       CREATE UNIQUE INDEX announcement_attachments_storage_path_unique ON announcement_attachments(storage_path) WHERE storage_path IS NOT NULL;
     `);
   }
+
+  const studentColumns = await db.prepare('PRAGMA table_info(students)').all();
+  if (studentColumns.some(column=>column.name==='church') || studentColumns.find(column=>column.name==='email')?.notnull===1) {
+    await db.exec(`
+      INSERT OR IGNORE INTO churches (name)
+        SELECT DISTINCT TRIM(church) FROM students WHERE church IS NOT NULL AND TRIM(church)<>'';
+      PRAGMA foreign_keys=OFF;
+      DROP INDEX IF EXISTS students_email_lower_unique;
+      DROP INDEX IF EXISTS students_church_id_idx;
+      CREATE TABLE students_model_migration (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT COLLATE NOCASE,
+        phone TEXT,
+        guardian_name TEXT,
+        guardian_phone TEXT,
+        church_id INTEGER REFERENCES churches(id),
+        age_group TEXT,
+        has_instrument INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO students_model_migration (id,name,email,phone,church_id,age_group,has_instrument,active,created_at,updated_at)
+        SELECT students.id,students.name,NULLIF(TRIM(students.email),''),students.phone,churches.id,students.age_group,students.has_instrument,students.active,students.created_at,students.updated_at
+        FROM students LEFT JOIN churches ON LOWER(churches.name)=LOWER(TRIM(students.church));
+      DROP TABLE students;
+      ALTER TABLE students_model_migration RENAME TO students;
+      PRAGMA foreign_keys=ON;
+    `);
+  }
+  await db.exec('CREATE UNIQUE INDEX IF NOT EXISTS students_email_lower_unique ON students(LOWER(email)) WHERE email IS NOT NULL; CREATE INDEX IF NOT EXISTS students_church_id_idx ON students(church_id);');
+
+  const academicClassColumns=await db.prepare('PRAGMA table_info(classes)').all();
+  const academicClassTable=await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='classes'").get();
+  if(!academicClassColumns.some(column=>column.name==='capacity')||String(academicClassTable?.sql||'').replace(/\s+/g,'').includes('UNIQUE(school_year_id,course_id,professor_id,location_id)')){
+    await db.exec(`
+      PRAGMA foreign_keys=OFF;
+      DROP INDEX IF EXISTS classes_period_offering_unique;
+      DROP INDEX IF EXISTS classes_distinct_offering_unique;
+      CREATE TABLE classes_model_migration (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        school_year_id INTEGER NOT NULL REFERENCES school_years(id),
+        course_id INTEGER NOT NULL REFERENCES courses(id),
+        professor_id INTEGER NOT NULL REFERENCES professor_profiles(id),
+        location_id INTEGER NOT NULL REFERENCES locations(id),
+        label TEXT,
+        weekday TEXT,
+        start_time TEXT,
+        capacity INTEGER CHECK(capacity IS NULL OR (capacity BETWEEN 1 AND 500)),
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO classes_model_migration (id,school_year_id,course_id,professor_id,location_id,label,weekday,start_time,active,created_at)
+        SELECT id,school_year_id,course_id,professor_id,location_id,label,weekday,start_time,active,created_at FROM classes;
+      DROP TABLE classes;
+      ALTER TABLE classes_model_migration RENAME TO classes;
+      PRAGMA foreign_keys=ON;
+    `);
+  }
+  await db.exec(`
+    DROP INDEX IF EXISTS classes_period_offering_unique;
+    CREATE INDEX IF NOT EXISTS classes_school_year_id_idx ON classes(school_year_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS classes_distinct_offering_unique ON classes(school_year_id,course_id,professor_id,location_id,LOWER(COALESCE(label,'')),COALESCE(weekday,''),COALESCE(start_time,''));
+  `);
+
+  const enrollmentColumns=await db.prepare('PRAGMA table_info(enrollments)').all();
+  if(!enrollmentColumns.some(column=>column.name==='completed_at'))await db.exec('ALTER TABLE enrollments ADD COLUMN completed_at TEXT;');
+  if(!enrollmentColumns.some(column=>column.name==='transferred_to_class_id'))await db.exec('ALTER TABLE enrollments ADD COLUMN transferred_to_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;');
+  await db.exec('CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);');
+  const dropoutColumns=await db.prepare('PRAGMA table_info(dropout_events)').all();
+  if(!dropoutColumns.some(column=>column.name==='reason_category'))await db.exec("ALTER TABLE dropout_events ADD COLUMN reason_category TEXT NOT NULL DEFAULT 'outro' CHECK(reason_category IN ('mudanca','desinteresse','horario','saude','familia','outro')); UPDATE dropout_events SET reason_category=CASE WHEN LOWER(reason) LIKE '%horário%' OR LOWER(reason) LIKE '%horario%' THEN 'horario' WHEN LOWER(reason) LIKE '%pessoais%' OR LOWER(reason) LIKE '%familia%' THEN 'familia' ELSE 'outro' END;");
 }
 
 const sha256 = value => createHash('sha256').update(value).digest('hex');
@@ -517,8 +605,10 @@ async function seedAcademicData() {
     ['Larissa Melo','larissa.melo@email.com','(71) 96742-2161','ICM Brotas','Jovem',0,'Teclado','Brotas'],
   ];
   for (const [name,email,phone,church,ageGroup,instrument,course,location] of studentRows) {
-    await db.prepare('INSERT OR IGNORE INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)')
-      .run(name,email,phone,church,ageGroup,instrument);
+    await db.prepare('INSERT OR IGNORE INTO churches (name) VALUES (?)').run(church);
+    const churchId=(await db.prepare('SELECT id FROM churches WHERE name=?').get(church)).id;
+    await db.prepare('INSERT OR IGNORE INTO students (name,email,phone,church_id,age_group,has_instrument) VALUES (?,?,?,?,?,?)')
+      .run(name,email,phone,churchId,ageGroup,instrument);
     const studentId = (await db.prepare('SELECT id FROM students WHERE email = ?').get(email)).id;
     const classRow = await db.prepare(`SELECT classes.id FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE courses.name=? AND locations.name=?`).get(course,location);
     if (classRow) await db.prepare('INSERT OR IGNORE INTO enrollments (student_id,class_id) VALUES (?,?)').run(studentId,classRow.id);
@@ -822,10 +912,11 @@ function studentView(row) {
   }) : [];
   const courseNames = classes.map(item => item.nome);
   return {
-    id: row.id, nome: row.name, email: row.email, contato: row.email,
-    telefone: row.phone || '', igreja: row.church || '', classe: row.age_group || '',
+    id: row.id, nome: row.name, email: row.email || '', contato: row.email || '',
+    telefone: row.phone || '', igreja_id: row.church_id ? Number(row.church_id) : null, igreja: row.church_name || '', classe: row.age_group || '',
+    guardian_name: row.guardian_name || '', guardian_phone: row.guardian_phone || '',
     instrumento: row.has_instrument ? 'Sim' : 'Não', curso: courseNames,
-    local: row.church || '', foto_url: '',
+    local: row.church_id ? Number(row.church_id) : '', foto_url: '',
     cursos: classes.map(({ nome, local }) => ({ nome, local })),
     turmas: classes,
     created_at: row.created_at,
@@ -842,12 +933,12 @@ function studentCourseNames(value) {
   return [...new Set(courses.map(course => cleanText(course, 100)).filter(Boolean))];
 }
 
-async function activeClassesForStudent(classIds, legacyCourseNames = [], schoolYearId) {
+async function activeClassesForStudent(classIds, legacyCourseNames = [], schoolYearId, studentId = null) {
   let classes = [];
   if (classIds.length) {
     const placeholders = classIds.map(() => '?').join(',');
     classes = await db.prepare(`
-      SELECT classes.id,classes.course_id,courses.name AS course_name
+      SELECT classes.id,classes.course_id,classes.capacity,courses.name AS course_name
       FROM classes
       JOIN courses ON courses.id=classes.course_id
       JOIN locations ON locations.id=classes.location_id
@@ -859,7 +950,7 @@ async function activeClassesForStudent(classIds, legacyCourseNames = [], schoolY
   } else if (legacyCourseNames.length) {
     const placeholders = legacyCourseNames.map(() => '?').join(',');
     classes = await db.prepare(`
-      SELECT MIN(classes.id) AS id,courses.id AS course_id,courses.name AS course_name
+      SELECT MIN(classes.id) AS id,courses.id AS course_id,MAX(classes.capacity) AS capacity,courses.name AS course_name
       FROM classes
       JOIN courses ON courses.id=classes.course_id
       JOIN locations ON locations.id=classes.location_id
@@ -873,13 +964,26 @@ async function activeClassesForStudent(classIds, legacyCourseNames = [], schoolY
   if (new Set(classes.map(item => item.course_id)).size !== classes.length) {
     return { classes: [], error: 'Escolha apenas uma turma para cada curso.' };
   }
+  for(const classRow of classes){
+    if(!classRow.capacity)continue;
+    const enrollmentCount=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa' AND student_id<>?").get(classRow.id,studentId||0);
+    if(Number(enrollmentCount.total)>=Number(classRow.capacity))return {classes:[],error:`A turma de ${classRow.course_name} atingiu a capacidade máxima.`};
+  }
   return { classes, error: '' };
 }
 
+async function activeChurch(value) {
+  const id=Number(value);
+  if(Number.isInteger(id)&&id>0)return db.prepare('SELECT id,name FROM churches WHERE id=? AND active=1').get(id);
+  const name=cleanText(value,100);
+  return name?db.prepare('SELECT id,name FROM churches WHERE LOWER(name)=LOWER(?) AND active=1').get(name):null;
+}
+
 const studentSelect = `
-  SELECT students.*,
+  SELECT students.*,MAX(churches.name) AS church_name,
     GROUP_CONCAT(classes.id || '::' || courses.name || '::' || locations.name, '||') AS class_offerings
   FROM students
+  LEFT JOIN churches ON churches.id=students.church_id
   LEFT JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa'
   LEFT JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=?
   LEFT JOIN courses ON courses.id=classes.course_id
@@ -1479,14 +1583,56 @@ async function api(request, response, url) {
     }
   }
 
+  if(request.method==='GET'&&url.pathname==='/api/churches'){
+    if(!await authorize(request,response,['gestor','professor']))return;
+    const rows=await db.prepare('SELECT id,name AS nome,active FROM churches WHERE active=1 ORDER BY name').all();
+    return json(response,200,rows.map(row=>({id:Number(row.id),nome:row.nome,ativo:row.active===1})));
+  }
+  if(request.method==='POST'&&url.pathname==='/api/churches'){
+    const session=await authorize(request,response,['gestor']);if(!session)return;
+    const body=await readJson(request),name=cleanText(body.nome,100),errorMessage=catalogNameError(name,'igreja');
+    if(errorMessage)return invalid(response,{nome:errorMessage});
+    const existing=await db.prepare('SELECT id,active FROM churches WHERE LOWER(name)=LOWER(?)').get(name);
+    if(existing?.active===1)return json(response,409,{message:'Esta igreja já está cadastrada.'});
+    if(existing){
+      await db.prepare('UPDATE churches SET name=?,active=1 WHERE id=?').run(name,existing.id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_reactivated',ip);
+      return json(response,200,{id:Number(existing.id),nome:name});
+    }
+    const result=await db.prepare('INSERT INTO churches (name) VALUES (?)').run(name);
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_created',ip);
+    return json(response,201,{id:Number(result.lastInsertRowid),nome:name});
+  }
+  const churchMatch=url.pathname.match(/^\/api\/churches\/(\d+)$/);
+  if(churchMatch&&request.method==='PUT'){
+    const session=await authorize(request,response,['gestor']);if(!session)return;
+    const id=Number(churchMatch[1]),body=await readJson(request),name=cleanText(body.nome,100),errorMessage=catalogNameError(name,'igreja');
+    if(errorMessage)return invalid(response,{nome:errorMessage});
+    try{
+      const result=await db.prepare('UPDATE churches SET name=? WHERE id=? AND active=1').run(name,id);
+      if(!result.changes)return json(response,404,{message:'Igreja não encontrada.'});
+    }catch(error){if(duplicateError(error))return json(response,409,{message:'Já existe uma igreja com este nome.'});throw error;}
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_updated',ip);
+    return json(response,200,{success:true});
+  }
+  if(churchMatch&&request.method==='DELETE'){
+    const session=await authorize(request,response,['gestor']);if(!session)return;
+    const id=Number(churchMatch[1]);
+    if(await db.prepare('SELECT id FROM students WHERE church_id=? LIMIT 1').get(id))return json(response,409,{message:'Esta igreja está vinculada a alunos e não pode ser desativada.'});
+    const result=await db.prepare('UPDATE churches SET active=0 WHERE id=? AND active=1').run(id);
+    if(!result.changes)return json(response,404,{message:'Igreja não encontrada.'});
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_deactivated',ip);
+    return json(response,200,{success:true});
+  }
+
   if (request.method === 'GET' && url.pathname === '/alunos') {
     if (!await authorize(request, response, ['gestor'])) return;
     const period=await selectedSchoolYear(request,response);if(!period)return;
     const page = Math.max(1, Number(url.searchParams.get('page') || 1));
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') || 10)));
     const search = `%${String(url.searchParams.get('search') || '').trim()}%`;
-    const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 WHERE classes.school_year_id=? AND students.active=1 AND (students.name LIKE ? OR students.email LIKE ?)`).get(period.id,search,search)).total;
-    const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND (students.name LIKE ? OR students.email LIKE ?) AND EXISTS (SELECT 1 FROM enrollments selected_enrollments JOIN classes selected_classes ON selected_classes.id=selected_enrollments.class_id WHERE selected_enrollments.student_id=students.id AND selected_enrollments.status='ativa' AND selected_classes.active=1 AND selected_classes.school_year_id=?) GROUP BY students.id ORDER BY students.name LIMIT ? OFFSET ?`).all(period.id,search,search,period.id,limit,(page-1)*limit);
+    const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 WHERE classes.school_year_id=? AND students.active=1 AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?)`).get(period.id,search,search)).total;
+    const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?) AND EXISTS (SELECT 1 FROM enrollments selected_enrollments JOIN classes selected_classes ON selected_classes.id=selected_enrollments.class_id WHERE selected_enrollments.student_id=students.id AND selected_enrollments.status='ativa' AND selected_classes.active=1 AND selected_classes.school_year_id=?) GROUP BY students.id ORDER BY students.name LIMIT ? OFFSET ?`).all(period.id,search,search,period.id,limit,(page-1)*limit);
     return json(response, 200, { alunos: rows.map(studentView), total });
   }
 
@@ -1495,16 +1641,18 @@ async function api(request, response, url) {
     const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
     const body = await readJson(request);
     const name = cleanText(body.nome,100), email = cleanEmail(body.contato || body.email), phone=cleanText(body.telefone,30);
-    const rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso),locationName=cleanText(body.local,100);
+    const guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',church=await activeChurch(body.church_id||body.local);
+    const rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
     const selections=rawClassIds.length?rawClassIds:courseNames;
-    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,turmas:selections,local:locationName});
+    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,turmas:selections,local:church?.id||''});
+    if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
     if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
     if(hasValidationErrors(errors))return invalid(response,errors);
     const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id);
     if (classError) return invalid(response, { curso: classError });
     try {
       const studentId=await db.transaction(async()=>{
-        const result = await db.prepare('INSERT INTO students (name,email,phone,church,age_group,has_instrument) VALUES (?,?,?,?,?,?)').run(name,email,phone,locationName,body.classe,body.instrumento === 'Sim' ? 1 : 0);
+        const result = await db.prepare('INSERT INTO students (name,email,phone,guardian_name,guardian_phone,church_id,age_group,has_instrument) VALUES (?,?,?,?,?,?,?,?)').run(name,email||null,phone,guardianName||null,guardianPhone||null,church.id,body.classe,body.instrumento === 'Sim' ? 1 : 0);
         for (const classRow of classRows) {
           await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
         }
@@ -1523,22 +1671,30 @@ async function api(request, response, url) {
     const session = await authorize(request, response, ['gestor']); if (!session) return;
     const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
     const id = Number(studentMatch[1]), body = await readJson(request);
-    const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso),locationName=cleanText(body.local,100);
+    const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',church=await activeChurch(body.church_id||body.local),rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
     const selections=rawClassIds.length?rawClassIds:courseNames;
-    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,turmas:selections,local:locationName});
+    const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,turmas:selections,local:church?.id||''});
+    if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
     if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
     if(hasValidationErrors(errors))return invalid(response,errors);
-    const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id);
+    const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id,id);
     if (classError) return invalid(response, { curso: classError });
     const currentStudent=await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
     if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
     try {
       await db.transaction(async()=>{
-        await db.prepare(`UPDATE students SET name=?,email=?,phone=?,church=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
-          .run(name,email,phone,locationName,body.classe,body.instrumento==='Sim'?1:0,id);
-        await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND status='ativa' AND class_id IN (SELECT id FROM classes WHERE school_year_id=?)").run(id,period.id);
+        await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
+          .run(name,email||null,phone,guardianName||null,guardianPhone||null,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
+        const currentEnrollments=await db.prepare("SELECT enrollments.id,enrollments.class_id,classes.course_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?").all(id,period.id);
+        const selectedIds=new Set(classRows.map(classRow=>Number(classRow.id)));
+        const selectedByCourse=new Map(classRows.map(classRow=>[Number(classRow.course_id),Number(classRow.id)]));
+        for(const enrollment of currentEnrollments){
+          if(selectedIds.has(Number(enrollment.class_id)))continue;
+          await db.prepare("UPDATE enrollments SET status='cancelada',transferred_to_class_id=? WHERE id=?")
+            .run(selectedByCourse.get(Number(enrollment.course_id))||null,enrollment.id);
+        }
         for (const classRow of classRows) {
-          await db.prepare(`INSERT INTO enrollments (student_id,class_id,status) VALUES (?,?,'ativa') ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa'`).run(id,classRow.id);
+          await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES (?,?,'ativa',NULL,NULL) ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(id,classRow.id);
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
       });
@@ -1559,7 +1715,7 @@ async function api(request, response, url) {
       await db.prepare('UPDATE students SET active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
       await db.prepare("UPDATE enrollments SET status='cancelada' WHERE student_id=? AND class_id IN (SELECT id FROM classes WHERE school_year_id=?)").run(id,period.id);
       for (const enrollment of enrollments) {
-        await db.prepare('INSERT INTO dropout_events (student_id,class_id,reason,occurred_at) VALUES (?,?,?,?)').run(id,enrollment.class_id,'Excluído pelo gestor',new Date().toISOString().slice(0,10));
+        await db.prepare('INSERT INTO dropout_events (student_id,class_id,reason,reason_category,occurred_at) VALUES (?,?,?,?,?)').run(id,enrollment.class_id,'Excluído pelo gestor','outro',new Date().toISOString().slice(0,10));
       }
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_deactivated',ip);
     });
@@ -1574,8 +1730,8 @@ async function api(request, response, url) {
     const search = `%${String(url.searchParams.get('search') || '').trim()}%`;
     const profile = await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
     if (!profile) return json(response, 403, { message: 'Perfil de professor não configurado.' });
-    const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE students.active=1 AND enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=? AND (students.name LIKE ? OR students.email LIKE ?)`).get(period.id,profile.id,search,search)).total;
-    const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=?) AND (students.name LIKE ? OR students.email LIKE ?) GROUP BY students.id ORDER BY students.name LIMIT ? OFFSET ?`).all(period.id,period.id,profile.id,search,search,limit,(page-1)*limit);
+    const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE students.active=1 AND enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=? AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?)`).get(period.id,profile.id,search,search)).total;
+    const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=?) AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?) GROUP BY students.id ORDER BY students.name LIMIT ? OFFSET ?`).all(period.id,period.id,profile.id,search,search,limit,(page-1)*limit);
     return json(response, 200, { alunos: rows.map(studentView), total });
   }
 
@@ -1700,7 +1856,7 @@ async function api(request, response, url) {
   if (request.method === 'GET' && url.pathname === '/cursos') {
     if (!await authorize(request, response, ['gestor'])) return;
     const period=await selectedSchoolYear(request,response);if(!period)return;
-    const rows = await db.prepare(`SELECT classes.id,courses.name AS nome,locations.name AS local,professor_profiles.name AS professor,classes.weekday,classes.start_time,CASE classes.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,COUNT(CASE WHEN enrollments.status='ativa' AND students.active=1 THEN 1 END) AS alunos FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id WHERE classes.school_year_id=? GROUP BY classes.id,courses.name,locations.name,professor_profiles.name,classes.weekday,classes.start_time ORDER BY courses.name,locations.name`).all(period.id);
+    const rows = await db.prepare(`SELECT classes.id,classes.label,classes.capacity,courses.name AS nome,locations.name AS local,professor_profiles.name AS professor,classes.weekday,classes.start_time,CASE classes.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,COUNT(CASE WHEN enrollments.status='ativa' AND students.active=1 THEN 1 END) AS alunos FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id WHERE classes.school_year_id=? GROUP BY classes.id,courses.name,locations.name,professor_profiles.name,classes.weekday,classes.start_time ORDER BY courses.name,classes.label,locations.name`).all(period.id);
     const professores = (await db.prepare('SELECT name FROM professor_profiles WHERE active=1 ORDER BY name').all()).map(row=>row.name);
     const locais = (await db.prepare('SELECT name FROM locations WHERE active=1 ORDER BY name').all()).map(row=>row.name);
     return json(response, 200, { cursos: rows, professores, locais });
@@ -1711,12 +1867,12 @@ async function api(request, response, url) {
     const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
     const body = await readJson(request);
     const courseName = cleanText(body.nome, 100), locationName = cleanText(body.local, 100), professorName = cleanText(body.professor, 100);
-    const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10);
+    const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
     const errors = {
       nome: catalogNameError(courseName, 'curso'),
       local: locationName ? '' : 'Selecione uma igreja cadastrada.',
       professor: professorName ? '' : 'Selecione um professor cadastrado.',
-      ...validateClassSchedule({ weekday, start_time: startTime }),
+      ...validateClassDetails({ weekday, start_time: startTime,label:classLabel,capacity }),
     };
     if (hasValidationErrors(errors)) return invalid(response, errors);
     const professor = await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
@@ -1725,7 +1881,7 @@ async function api(request, response, url) {
     const location = await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
     if (!course || !location) return json(response, 400, { message: 'Selecione somente cursos e locais ativos cadastrados pelo gestor.' });
     try {
-      const result=await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,weekday,start_time) VALUES (?,?,?,?,?,?,?)').run(period.id,course.id,professor.id,location.id,`${courseName} — ${locationName}`,weekday||null,startTime||null);
+      const result=await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,weekday,start_time,capacity) VALUES (?,?,?,?,?,?,?,?)').run(period.id,course.id,professor.id,location.id,classLabel||`${courseName} — ${locationName}`,weekday||null,startTime||null,capacity);
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_created',ip);
       return json(response,201,{id:Number(result.lastInsertRowid)});
     } catch (error) {
@@ -1739,15 +1895,16 @@ async function api(request, response, url) {
     const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
     const id=Number(courseMatch[1]),body=await readJson(request);
     const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
-    const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10);
-    const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione uma igreja cadastrada.',professor:professorName?'':'Selecione um professor cadastrado.',...validateClassSchedule({weekday,start_time:startTime})};
+    const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
+    const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione uma igreja cadastrada.',professor:professorName?'':'Selecione um professor cadastrado.',...validateClassDetails({weekday,start_time:startTime,label:classLabel,capacity})};
     if(hasValidationErrors(errors))return invalid(response,errors);
     const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
     if(!professor)return json(response,400,{message:'Professor não encontrado.'});
     const course=await db.prepare('SELECT id FROM courses WHERE name=? AND active=1').get(courseName),location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
     if(!course||!location)return json(response,400,{message:'Selecione somente cursos e locais ativos cadastrados pelo gestor.'});
+    if(capacity!==null){const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(id);if(Number(occupied.total)>capacity)return invalid(response,{capacity:`A capacidade não pode ser menor que os ${occupied.total} aluno(s) já matriculados.`});}
     try{
-      const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,weekday=?,start_time=? WHERE id=? AND school_year_id=?').run(course.id,professor.id,location.id,`${courseName} — ${locationName}`,weekday||null,startTime||null,id,period.id);
+      const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,weekday=?,start_time=?,capacity=? WHERE id=? AND school_year_id=?').run(course.id,professor.id,location.id,classLabel||`${courseName} — ${locationName}`,weekday||null,startTime||null,capacity,id,period.id);
       if(!result.changes)return json(response,404,{message:'Turma não encontrada.'});
     }catch(error){if(duplicateError(error))return json(response,409,{message:'Esta turma já existe.'});throw error;}
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
@@ -1879,17 +2036,16 @@ async function api(request, response, url) {
     try{
       await db.transaction(async()=>{
         await db.prepare('UPDATE professor_profiles SET name=?,email=?,phone=?,home_location_id=? WHERE id=?').run(name,email,phone,location.id,id);
-        await db.prepare('UPDATE classes SET active=0 WHERE professor_id=? AND school_year_id=?').run(id,period.id);
+        const selectedCourseIds=catalogCourses.map(course=>Number(course.id));
+        if(selectedCourseIds.length){
+          await db.prepare(`UPDATE classes SET active=0 WHERE professor_id=? AND school_year_id=? AND course_id NOT IN (${selectedCourseIds.map(()=>'?').join(',')})`).run(id,period.id,...selectedCourseIds);
+        }else{
+          await db.prepare('UPDATE classes SET active=0 WHERE professor_id=? AND school_year_id=?').run(id,period.id);
+        }
         for(const course of catalogCourses){
-          const oldClass = await db.prepare('SELECT id FROM classes WHERE course_id=? AND professor_id=? AND school_year_id=? AND active=0 ORDER BY id LIMIT 1').get(course.id,id,period.id);
-          await db.prepare(`INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,active) VALUES (?,?,?,?,?,1)
-            ON CONFLICT(school_year_id,course_id,professor_id,location_id) DO UPDATE SET active=1,label=excluded.label`).run(period.id,course.id,id,location.id,`${course.name} — ${locationName}`);
-          if (oldClass) {
-            const newClass = await db.prepare('SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND professor_id=? AND location_id=? AND active=1').get(period.id,course.id,id,location.id);
-            if (newClass && newClass.id !== oldClass.id) {
-              await db.prepare("UPDATE enrollments SET class_id=? WHERE class_id=? AND status='ativa'").run(newClass.id, oldClass.id);
-            }
-          }
+          const existingClass=await db.prepare('SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND professor_id=? ORDER BY active DESC,id LIMIT 1').get(period.id,course.id,id);
+          if(existingClass)await db.prepare('UPDATE classes SET active=1 WHERE id=?').run(existingClass.id);
+          else await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,active) VALUES (?,?,?,?,?,1)').run(period.id,course.id,id,location.id,`${course.name} — ${locationName}`);
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_updated',ip);
       });
@@ -2398,7 +2554,7 @@ async function api(request, response, url) {
     };
     const inscricoesPorCurso=await db.prepare("SELECT courses.name AS curso,COUNT(enrollments.id) AS total FROM courses LEFT JOIN classes ON classes.course_id=courses.id AND classes.active=1 AND classes.school_year_id=? LEFT JOIN enrollments ON enrollments.class_id=classes.id AND enrollments.status='ativa' WHERE courses.active=1 GROUP BY courses.id ORDER BY total DESC,courses.name").all(period.id);
     const ultimasInscricoes=await db.prepare("SELECT students.name AS nome,courses.name AS curso,locations.name AS local,enrollments.enrolled_at FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.status='ativa' AND classes.school_year_id=? ORDER BY enrollments.enrolled_at DESC,enrollments.id DESC LIMIT 6").all(period.id);
-    const baixaFrequencia=(await db.prepare(`SELECT students.id,students.name AS nome,students.email AS contato,students.phone AS telefone,students.church AS igreja,students.age_group AS classe,students.has_instrument,courses.name AS curso,locations.name AS local,ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0)) AS frequencia FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN students ON students.id=attendance_records.student_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE students.active=1 AND classes.school_year_id=? GROUP BY students.id,classes.id,courses.name,locations.name HAVING ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0))<75 ORDER BY frequencia,students.name`).all(period.id)).map(row=>({...row,curso:[row.curso],instrumento:row.has_instrument?'Sim':'Não',status:'Ativo'}));
+    const baixaFrequencia=(await db.prepare(`SELECT students.id,students.name AS nome,students.email AS contato,students.phone AS telefone,churches.name AS igreja,students.age_group AS classe,students.has_instrument,courses.name AS curso,locations.name AS local,ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0)) AS frequencia FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN students ON students.id=attendance_records.student_id LEFT JOIN churches ON churches.id=students.church_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE students.active=1 AND classes.school_year_id=? GROUP BY students.id,classes.id,churches.name,courses.name,locations.name HAVING ROUND(100.0*SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END)/NULLIF(COUNT(attendance_records.id),0))<75 ORDER BY frequencia,students.name`).all(period.id)).map(row=>({...row,curso:[row.curso],instrumento:row.has_instrument?'Sim':'Não',status:'Ativo'}));
     return json(response,200,{stats,inscricoesPorCurso,ultimasInscricoes,baixaFrequencia,periodo:schoolYearView(period)});
   }
   if(request.method==='GET'&&url.pathname==='/api/dashboard/professor'){

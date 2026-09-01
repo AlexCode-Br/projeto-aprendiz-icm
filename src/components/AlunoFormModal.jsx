@@ -8,6 +8,8 @@ const initialFormState = {
     nome: '',
     contato: '',
     telefone: '',
+    guardian_name: '',
+    guardian_phone: '',
     classe: '',
     turmas: [],
     local: '',
@@ -41,7 +43,9 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                 telefone: aluno.telefone || '',
                 classe: aluno.classe || '',
                 turmas: Array.isArray(aluno.turmas) ? aluno.turmas.slice(0, 3).map(item => item.id) : [],
-                local: aluno.igreja || aluno.local || '',
+                guardian_name: aluno.guardian_name || '',
+                guardian_phone: aluno.guardian_phone || '',
+                local: aluno.igreja_id || aluno.local || '',
                 instrumento: aluno.instrumento || 'Não',
             });
         } else {
@@ -53,7 +57,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        const normalizedValue = name === 'telefone' ? formatPhone(value) : value;
+        const normalizedValue = ['telefone', 'guardian_phone'].includes(name) ? formatPhone(value) : value;
         setFormData(prev => ({ ...prev, [name]: normalizedValue }));
 
         if (errors[name]) {
@@ -78,7 +82,12 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
         }
         setSaving(true);
         try {
-            await onSave({ ...formData, nome: cleanText(formData.nome, 100), contato: cleanText(formData.contato, 254) }, aluno?.id);
+            await onSave({
+                ...formData,
+                church_id: formData.local,
+                nome: cleanText(formData.nome, 100),
+                contato: cleanText(formData.contato, 254),
+            }, aluno?.id);
         } finally {
             setSaving(false);
         }
@@ -91,7 +100,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {Object.entries({ nome: 'Nome completo', contato: 'E-mail', telefone: 'Telefone (WhatsApp)' }).map(([key, label]) => (
+                            {Object.entries({ nome: 'Nome completo', contato: 'E-mail (opcional)', telefone: 'Telefone (WhatsApp)' }).map(([key, label]) => (
                                 <div key={key}>
                                     <label htmlFor={key} className="form-label">{label}</label>
                                     <input
@@ -135,6 +144,18 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                                 />
                                 {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
                             </div>
+                            {formData.classe === 'Adolescente' && <>
+                                <div>
+                                    <label htmlFor="guardian_name" className="form-label">Nome do responsável</label>
+                                    <input id="guardian_name" name="guardian_name" value={formData.guardian_name} onChange={handleChange} autoComplete="name" maxLength="100" aria-invalid={Boolean(errors.guardian_name)} className={`form-control ${errors.guardian_name ? 'border-danger' : ''}`} />
+                                    {errors.guardian_name && <p className="mt-1 text-xs text-danger">{errors.guardian_name}</p>}
+                                </div>
+                                <div>
+                                    <label htmlFor="guardian_phone" className="form-label">Telefone do responsável</label>
+                                    <input id="guardian_phone" name="guardian_phone" type="tel" inputMode="tel" value={formData.guardian_phone} onChange={handleChange} autoComplete="tel" maxLength="15" aria-invalid={Boolean(errors.guardian_phone)} className={`form-control ${errors.guardian_phone ? 'border-danger' : ''}`} />
+                                    {errors.guardian_phone && <p className="mt-1 text-xs text-danger">{errors.guardian_phone}</p>}
+                                </div>
+                            </>}
                             <div className="md:col-span-2">
                                 <label htmlFor="curso" className="form-label">Cursos de interesse</label>
                                 <FormSelect

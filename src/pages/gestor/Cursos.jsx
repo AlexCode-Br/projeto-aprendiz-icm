@@ -185,7 +185,7 @@ const Cursos = () => {
                                 <th scope="col" className="px-6 py-3">Igreja</th>
                                 <th scope="col" className="px-6 py-3">Professor</th>
                                 <th scope="col" className="px-6 py-3">Horário</th>
-                                <th scope="col" className="px-6 py-3 text-center">Alunos</th>
+                                <th scope="col" className="px-6 py-3 text-center">Ocupação</th>
                                 <th scope="col" className="px-6 py-3 text-center">Status</th>
                                 <th scope="col" className="px-6 py-3 text-center">Ações</th>
                             </tr>
@@ -193,13 +193,13 @@ const Cursos = () => {
                         <tbody>
                             {filteredCursos.map(curso => (
                                 <tr key={curso.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-                                    <td className="px-6 py-4 font-medium">{curso.nome}</td>
+                                    <td className="px-6 py-4 font-medium">{curso.nome}{curso.label && curso.label !== `${curso.nome} — ${curso.local}` && <span className="mt-1 block text-xs font-normal text-text-muted">{curso.label}</span>}</td>
                                     <td className="px-6 py-4">{curso.local}</td>
                                     <td className="px-6 py-4">{curso.professor}</td>
                                     <td className="px-6 py-4 text-xs">
                                         {curso.weekday ? `${curso.weekday} às ${curso.start_time || '--:--'}` : 'A definir'}
                                     </td>
-                                    <td className="px-6 py-4 text-center">{curso.alunos}</td>
+                                    <td className="px-6 py-4 text-center">{curso.capacity ? `${curso.alunos} / ${curso.capacity}` : `${curso.alunos} / sem limite`}</td>
                                     <td className="px-6 py-4 text-center">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${curso.status === 'Ativo' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                                             {curso.status}
@@ -207,7 +207,7 @@ const Cursos = () => {
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center space-x-2">
-                                            <button type="button" aria-label={`Editar ${curso.nome}`} onClick={() => handleOpenCursoModal(curso)} className="icon-button text-blue-600 hover:bg-blue-100 dark:hover:bg-blue-500/20" title="Editar">
+                                            <button type="button" aria-label={`Editar ${curso.nome}`} onClick={() => handleOpenCursoModal(curso)} className="icon-button text-primary hover:bg-primary/10" title="Editar">
                                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
                                             </button>
                                             <button type="button" aria-label={`Excluir ${curso.nome}`} onClick={() => handleOpenConfirmModal(curso)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Excluir">
@@ -217,7 +217,7 @@ const Cursos = () => {
                                     </td>
                                 </tr>
                             ))}
-                            {!filteredCursos.length && <tr><td colSpan="6" className="px-6 py-10 text-center text-sm text-text-muted">Nenhum curso encontrado com estes filtros.</td></tr>}
+                            {!filteredCursos.length && <tr><td colSpan="7" className="px-6 py-10 text-center text-sm text-text-muted">Nenhuma turma encontrada com estes filtros.</td></tr>}
                         </tbody>
                     </table>
                 </div>

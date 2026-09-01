@@ -72,7 +72,7 @@ export function validateProfessor(values) {
 export function validateStudent(values) {
   const errors = {};
   const nameMessage = personNameError(values.nome, 'nome completo');
-  const emailMessage = emailError(values.contato);
+  const emailMessage = normalizeEmail(values.contato) ? emailError(values.contato) : '';
   const phoneMessage = phoneError(values.telefone);
   if (nameMessage) errors.nome = nameMessage;
   if (emailMessage) errors.contato = emailMessage;
@@ -85,6 +85,12 @@ export function validateStudent(values) {
   if (normalizedCourses.length > 3) errors.curso = 'Selecione no máximo três cursos.';
   if (!cleanText(values.local, 100)) errors.local = 'Selecione uma igreja.';
   if (!['Sim','Não'].includes(values.instrumento)) errors.instrumento = 'Informe se o aluno possui instrumento.';
+  if (values.classe === 'Adolescente') {
+    const guardianNameMessage = personNameError(values.guardian_name, 'nome do responsável');
+    const guardianPhoneMessage = phoneError(values.guardian_phone);
+    if (guardianNameMessage) errors.guardian_name = guardianNameMessage;
+    if (guardianPhoneMessage) errors.guardian_phone = guardianPhoneMessage;
+  }
   return errors;
 }
 
@@ -97,6 +103,15 @@ export function validateClassSchedule(values) {
   if (startTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(startTime)) errors.start_time = 'Informe um horário válido.';
   if (weekday && !startTime) errors.start_time = 'Informe o horário da turma.';
   if (!weekday && startTime) errors.weekday = 'Selecione o dia da semana.';
+  return errors;
+}
+
+export function validateClassDetails(values) {
+  const errors = validateClassSchedule(values);
+  const label = cleanText(values.label, 100);
+  const capacity = values.capacity === '' || values.capacity === null || values.capacity === undefined ? null : Number(values.capacity);
+  if (label && catalogNameError(label, 'nome da turma')) errors.label = 'Informe um nome de turma válido.';
+  if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 500)) errors.capacity = 'A capacidade deve ser um número entre 1 e 500.';
   return errors;
 }
 

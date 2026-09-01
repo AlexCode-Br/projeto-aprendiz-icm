@@ -11,6 +11,12 @@ const StudentDetailsModal = ({ student, isOpen, onClose }) => {
         ['Classe', student.classe],
         ['Possui instrumento?', student.instrumento],
     ];
+    if (student.classe === 'Adolescente') {
+        fields.splice(5, 0,
+            ['Responsável', student.guardian_name],
+            ['Telefone do responsável', student.guardian_phone],
+        );
+    }
     const courses = Array.isArray(student.turmas) && student.turmas.length
         ? student.turmas.map(item => `${item.nome} — ${item.local}`)
         : Array.isArray(student.curso) ? student.curso : student.curso ? [student.curso] : [];

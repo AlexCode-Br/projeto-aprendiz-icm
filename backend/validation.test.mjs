@@ -8,6 +8,7 @@ import {
   validateProfessor,
   validateStudent,
   validateClassSchedule,
+  validateClassDetails,
   validateSchoolYear,
   validateSupportTicket,
   supportClientMessageIdError,
@@ -42,12 +43,14 @@ test('valida catálogos e o cadastro completo do professor', () => {
 test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () => {
   assert.deepEqual(validateStudent({
     nome: 'Maria de Souza',
-    contato: 'maria@example.com',
+    contato: '',
     telefone: '(71) 99999-1234',
-    classe: 'Jovem',
+    classe: 'Adolescente',
     turmas: [11, 22, 33],
     local: 'Guarani',
     instrumento: 'Não',
+    guardian_name: 'Joana de Souza',
+    guardian_phone: '(71) 98888-1234',
   }), {});
 
   assert.equal(validateStudent({
@@ -86,6 +89,8 @@ test('valida dia e horário da turma como um único agendamento opcional', () =>
   assert.equal(validateClassSchedule({ weekday: 'Quarta-feira', start_time: '' }).start_time, 'Informe o horário da turma.');
   assert.equal(validateClassSchedule({ weekday: '', start_time: '19:30' }).weekday, 'Selecione o dia da semana.');
   assert.equal(validateClassSchedule({ weekday: 'Feriado', start_time: '25:99' }).weekday, 'Selecione um dia da semana válido.');
+  assert.deepEqual(validateClassDetails({ weekday: 'Sábado', start_time: '09:00', label: 'Turma A', capacity: 25 }), {});
+  assert.match(validateClassDetails({ weekday: '', start_time: '', label: 'Turma A', capacity: 0 }).capacity, /entre 1 e 500/);
 });
 
 test('valida período letivo por intervalo de datas, inclusive entre anos civis', () => {
