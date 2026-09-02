@@ -97,8 +97,6 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
       professor: offering.professor,
       label: 'Turma B',
       capacity: 1,
-      weekday: 'Terça-feira',
-      start_time: '19:00',
     });
     assert.equal(parallel.status, 201, JSON.stringify(parallel.data));
     const parallelId = Number(parallel.data.id);
@@ -114,8 +112,6 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
       professor: offering.professor,
       label: 'Turma C',
       capacity: 10,
-      weekday: 'Quarta-feira',
-      start_time: '19:00',
     });
     assert.equal(destination.status, 201, JSON.stringify(destination.data));
     const updated = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um', destination.data.id));

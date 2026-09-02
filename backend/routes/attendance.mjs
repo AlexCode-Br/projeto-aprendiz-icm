@@ -1,3 +1,5 @@
+import { attachClassSchedules } from '../class-schedules.mjs';
+
 export function createAttendanceRoutes(context) {
   const {
     db,
@@ -13,7 +15,7 @@ export function createAttendanceRoutes(context) {
         const session=await authorize(request,response,['professor']);if(!session)return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
         const rows=await db.prepare(`SELECT classes.id,classes.label,classes.weekday,classes.start_time,courses.name AS nome,locations.name AS local FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=? ORDER BY courses.name,classes.label,locations.name`).all(session.user_id,period.id);
-        return json(response,200,rows);
+        return json(response,200,await attachClassSchedules(db,rows));
       }
     
       if(request.method==='GET'&&url.pathname==='/frequencia'){

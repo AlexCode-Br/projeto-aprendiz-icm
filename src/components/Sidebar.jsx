@@ -67,6 +67,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     const navLinks = [
         { path: "/dashboard", icon: <LayoutDashboard aria-hidden="true" />, label: "Dashboard", role: ['gestor', 'professor'] },
         { path: "/cursos", icon: <BookOpen aria-hidden="true" />, label: "Cursos", role: ['gestor'] },
+        { path: "/turmas", icon: <BookOpen aria-hidden="true" />, label: "Minhas turmas", role: ['professor'] },
         { path: "/alunos", icon: <Users aria-hidden="true" />, label: "Alunos", role: ['gestor', 'professor'] },
         { path: "/professores", icon: <GraduationCap aria-hidden="true" />, label: "Professores", role: ['gestor'] },
         { path: "/relatorios", icon: <ChartNoAxesCombined aria-hidden="true" />, label: "Relatórios", role: ['professor'] },

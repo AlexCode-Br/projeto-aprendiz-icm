@@ -17,6 +17,7 @@ const Professores = React.lazy(() => import('./pages/gestor/Professores.jsx'));
 const GestorInformativos = React.lazy(() => import('./pages/gestor/Informativos.jsx'));
 const GestorSuporte = React.lazy(() => import('./pages/gestor/Suporte.jsx'));
 const ProfessorDashboard = React.lazy(() => import('./pages/professor/ProfessorDashboard.jsx'));
+const ProfessorTurmas = React.lazy(() => import('./pages/professor/ProfessorTurmas.jsx'));
 const ProfessorAlunos = React.lazy(() => import('./pages/professor/ProfessorAlunos.jsx'));
 const ProfessorFrequencia = React.lazy(() => import('./pages/professor/ProfessorFrequencia.jsx'));
 const ProfessorRelatorios = React.lazy(() => import('./pages/professor/ProfessorRelatorios.jsx'));
@@ -73,6 +74,7 @@ const AppRoutes = () => {
     const professorRoutes = (
         <>
             <Route path="/professor/dashboard" element={<ProfessorDashboard />} />
+            <Route path="/professor/turmas" element={<ProfessorTurmas />} />
             <Route path="/professor/alunos" element={<ProfessorAlunos />} />
             <Route path="/professor/frequencia" element={<ProfessorFrequencia />} />
             <Route path="/professor/relatorios" element={<ProfessorRelatorios />} />

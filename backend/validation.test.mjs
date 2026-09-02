@@ -105,6 +105,7 @@ test('valida dia e horário da turma como um único agendamento opcional', () =>
   assert.equal(validateClassSchedule({ weekday: '', start_time: '19:30' }).weekday, 'Selecione o dia da semana.');
   assert.equal(validateClassSchedule({ weekday: 'Feriado', start_time: '25:99' }).weekday, 'Selecione um dia da semana válido.');
   assert.deepEqual(validateClassDetails({ weekday: 'Sábado', start_time: '09:00', label: 'Turma A', capacity: 25 }), {});
+  assert.deepEqual(validateClassDetails({ label: 'Teclado — Brotas' }), {});
   assert.match(validateClassDetails({ weekday: '', start_time: '', label: 'Turma A', capacity: 0 }).capacity, /entre 1 e 500/);
 });
 

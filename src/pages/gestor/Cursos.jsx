@@ -3,9 +3,12 @@ import { Pencil, Trash2 } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { CirclePause } from 'lucide-react';
 import SectionAddHeader from '../../components/SectionAddHeader';
+import TurmaCard from '../../components/TurmaCard';
+import ClassScheduleList from '../../components/ClassScheduleList';
 import SearchInput from '../../components/SearchInput';
 import CursoModal from '../../components/CursoModal';
 import CatalogItemModal from '../../components/CatalogItemModal';
+import MobileCatalogList from '../../components/MobileCatalogList';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import FormSelect from '../../components/FormSelect';
 import { useToast } from '../../contexts/ToastContext';
@@ -148,7 +151,8 @@ const Cursos = () => {
                             onAdd={() => setCatalogModal({ open: true, type, item: null })}
                             className="border-b border-border px-5 py-4 xl:min-h-[104px]"
                         />
-                        <div className="max-h-80 overflow-auto">
+                        <MobileCatalogList type={type} items={catalogos[type]} onEdit={item => setCatalogModal({ open: true, type, item })} onDelete={item => setCatalogToDelete({ type, item })} />
+                        <div className="hidden max-h-80 overflow-auto sm:block">
                             <table className="data-table w-full text-left text-sm">
                                 <thead className="bg-surface-muted text-xs uppercase text-text-muted"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
                                 <tbody>{catalogos[type].map(item => <tr key={item.id} className="border-t border-border">
@@ -158,8 +162,8 @@ const Cursos = () => {
                                     <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}><Pencil aria-hidden="true" /></button><button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Excluir definitivamente ${item.nome}`}><Trash2 aria-hidden="true" /></button></td>
                                 </tr>)}</tbody>
                             </table>
-                            {!catalogos[type].length && <div className="p-8 text-center text-sm text-text-muted"><strong className="block text-text-default">Nenhum cadastro encontrado</strong><span className="mt-1 block">Use “Adicionar” para criar a primeira opção deste catálogo.</span></div>}
                         </div>
+                        {!catalogos[type].length && <div className="p-8 text-center text-sm text-text-muted"><strong className="block text-text-default">Nenhum cadastro encontrado</strong><span className="mt-1 block">Use “Adicionar” para criar a primeira opção deste catálogo.</span></div>}
                     </section>
                 ))}
             </div>
@@ -172,7 +176,7 @@ const Cursos = () => {
                 className="mb-3"
             />
 
-            <section className="panel mb-6 p-4 md:p-6" aria-label="Filtros de cursos">
+            <section className="panel mb-3 p-4 sm:mb-6 md:p-6" aria-label="Filtros de cursos">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="course-search" className="form-label">Pesquisar por nome</label>
@@ -198,9 +202,24 @@ const Cursos = () => {
                 </div>
             </section>
 
-            <div className="panel overflow-hidden">
+            <section className="sm:hidden" aria-label="Turmas cadastradas">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-text-muted" role="status">
+                        {searchTerm || selectedLocal
+                            ? `${filteredCursos.length} de ${cursos.length} turmas`
+                            : `${filteredCursos.length} ${filteredCursos.length === 1 ? 'turma cadastrada' : 'turmas cadastradas'}`}
+                    </p>
+                    {(searchTerm || selectedLocal) && <button type="button" onClick={() => { setSearchTerm(''); setSelectedLocal(''); }} className="btn btn-ghost px-2 text-xs">Limpar filtros</button>}
+                </div>
+                <div className="space-y-4">
+                    {filteredCursos.map(curso => <TurmaCard key={curso.id} curso={curso} onEdit={handleOpenCursoModal} onDeactivate={handleOpenConfirmModal} />)}
+                    {!filteredCursos.length && <div className="panel empty-state"><strong className="text-text-default">Nenhuma turma encontrada</strong><span>{searchTerm || selectedLocal ? 'Tente outra busca ou limpe os filtros.' : 'Use “Adicionar” para montar a primeira turma.'}</span></div>}
+                </div>
+            </section>
+
+            <div className="panel hidden overflow-hidden sm:block">
                 <div className="table-scroll" tabIndex={0} role="region" aria-label="Resultados">
-                    <table className="data-table mobile-cards w-full text-sm text-left text-text-default">
+                    <table className="data-table w-full text-sm text-left text-text-default">
                         <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                             <tr>
                                 <th scope="col" className="px-6 py-3">Curso</th>
@@ -219,7 +238,7 @@ const Cursos = () => {
                                     <td data-label="Igreja" className="px-6 py-4">{curso.local}</td>
                                     <td data-label="Professor" className="px-6 py-4">{curso.professor}</td>
                                     <td data-label="Horário" className="px-6 py-4 text-xs">
-                                        {curso.weekday ? `${curso.weekday} às ${curso.start_time || '--:--'}` : 'A definir'}
+                                        <ClassScheduleList course={curso} />
                                     </td>
                                     <td data-label="Alunos" className="px-6 py-4 text-center">{curso.alunos}</td>
                                     <td className="px-6 py-4 text-center">
@@ -255,7 +274,7 @@ const Cursos = () => {
                 allCursos={catalogos.cursos.filter(item => item.ativo).map(item => item.nome)}
             />
 
-            <CatalogItemModal isOpen={catalogModal.open} onClose={() => setCatalogModal({ open: false, type: 'cursos', item: null })} onSave={handleSaveCatalog} item={catalogModal.item} type={catalogModal.type} />
+            <CatalogItemModal isOpen={catalogModal.open} onClose={() => setCatalogModal({ open: false, type: 'cursos', item: null })} onSave={handleSaveCatalog} item={catalogModal.item} type={catalogModal.type} existingItems={catalogos[catalogModal.type]} />
 
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}

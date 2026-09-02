@@ -1,3 +1,6 @@
+import { attachClassSchedules } from '../class-schedules.mjs';
+import { nextClassSchedule } from '../../shared/class-schedules.mjs';
+
 export function createDashboardRoutes(context) {
   const {
     db,
@@ -40,7 +43,8 @@ export function createDashboardRoutes(context) {
         const session=await authorize(request,response,['professor']);if(!session)return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
         const totalAlunos=(await db.prepare("SELECT COUNT(DISTINCT enrollments.student_id) AS total FROM enrollments JOIN classes ON classes.id=enrollments.class_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id JOIN students ON students.id=enrollments.student_id WHERE professor_profiles.user_id=? AND classes.school_year_id=? AND enrollments.status='ativa' AND students.active=1 AND classes.active=1").get(session.user_id,period.id)).total;
-        const proxima=await db.prepare('SELECT courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=? ORDER BY classes.id LIMIT 1').get(session.user_id,period.id);
+        const classRows=await db.prepare('SELECT classes.id,courses.name AS curso,locations.name AS local,classes.weekday,classes.start_time FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND professor_profiles.active=1 AND classes.active=1 AND classes.school_year_id=? ORDER BY classes.id').all(session.user_id,period.id);
+        const proxima=nextClassSchedule(await attachClassSchedules(db,classRows),new Date(),process.env.APP_TIMEZONE || 'America/Sao_Paulo');
         const frequency=await db.prepare("SELECT COUNT(attendance_records.id) AS total,COALESCE(SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS presencas FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.school_year_id=?").get(session.user_id,period.id);
         const frequenciaMedia=frequency.total?Math.round(100*frequency.presencas/frequency.total):null;
         const informativos=(await db.prepare(`SELECT COUNT(*) AS total FROM announcements WHERE active=1 AND ${announcementScheduledCondition('scheduled_at')} AND (
@@ -51,7 +55,7 @@ export function createDashboardRoutes(context) {
           ))
         )`).get(session.user_id,session.user_id)).total;
         const ticketsAbertos=(await db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE requester_user_id=? AND status<>'Resolvido'").get(session.user_id)).total;
-        return json(response,200,{stats:{totalAlunos,informativos,ticketsAbertos,frequenciaMedia},proximaAula:proxima?{...proxima,descricao:`${proxima.weekday||'A definir'}, ${proxima.start_time||'horário a definir'}`} : null,periodo:schoolYearView(period)});
+        return json(response,200,{stats:{totalAlunos,informativos,ticketsAbertos,frequenciaMedia},proximaAula:proxima,periodo:schoolYearView(period)});
       }
     return json(response, 404, { message: 'Rota não encontrada.' });
   };

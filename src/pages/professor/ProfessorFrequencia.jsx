@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import FormSelect from '../../components/FormSelect';
 import { downloadCsv } from '../../utils/csv.js';
+import { classSchedules, scheduleText } from '../../../shared/class-schedules.mjs';
 
 const localToday = () => {
     const now = new Date();
@@ -36,7 +37,8 @@ const ProfessorFrequencia = () => {
                 const response = await api.get('/professores/meus-cursos'); // Rota específica do professor
                 setCursos(response.data.map(c => {
                     const customLabel = c.label && c.label !== `${c.nome} — ${c.local}` ? ` — ${c.label}` : '';
-                    const schedule = c.weekday ? ` · ${c.weekday}${c.start_time ? ` ${c.start_time}` : ''}` : '';
+                    const slots = classSchedules(c);
+                    const schedule = slots.length === 1 ? ' · ' + scheduleText(slots[0]) : slots.length ? ` · ${slots.length} horários semanais` : '';
                     return { value: c.id, label: `${c.nome}${customLabel} · ${c.local}${schedule}` };
                 }));
             } catch (error) {

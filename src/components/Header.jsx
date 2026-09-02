@@ -7,7 +7,7 @@ import { Menu, X, ChevronDown, UserRound, Sun, Moon, LogOut } from 'lucide-react
 
 const Header = ({ sidebarOpen, setSidebarOpen }) => {
     const location = useLocation();
-    const sectionNames = { dashboard: 'Visão geral', cursos: 'Cursos e igrejas', alunos: 'Alunos', professores: 'Professores', relatorios: 'Relatórios', informativos: 'Informativos', suporte: 'Suporte', frequencia: 'Chamada', configuracoes: 'Configurações' };
+    const sectionNames = { dashboard: 'Visão geral', cursos: 'Cursos e igrejas', turmas: 'Minhas turmas', alunos: 'Alunos', professores: 'Professores', relatorios: 'Relatórios', informativos: 'Informativos', suporte: 'Suporte', frequencia: 'Chamada', configuracoes: 'Configurações' };
     const section = sectionNames[location.pathname.split('/').pop()] || 'Projeto Aprendiz';
     const triggerRef = useRef(null);
     const { user, logout } = useContext(AuthContext);

@@ -13,6 +13,7 @@ import StudentDetailsModal from '../../components/StudentDetailsModal';
 import ContactLink from '../../components/ContactLink';
 import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
 import ProfileAvatar from '../../components/ProfileAvatar';
+import MobileStudentList from '../../components/MobileStudentList';
 
 const Alunos = () => {
     // --- Estados ---
@@ -185,8 +186,9 @@ const Alunos = () => {
             </section>
 
             {/* Tabela de Alunos */}
-            <div className="panel overflow-x-auto">
-                <table className="data-table mobile-cards min-w-full divide-y divide-border">
+            <MobileStudentList students={alunos} loading={loading} error={error} onView={setDetailsAluno} onEdit={handleOpenFormModal} onDelete={handleOpenConfirmModal} />
+            <div className="panel hidden overflow-x-auto sm:block">
+                <table className="data-table min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Aluno</th>

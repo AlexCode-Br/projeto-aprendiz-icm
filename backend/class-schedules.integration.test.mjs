@@ -1,0 +1,67 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+import test from 'node:test';
+
+test('professor gerencia somente seus horários; gestor consulta sem sobrescrever', {timeout:40000}, async () => {
+  const directory=await mkdtemp(join(tmpdir(),'aprendiz-schedules-'));
+  const databasePath=join(directory,'schedules.db');
+  const port=56000+(process.pid%1000);
+  const base='http://127.0.0.1:'+port;
+  let logs='',server,database;
+  const start=async()=>{
+    server=spawn(process.execPath,['backend/server.mjs'],{cwd:join(import.meta.dirname,'..'),env:{...process.env,PORT:String(port),HOST:'127.0.0.1',APP_URL:base,DATABASE_URL:'',SQLITE_PATH:databasePath,AUTH_PROVIDER:'local',SEED_DEMO_DATA:'true',NODE_ENV:'test'},stdio:['ignore','pipe','pipe']});
+    server.stdout.on('data',data=>{logs+=data;});server.stderr.on('data',data=>{logs+=data;});
+    for(let i=0;i<80;i++){try{if((await fetch(base+'/api/health')).ok)return;}catch{} await new Promise(resolve=>setTimeout(resolve,100));}
+    assert.fail(logs);
+  };
+  const stop=async()=>{if(server&&server.exitCode===null){const exited=once(server,'exit');server.kill();await exited;}};
+  const call=async(session,method,path,body)=>{
+    const response=await fetch(base+path,{method,headers:{...(session?{Cookie:session.cookie,'X-CSRF-Token':session.csrf}:{}),...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
+    return {status:response.status,data:await response.json(),headers:response.headers};
+  };
+  const login=async(email,password)=>{const result=await call(null,'POST','/api/auth/login',{email,password});assert.equal(result.status,200);return {cookie:result.headers.get('set-cookie').split(';')[0],csrf:result.data.csrfToken};};
+  try {
+    await start();
+    const manager=await login('gestor@projetoaprendiz.local','Gestor@2026!');
+    const professor=await login('professor@projetoaprendiz.local','Professor@2026!');
+    const all=(await call(manager,'GET','/cursos')).data.cursos;
+    const own=(await call(professor,'GET','/professores/meus-cursos')).data;
+    const course=own[0],foreign=all.find(item=>!own.some(row=>row.id===item.id));
+    assert.ok(course&&foreign);
+    assert.equal(course.horarios.length,1);
+    const path='/api/professores/me/turmas/'+course.id+'/horarios';
+    const horarios=[{weekday:'Quarta-feira',start_time:'19:30'},{weekday:'Segunda-feira',start_time:'08:00'}];
+    assert.equal((await call(null,'PUT',path,{horarios})).status,401);
+    assert.equal((await call(manager,'PUT',path,{horarios})).status,403);
+    assert.equal((await call(professor,'PUT','/api/professores/me/turmas/'+foreign.id+'/horarios',{horarios})).status,403);
+    for(const invalid of [null,[{weekday:'Sábado',start_time:''}],[horarios[0],horarios[0]],[{weekday:'Segunda-feira',start_time:'25:00'}]]) assert.equal((await call(professor,'PUT',path,{horarios:invalid})).status,400);
+    const saved=await call(professor,'PUT',path,{horarios});
+    assert.equal(saved.status,200,JSON.stringify(saved.data));
+    assert.deepEqual(saved.data.horarios,[horarios[1],horarios[0]]);
+    const current=(await call(manager,'GET','/cursos')).data.cursos.find(item=>item.id===course.id);
+    assert.deepEqual(current.horarios,saved.data.horarios);
+    const update={nome:current.nome,local:current.local,professor:current.professor,label:current.label,capacity:current.capacity};
+    const managerUpdate=await call(manager,'PUT','/cursos/'+course.id,update);
+    assert.equal(managerUpdate.status,200,JSON.stringify(managerUpdate.data));
+    assert.deepEqual((await call(professor,'GET','/professores/meus-cursos')).data.find(item=>item.id===course.id).horarios,saved.data.horarios);
+    assert.equal((await call(manager,'PUT','/cursos/'+course.id,{...update,weekday:'Sexta-feira',start_time:'12:00'})).status,403);
+    assert.equal((await call(manager,'POST','/cursos',{...update,label:'Nova',horarios})).status,403);
+    await stop();await start();
+    assert.deepEqual((await call(professor,'GET','/professores/meus-cursos')).data.find(item=>item.id===course.id).horarios,saved.data.horarios);
+    assert.equal((await call(professor,'PUT',path,{horarios:[]})).status,200);
+    await stop();await start();
+    assert.deepEqual((await call(professor,'GET','/professores/meus-cursos')).data.find(item=>item.id===course.id).horarios,[]);
+    database=new DatabaseSync(databasePath);
+    database.prepare("UPDATE school_years SET closed_at='2026-12-31' WHERE id=(SELECT school_year_id FROM classes WHERE id=?)").run(course.id);
+    assert.equal((await call(professor,'PUT',path,{horarios})).status,409);
+    database.prepare('UPDATE school_years SET closed_at=NULL').run();
+    database.prepare('UPDATE classes SET active=0 WHERE id=?').run(course.id);
+    assert.equal((await call(professor,'PUT',path,{horarios})).status,403);
+    assert.ok(database.prepare("SELECT id FROM audit_log WHERE action=?").get('class_schedule_updated:'+course.id));
+  } finally {database?.close();await stop();await rm(directory,{recursive:true,force:true});}
+});

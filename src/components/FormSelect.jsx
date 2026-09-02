@@ -1,5 +1,6 @@
 import React, { forwardRef } from 'react';
 import Select from 'react-select';
+import CreatableSelect from 'react-select/creatable';
 
 const ariaLiveMessages = {
     guidance: ({ context, isSearchable }) => context === 'menu'
@@ -29,6 +30,7 @@ const FormSelect = forwardRef(({
     isSearchable = true,
     isDisabled = false,
     isLoading = false,
+    allowCreate = false,
     noOptionsMessage = () => 'Nenhuma opção encontrada',
     invalid = false,
     className,
@@ -48,8 +50,8 @@ const FormSelect = forwardRef(({
             }
             return [];
         }
-        return formattedOptions?.find(opt => String(opt.value) === String(value)) || null;
-    }, [value, formattedOptions, isMulti]);
+        return formattedOptions?.find(opt => String(opt.value) === String(value)) || (allowCreate ? { value, label: String(value) } : null);
+    }, [value, formattedOptions, isMulti, allowCreate]);
 
     const handleChange = (selected) => {
         if (isMulti) {
@@ -63,8 +65,9 @@ const FormSelect = forwardRef(({
         }
     };
 
+    const SelectComponent = allowCreate ? CreatableSelect : Select;
     return (
-        <Select
+        <SelectComponent
             ref={ref}
             inputId={id}
             aria-label={props['aria-label'] || (!id ? placeholder : undefined)}

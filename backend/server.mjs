@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { initializeClassSchedules } from './class-schedules.mjs';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -688,6 +689,8 @@ async function seedCommunicationData() {
 if (seedDemoData) await seedCommunicationData();
 await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
 await db.prepare('DELETE FROM password_resets WHERE expires_at <= ? OR used_at IS NOT NULL').run(new Date().toISOString());
+
+await initializeClassSchedules(db);
 
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60_000;
 const AUTH_RATE_LIMIT_MESSAGE = 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.';

@@ -111,7 +111,7 @@ export function validateClassDetails(values) {
   const errors = validateClassSchedule(values);
   const label = cleanText(values.label, 100);
   const capacity = values.capacity === '' || values.capacity === null || values.capacity === undefined ? null : Number(values.capacity);
-  if (label && catalogNameError(label, 'nome da turma')) errors.label = 'Informe um nome de turma válido.';
+  if (label && catalogNameError(label.replace(/[–—]/g, '-'), 'nome da turma')) errors.label = 'Informe um nome de turma válido.';
   if (capacity !== null && (!Number.isInteger(capacity) || capacity < 1 || capacity > 500)) errors.capacity = 'A capacidade deve ser um número entre 1 e 500.';
   return errors;
 }

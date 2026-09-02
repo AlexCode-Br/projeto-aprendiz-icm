@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
-import { validateClassSchedule } from '../../shared/validation.mjs';
+import ClassScheduleList from './ClassScheduleList';
 
 const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLocais = [], allCursos = [] }) => {
-    const [formData, setFormData] = useState({ nome: '', local: '', professor: '', weekday: '', start_time: '' });
+    const [formData, setFormData] = useState({ nome: '', local: '', professor: '', label: '', capacity: '' });
     const [errors, setErrors] = useState({});
 
     useEffect(() => {
@@ -13,11 +13,11 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                 nome: curso.nome || '',
                 local: curso.local || '',
                 professor: curso.professor || '',
-                weekday: curso.weekday || '',
-                start_time: curso.start_time || '',
+                label: curso.label || '',
+                capacity: curso.capacity ?? '',
             });
         } else {
-            setFormData({ nome: '', local: '', professor: '', weekday: '', start_time: '' });
+            setFormData({ nome: '', local: '', professor: '', label: '', capacity: '' });
         }
         setErrors({});
     }, [curso, isOpen]);
@@ -27,7 +27,6 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
         if (!formData.nome.trim()) newErrors.nome = 'O nome do curso é obrigatório.';
         if (!formData.local) newErrors.local = 'A igreja é obrigatória.';
         if (!formData.professor) newErrors.professor = 'O professor é obrigatório.';
-        Object.assign(newErrors, validateClassSchedule(formData));
         return newErrors;
     };
 
@@ -51,9 +50,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
 
     if (!isOpen) return null;
 
-    const modalTitle = curso ? 'Editar Curso' : 'Adicionar Novo Curso';
-
-    const weekdays = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+    const modalTitle = curso ? 'Editar turma' : 'Adicionar turma';
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
@@ -98,33 +95,10 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                             />
                             {errors.professor && <p className="text-danger text-xs mt-1">{errors.professor}</p>}
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="weekday" className="form-label">Dia da semana</label>
-                                <FormSelect
-                                    name="weekday"
-                                    id="weekday"
-                                    value={formData.weekday}
-                                    onChange={handleChange}
-                                    options={weekdays}
-                                    placeholder="A definir"
-                                    invalid={Boolean(errors.weekday)}
-                                />
-                                {errors.weekday && <p className="text-danger text-xs mt-1">{errors.weekday}</p>}
-                            </div>
-                            <div>
-                                <label htmlFor="start_time" className="form-label">Horário</label>
-                                <input
-                                    type="time"
-                                    name="start_time"
-                                    id="start_time"
-                                    value={formData.start_time}
-                                    onChange={handleChange}
-                                    aria-invalid={Boolean(errors.start_time)}
-                                    className={`form-control ${errors.start_time ? 'border-danger' : ''}`}
-                                />
-                                {errors.start_time && <p className="text-danger text-xs mt-1">{errors.start_time}</p>}
-                            </div>
+                        <div className="rounded-xl border border-border bg-surface-muted/50 p-4">
+                            <h3 className="mb-2 text-sm font-semibold">Dias e horários</h3>
+                            <div className="text-sm leading-6"><ClassScheduleList course={curso} /></div>
+                            <p className="mt-2 text-xs leading-5 text-text-muted">O professor define os dias e horários na área “Minhas turmas”.</p>
                         </div>
                     </div>
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">

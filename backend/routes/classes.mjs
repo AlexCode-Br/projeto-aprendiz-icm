@@ -1,3 +1,5 @@
+import { attachClassSchedules } from '../class-schedules.mjs';
+
 export function createClassRoutes(context) {
   const {
     db,
@@ -98,7 +100,7 @@ export function createClassRoutes(context) {
         const rows = await db.prepare(`SELECT classes.id,classes.label,classes.capacity,courses.name AS nome,locations.name AS local,professor_profiles.name AS professor,classes.weekday,classes.start_time,CASE classes.active WHEN 1 THEN 'Ativo' ELSE 'Inativo' END AS status,COUNT(CASE WHEN enrollments.status='ativa' AND students.active=1 THEN 1 END) AS alunos FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN enrollments ON enrollments.class_id=classes.id LEFT JOIN students ON students.id=enrollments.student_id WHERE classes.school_year_id=? GROUP BY classes.id,courses.name,locations.name,professor_profiles.name,classes.weekday,classes.start_time ORDER BY courses.name,classes.label,locations.name`).all(period.id);
         const professores = (await db.prepare('SELECT name FROM professor_profiles WHERE active=1 ORDER BY name').all()).map(row=>row.name);
         const locais = (await db.prepare('SELECT name FROM locations WHERE active=1 ORDER BY name').all()).map(row=>row.name);
-        return json(response, 200, { cursos: rows, professores, locais });
+        return json(response, 200, { cursos: await attachClassSchedules(db,rows), professores, locais });
       }
     
       if (request.method === 'POST' && url.pathname === '/cursos') {
@@ -106,6 +108,7 @@ export function createClassRoutes(context) {
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const body = await readJson(request);
         const courseName = cleanText(body.nome, 100), locationName = cleanText(body.local, 100), professorName = cleanText(body.professor, 100);
+        if (body.weekday || body.start_time || body.horarios !== undefined) return json(response,403,{message:'Os dias e horários são definidos pelo professor da turma.'});
         const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
         const errors = {
           nome: catalogNameError(courseName, 'curso'),
@@ -135,6 +138,7 @@ export function createClassRoutes(context) {
         const session=await authorize(request,response,['gestor']); if(!session)return;
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const id=Number(courseMatch[1]),body=await readJson(request);
+        if (body.weekday || body.start_time || body.horarios !== undefined) return json(response,403,{message:'Os dias e horários são definidos pelo professor da turma.'});
         const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
         const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
         const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione uma igreja cadastrada.',professor:professorName?'':'Selecione um professor cadastrado.',...validateClassDetails({weekday,start_time:startTime,label:classLabel,capacity})};
@@ -145,7 +149,7 @@ export function createClassRoutes(context) {
         if(!course||!location)return json(response,400,{message:'Selecione somente cursos e locais ativos cadastrados pelo gestor.'});
         if(capacity!==null){const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(id);if(Number(occupied.total)>capacity)return invalid(response,{capacity:`A capacidade não pode ser menor que os ${occupied.total} aluno(s) já matriculados.`});}
         try{
-          const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,weekday=?,start_time=?,capacity=? WHERE id=? AND school_year_id=?').run(course.id,professor.id,location.id,classLabel||`${courseName} — ${locationName}`,weekday||null,startTime||null,capacity,id,period.id);
+          const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,capacity=? WHERE id=? AND school_year_id=?').run(course.id,professor.id,location.id,classLabel||`${courseName} — ${locationName}`,capacity,id,period.id);
           if(!result.changes)return json(response,404,{message:'Turma não encontrada.'});
         }catch(error){if(duplicateError(error))return json(response,409,{message:'Esta turma já existe.'});throw error;}
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);

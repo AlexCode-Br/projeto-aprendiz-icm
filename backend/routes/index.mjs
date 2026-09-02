@@ -1,4 +1,5 @@
 import { createAuthRoutes } from './auth.mjs';
+import { createScheduleRoutes } from './schedules.mjs';
 import { createAnnouncementRoutes } from './announcements.mjs';
 import { createAttendanceRoutes } from './attendance.mjs';
 import { createClassRoutes } from './classes.mjs';
@@ -37,6 +38,7 @@ export function createApiHandler(context) {
     logger,
   } = context;
   const authRoutes = createAuthRoutes(context);
+  const scheduleRoutes = createScheduleRoutes(context);
   const announcementRoutes = createAnnouncementRoutes(context);
   const attendanceRoutes = createAttendanceRoutes(context);
   const classRoutes = createClassRoutes(context);
@@ -226,6 +228,8 @@ export function createApiHandler(context) {
       return studentRoutes(request, response, url, ip);
     }
   
+    if (url.pathname.startsWith('/api/professores/me/turmas/')) return scheduleRoutes(request,response,url,ip);
+
     if (url.pathname === '/cursos' || url.pathname.startsWith('/cursos/') || url.pathname.startsWith('/api/catalogos/')) {
       return classRoutes(request, response, url, ip);
     }

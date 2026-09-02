@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import ProfileAvatar from '../../components/ProfileAvatar';
 import ContactLink from '../../components/ContactLink';
+import MobileStudentList from '../../components/MobileStudentList';
 import StudentDetailsModal from '../../components/StudentDetailsModal';
 import { useToast } from '../../contexts/ToastContext';
 import { Download } from 'lucide-react';
@@ -101,8 +102,9 @@ const ProfessorAlunos = () => {
             </div>
             
             {/* Tabela de Alunos */}
-            <div className="panel overflow-x-auto">
-                <table className="data-table mobile-cards min-w-full divide-y divide-border">
+            <MobileStudentList students={alunos} loading={loading} error={error} onView={setDetailsAluno} showCourses />
+            <div className="panel hidden overflow-x-auto sm:block">
+                <table className="data-table min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Aluno</th>
