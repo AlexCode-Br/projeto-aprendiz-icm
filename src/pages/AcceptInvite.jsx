@@ -1,3 +1,4 @@
+import PasswordInput from '../components/PasswordInput';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthLayout from '../layouts/AuthLayout';
@@ -51,15 +52,9 @@ export default function AcceptInvite() {
                 <form onSubmit={submit} className="space-y-5">
                     <p className="text-sm leading-6 text-text-muted">Olá, <strong className="text-text-default">{invitation?.nome}</strong>. Crie a senha de acesso para <strong className="break-all text-text-default">{invitation?.email}</strong>.</p>
                     {status.error && <div className="alert-error" role="alert">{status.error}</div>}
-                    <label className="block" htmlFor="invite-password">
-                        <span className="form-label">Crie uma senha</span>
-                        <input id="invite-password" type="password" autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} className="form-control" />
-                    </label>
+                    <div><label className="form-label" htmlFor="invite-password">Crie uma senha</label><PasswordInput id="invite-password"  autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} className="form-control" /></div>
                     <p className={`text-xs ${password && valid ? 'text-green-700 dark:text-green-400' : 'text-text-muted'}`}>10 caracteres, com maiúscula, minúscula, número e símbolo.</p>
-                    <label className="block" htmlFor="invite-confirmation">
-                        <span className="form-label">Confirme a senha</span>
-                        <input id="invite-confirmation" type="password" autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} className="form-control" />
-                    </label>
+                    <div><label className="form-label" htmlFor="invite-confirmation">Confirme a senha</label><PasswordInput id="invite-confirmation"  autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} className="form-control" /></div>
                     <button type="submit" disabled={status.loading} className="submit-btn w-full">{status.loading ? 'Ativando...' : 'Ativar minha conta'}</button>
                 </form>
             )}

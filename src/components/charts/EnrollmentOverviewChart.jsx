@@ -34,6 +34,7 @@ const EnrollmentOverviewChart = ({ data = [] }) => {
             borderColor: 'rgba(183, 28, 28, 1)',
             borderWidth: 1,
             borderRadius: 6,
+            maxBarThickness: 28,
             hoverBackgroundColor: 'rgba(183, 28, 28, 1)',
         }]
     };
@@ -52,7 +53,7 @@ const EnrollmentOverviewChart = ({ data = [] }) => {
             scales: {
                 x: {
                     beginAtZero: true,
-                    ticks: { color: textColor },
+                    ticks: { color: textColor, precision: 0 },
                     grid: { color: gridColor },
                 },
                 y: {
@@ -75,7 +76,8 @@ const EnrollmentOverviewChart = ({ data = [] }) => {
     }, [isDark]);
 
 
-    return <Bar data={chartData} options={chartOptions} />;
+    if (!data.length) return <div className="empty-state h-full"><strong className="text-text-default">Nenhuma turma com matrículas</strong><p>Os alunos aparecerão aqui após a matrícula em uma turma ativa.</p></div>;
+    return <><Bar data={chartData} options={chartOptions} role="img" aria-label={`Alunos por turma: ${data.map(item => `${item.curso}: ${item.total}`).join('; ')}`} /><ul className="sr-only">{data.map((item, index) => <li key={index}>{item.curso}: {item.total} alunos</li>)}</ul></>;
 };
 
 export default EnrollmentOverviewChart;

@@ -1,3 +1,5 @@
+import PageSkeleton from '../../components/PageSkeleton';
+import { Eye as DetailsIcon, Pencil as EditIcon, Trash2 as DeleteIcon, Mail as InviteIcon } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import ProfessorFormModal from '../../components/ProfessorFormModal';
 import ProfessorDetailsModal from '../../components/ProfessorDetailsModal';
@@ -7,15 +9,19 @@ import FormSelect from '../../components/FormSelect';
 import KebabMenu from '../../components/KebabMenu'; // Importando o novo componente
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
+import { Plus } from 'lucide-react';
+import SearchInput from '../../components/SearchInput';
 import ProfileAvatar from '../../components/ProfileAvatar';
 
 // Ícones de Ação
-const DetailsIcon = () => <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>;
-const EditIcon = () => <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>;
-const DeleteIcon = () => <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>;
-const InviteIcon = () => <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8m-18 8V6a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z" /></svg>;
+
+
+
+
 
 const Professores = () => {
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const { showToast } = useToast();
     const [professores, setProfessores] = useState([]);
     const [coursesList, setCoursesList] = useState([]);
@@ -34,14 +40,16 @@ const Professores = () => {
     const [resendingProfessorId, setResendingProfessorId] = useState(null);
 
     const fetchProfessores = useCallback(async () => {
+        setLoadError('');
         try {
             const response = await api.get('/professores');
             setProfessores(response.data.professores);
             setCoursesList(response.data.cursos);
             setLocaisList(response.data.locais);
         } catch (error) {
+            setLoadError(error.message || 'Erro ao carregar professores.');
             showToast(error.message || 'Erro ao carregar professores.', 'error');
-        }
+        } finally { setLoading(false); }
     }, [showToast]);
 
     useEffect(() => { fetchProfessores(); }, [fetchProfessores]);
@@ -139,24 +147,28 @@ const Professores = () => {
         );
     }, [professores, searchTerm, selectedCourse, selectedLocal]);
 
+    if (loading) return <PageSkeleton label="Carregando professores" />;
+    if (loadError) return <div className="panel empty-state"><p role="alert">{loadError}</p><button type="button" className="btn btn-secondary mt-3" onClick={fetchProfessores}>Tentar novamente</button></div>;
+
     return (
         <>
             <div className="page-header">
                 <div><h1 className="page-title">Professores</h1><p className="page-description">Gerencie a equipe docente, suas turmas e locais de atuação.</p></div>
                 <button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">
-                    Novo Professor
+                    <Plus aria-hidden="true" />Novo professor
                 </button>
             </div>
 
             <section className="panel mb-6 p-4" aria-label="Filtros de professores">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label className="sr-only">Pesquisar por nome</label>
-                        <input type="text" placeholder="Pesquisar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="form-control" />
+                        <label htmlFor="teacher-search" className="form-label">Pesquisar por nome</label>
+                        <SearchInput id="teacher-search" placeholder="Pesquisar por nome..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="form-control" />
                     </div>
                     <div>
-                        <label className="sr-only">Filtrar por curso</label>
+                        <label htmlFor="teacher-course" className="form-label">Curso</label>
                         <FormSelect
+                            id="teacher-course"
                             value={selectedCourse}
                             onChange={e => setSelectedCourse(e.target.value)}
                             options={coursesList}
@@ -164,8 +176,9 @@ const Professores = () => {
                         />
                     </div>
                     <div>
-                        <label className="sr-only">Filtrar por igreja</label>
+                        <label htmlFor="teacher-church" className="form-label">Igreja</label>
                         <FormSelect
+                            id="teacher-church"
                             value={selectedLocal}
                             onChange={e => setSelectedLocal(e.target.value)}
                             options={locaisList}
@@ -176,8 +189,8 @@ const Professores = () => {
             </section>
 
             <div className="panel overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
+                <div className="table-scroll" tabIndex={0} role="region" aria-label="Resultados">
+                    <table className="data-table mobile-cards record-cards w-full text-sm text-left">
                         <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                             <tr>
                                 <th className="px-6 py-3">Professor</th>
@@ -191,20 +204,20 @@ const Professores = () => {
                             {filteredProfessores.map(prof => (
                                 <tr key={prof.id} className="border-b border-border hover:bg-surface-hover transition-colors">
                                     <td className="px-6 py-4 font-medium"><div className="flex items-center gap-3"><ProfileAvatar name={prof.nome} src={prof.foto_url} className="h-10 w-10" /><span>{prof.nome}</span></div></td>
-                                    <td className="px-6 py-4">{prof.cursos.join(', ')}</td>
-                                    <td className="px-6 py-4">{prof.local}</td>
+                                    <td data-label="Cursos" className="px-6 py-4"><span className="inline-flex flex-wrap gap-1">{prof.cursos.map(course => <span key={course} className="badge">{course}</span>)}</span></td>
+                                    <td data-label="Igreja" className="px-6 py-4">{prof.local}</td>
                                     <td className="px-6 py-4">
                                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${prof.acesso === 'Ativo' ? 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300' : prof.acesso === 'Desativado' ? 'bg-gray-100 text-text-default dark:bg-white/10 dark:text-gray-300' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'}`}>{prof.acesso}</span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="hidden md:flex items-center justify-center space-x-2">
                                             <button type="button" aria-label={`Ver detalhes de ${prof.nome}`} onClick={() => handleOpenDetailsModal(prof)} className="icon-button text-text-muted" title="Detalhes"><DetailsIcon/></button>
-                                            <button type="button" aria-label={`Editar ${prof.nome}`} onClick={() => handleOpenFormModal(prof)} className="icon-button text-blue-600" title="Editar"><EditIcon/></button>
+                                            <button type="button" aria-label={`Editar ${prof.nome}`} onClick={() => handleOpenFormModal(prof)} className="icon-button text-primary" title="Editar"><EditIcon/></button>
                                             {prof.acesso !== 'Ativo' && prof.status === 'Ativo' && <button type="button" aria-label={`Reenviar convite para ${prof.nome}`} disabled={resendingProfessorId === prof.id} onClick={() => handleResendInvite(prof)} className="icon-button text-amber-700 dark:text-amber-300" title="Reenviar convite"><InviteIcon/></button>}
                                             <button type="button" aria-label={`Excluir ${prof.nome}`} onClick={() => handleOpenDeleteImpact(prof)} className="icon-button text-danger" title="Excluir definitivamente"><DeleteIcon/></button>
                                         </div>
                                         <div className="md:hidden">
-                                            <KebabMenu>
+                                            <KebabMenu label={`Ações de ${prof.nome}`}>
                                                 <button type="button" role="menuitem" onClick={() => handleOpenDetailsModal(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-text-default hover:bg-surface-hover transition-colors">
                                                     <DetailsIcon /> Detalhes
                                                 </button>

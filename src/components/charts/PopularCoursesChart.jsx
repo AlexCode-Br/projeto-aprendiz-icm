@@ -1,7 +1,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
-const COLORS = ['#ef4444', '#f97316', '#84cc16', '#3b82f6', '#8b5cf6'];
+const COLORS = ['#b71c1c', '#dd7272', '#71717a', '#a1a1aa', '#e9a7a7'];
 
 const PopularCoursesChart = ({ data }) => {
   if (!data || data.length === 0) {

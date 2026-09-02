@@ -1,3 +1,6 @@
+import FormSelect from '../../components/FormSelect';
+import SearchInput from '../../components/SearchInput';
+import { Trash2 } from 'lucide-react';
 import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -114,8 +117,8 @@ const Suporte = () => {
 
   const actions=detail?.ticket?<>
     <label className="sr-only" htmlFor="support-status">Status do chamado</label>
-    <select id="support-status" className="form-control min-h-9 w-auto py-1.5 text-xs" value={detail.ticket.status} disabled={updating} onChange={event=>updateTicket(event.target.value)}>{SUPPORT_STATUSES.map(value=><option key={value}>{value}</option>)}</select>
-    <button type="button" onClick={()=>setDeleteOpen(true)} className="btn btn-secondary min-h-9 border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10" aria-label="Apagar chamado">Apagar chamado</button>
+    <FormSelect id="support-status" className="min-w-44" value={detail.ticket.status} isDisabled={updating} isClearable={false} isSearchable={false} onChange={event => updateTicket(event.target.value)} options={SUPPORT_STATUSES} />
+    <button type="button" onClick={()=>setDeleteOpen(true)} className="btn btn-secondary min-h-9 border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10" aria-label="Apagar chamado"><Trash2 aria-hidden="true" />Apagar chamado</button>
   </>:null;
 
   return <>
@@ -128,7 +131,7 @@ const Suporte = () => {
 
     <section className="panel mb-4 p-3 sm:p-4" aria-label="Busca e filtros de chamados">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-        <label className="flex-1"><span className="sr-only">Buscar chamados</span><input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Buscar por professor, assunto, conteúdo ou número..." className="form-control"/></label>
+        <label className="flex-1"><span className="sr-only">Buscar chamados</span><SearchInput value={search} onChange={event=>setSearch(event.target.value)} placeholder="Buscar por professor, assunto, conteúdo ou número..." className="form-control"/></label>
         <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar chamados">
           {filters.map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-10 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}
         </div>

@@ -3,9 +3,28 @@ import { NavLink } from 'react-router-dom';
 import Logo from '../assets/logo_projeto_aprendiz.png';
 import { AuthContext } from '../contexts/AuthContext';
 import api from '../services/api';
+import { LayoutDashboard, BookOpen, Users, GraduationCap, ChartNoAxesCombined, Megaphone, MessagesSquare, CalendarCheck2, Settings, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     const { user } = useContext(AuthContext);
+    const location = useLocation();
+    const asideRef = React.useRef(null);
+    useEffect(() => { setSidebarOpen(false); }, [location.pathname, setSidebarOpen]);
+    useEffect(() => {
+        if (!sidebarOpen) return undefined;
+        const previous = document.activeElement;
+        asideRef.current?.querySelector('[data-mobile-close]')?.focus();
+        const close = event => {
+            if (event.key === 'Escape') setSidebarOpen(false);
+            if (event.key !== 'Tab' || window.matchMedia('(min-width: 1024px)').matches) return;
+            const items = [...asideRef.current.querySelectorAll('a,button')].filter(item => item.getClientRects().length);
+            if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items.at(-1)?.focus(); }
+            else if (!event.shiftKey && document.activeElement === items.at(-1)) { event.preventDefault(); items[0]?.focus(); }
+        };
+        document.addEventListener('keydown', close);
+        return () => { document.removeEventListener('keydown', close); previous?.focus?.(); };
+    }, [sidebarOpen, setSidebarOpen]);
     const userRole = user?.role || 'gestor';
     const [supportUnread,setSupportUnread]=useState(0);
     const [announcementUnread,setAnnouncementUnread]=useState(0);
@@ -46,19 +65,19 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     },[refreshAnnouncementUnread]);
 
     const navLinks = [
-        { path: "/dashboard", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>, label: "Dashboard", role: ['gestor', 'professor'] },
-        { path: "/cursos", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6.253v11.494m-9-5.747h18"></path></svg>, label: "Cursos", role: ['gestor'] },
-        { path: "/alunos", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>, label: "Alunos", role: ['gestor', 'professor'] },
-        { path: "/professores", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>, label: "Professores", role: ['gestor'] },
-        { path: "/relatorios", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V7a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>, label: "Relatórios", role: ['gestor', 'professor'] },
-        { path: "/informativos", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>, label: "Informativos", role: ['gestor', 'professor'], unread: userRole==='professor'?announcementUnread:0 },
-        { path: "/suporte", icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>, label: "Suporte", role: ['gestor', 'professor'], unread: supportUnread },
+        { path: "/dashboard", icon: <LayoutDashboard aria-hidden="true" />, label: "Dashboard", role: ['gestor', 'professor'] },
+        { path: "/cursos", icon: <BookOpen aria-hidden="true" />, label: "Cursos", role: ['gestor'] },
+        { path: "/alunos", icon: <Users aria-hidden="true" />, label: "Alunos", role: ['gestor', 'professor'] },
+        { path: "/professores", icon: <GraduationCap aria-hidden="true" />, label: "Professores", role: ['gestor'] },
+        { path: "/relatorios", icon: <ChartNoAxesCombined aria-hidden="true" />, label: "Relatórios", role: ['gestor', 'professor'] },
+        { path: "/informativos", icon: <Megaphone aria-hidden="true" />, label: "Informativos", role: ['gestor', 'professor'], unread: userRole==='professor'?announcementUnread:0 },
+        { path: "/suporte", icon: <MessagesSquare aria-hidden="true" />, label: "Suporte", role: ['gestor', 'professor'], unread: supportUnread },
     ];
 
     if (userRole === 'professor') {
         navLinks.splice(2, 0, {
             path: '/frequencia',
-            icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>,
+            icon: <CalendarCheck2 aria-hidden="true" />,
             label: 'Frequência',
             role: ['professor'],
         });
@@ -66,7 +85,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
     const configuracoesLink = {
         path: "/configuracoes",
-        icon: <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924-1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.096 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>,
+        icon: <Settings aria-hidden="true" />,
         label: "Configurações",
         role: ['gestor', 'professor']
     };
@@ -74,12 +93,14 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     return (
         <aside
             id="sidebar"
+            ref={asideRef}
             aria-label="Menu principal"
-            className={`fixed inset-y-0 left-0 z-40 flex shrink-0 transform flex-col text-text-inverse shadow-lg transition-all duration-300 ease-in-out lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-64 ${isCollapsed ? 'lg:w-20' : ''}`}
+            className={`${sidebarOpen ? 'visible' : 'invisible lg:visible'} fixed inset-y-0 left-0 z-40 flex shrink-0 transform flex-col text-text-inverse shadow-lg transition-all duration-300 ease-in-out lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-64 ${isCollapsed ? 'lg:w-20' : ''}`}
         >
-            <div className={`flex items-center h-20 border-b border-white/10 px-4 shrink-0 overflow-hidden ${isCollapsed ? 'lg:justify-center justify-between' : 'justify-between'}`}>
-                <div className={`flex items-center overflow-hidden transition-all duration-300 ${isCollapsed ? 'lg:w-0 lg:opacity-0 w-full opacity-100' : 'w-full opacity-100'}`}>
-                    <img src={Logo} alt="Projeto Aprendiz" className="h-10 w-auto ml-2" />
+            <div className={`flex items-center h-[76px] border-b border-white/10 px-4 shrink-0 overflow-hidden ${isCollapsed ? 'lg:justify-center justify-between' : 'justify-between'}`}>
+                <div className={`flex flex-col items-start overflow-hidden transition-all duration-300 ${isCollapsed ? 'lg:w-0 lg:opacity-0 w-full opacity-100' : 'w-full opacity-100'}`}>
+                    <img src={Logo} alt="Igreja Cristã Maranata" className="h-10 w-36 object-cover" />
+                    <span className="pl-2 text-xs font-semibold tracking-wide text-white">Projeto Aprendiz</span>
                 </div>
                 <button
                     type="button"
@@ -88,27 +109,27 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                     aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
                     title={isCollapsed ? "Expandir" : "Recolher"}
                 >
-                    <svg className={`w-5 h-5 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+                    {isCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
                 </button>
+                <button type="button" data-mobile-close onClick={() => setSidebarOpen(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-white/10 lg:hidden" aria-label="Fechar menu"><X aria-hidden="true" /></button>
             </div>
 
             <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden p-3">
+                <p className={`mb-4 mt-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60 ${isCollapsed ? 'lg:sr-only' : ''}`}>{userRole === 'gestor' ? 'Área do gestor' : 'Área do professor'}</p>
                 <nav aria-label="Seções principais" className="flex-1 space-y-1.5">
                     {navLinks.filter(link => link.role.includes(userRole)).map(link => (
                         <NavLink
                             key={link.label}
                             to={`/${userRole}${link.path}`}
                             title={isCollapsed ? link.label : undefined}
-                            className={({ isActive }) =>
-                                `group relative flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${isActive ? 'bg-white/20 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'}`
-                            }
+                            className="sidebar-link"
                             onClick={() => setSidebarOpen(false)}
                         >
                             <div className="flex shrink-0 items-center justify-center">{link.icon}</div>
-                            <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isCollapsed ? 'lg:w-0 lg:opacity-0 lg:ml-0 w-auto opacity-100 ml-3' : 'w-auto opacity-100 ml-3'}`}>
+                            <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isCollapsed ? 'lg:w-0 lg:opacity-0 lg:-ml-3 w-auto opacity-100' : 'w-auto opacity-100'}`}>
                                 {link.label}
                             </span>
-                            {link.unread>0&&<span className={`ml-auto inline-flex min-w-6 items-center justify-center rounded-full bg-white px-1.5 py-0.5 text-xs font-bold text-primary ${isCollapsed?'lg:absolute lg:right-1 lg:top-1 lg:min-w-4 lg:px-1 lg:text-[0.6rem]':''}`} aria-label={`${link.unread} item(ns) não lido(s) em ${link.label}`}>{link.unread>99?'99+':link.unread}</span>}
+                            {link.unread>0&&<span className={`ml-auto inline-flex min-w-6 items-center justify-center rounded-full bg-black/15 px-1.5 py-0.5 text-xs font-bold text-current ${isCollapsed?'lg:absolute lg:right-1 lg:top-1 lg:min-w-4 lg:px-1 lg:text-[0.6rem]':''}`} aria-label={`${link.unread} item(ns) não lido(s) em ${link.label}`}>{link.unread>99?'99+':link.unread}</span>}
                         </NavLink>
                     ))}
                 </nav>
@@ -117,13 +138,11 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                     <NavLink
                         to={configuracoesLink.path}
                         title={isCollapsed ? configuracoesLink.label : undefined}
-                        className={({ isActive }) =>
-                            `group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${isActive ? 'bg-white/20 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white'}`
-                        }
+                        className="sidebar-link"
                         onClick={() => setSidebarOpen(false)}
                     >
                         <div className="flex shrink-0 items-center justify-center">{configuracoesLink.icon}</div>
-                        <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isCollapsed ? 'lg:w-0 lg:opacity-0 lg:ml-0 w-auto opacity-100 ml-3' : 'w-auto opacity-100 ml-3'}`}>
+                        <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isCollapsed ? 'lg:w-0 lg:opacity-0 lg:-ml-3 w-auto opacity-100' : 'w-auto opacity-100'}`}>
                             {configuracoesLink.label}
                         </span>
                     </NavLink>

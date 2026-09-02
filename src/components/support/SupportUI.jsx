@@ -1,3 +1,4 @@
+import { CircleCheck, MessagesSquare, ArrowLeft, Send } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 const statusClasses = {
@@ -25,7 +26,7 @@ export function formatSupportDate(value, includeDate = false) {
 
 export function SupportTicketList({ tickets, selectedId, onSelect, loading, emptyMessage, role }) {
   if (loading && !tickets.length) return <div className="space-y-3 p-4" role="status" aria-label="Carregando chamados">{[1,2,3].map(item=><div key={item} className="skeleton h-28 rounded-xl" />)}</div>;
-  if (!tickets.length) return <div className="flex min-h-56 flex-col items-center justify-center px-6 text-center"><span className="mb-3 text-3xl" aria-hidden="true">✓</span><p className="font-semibold text-text-default">{emptyMessage}</p><p className="mt-1 text-sm leading-6 text-text-muted">Os chamados aparecerão aqui quando houver atividade.</p></div>;
+  if (!tickets.length) return <div className="flex min-h-56 flex-col items-center justify-center px-6 text-center"><span className="mb-3 text-3xl" aria-hidden="true"><CircleCheck aria-hidden="true" className="!h-8 !w-8" /></span><p className="font-semibold text-text-default">{emptyMessage}</p><p className="mt-1 text-sm leading-6 text-text-muted">Os chamados aparecerão aqui quando houver atividade.</p></div>;
   return <div className="divide-y divide-border" role="list" aria-label="Lista de chamados">
     {tickets.map(ticket=>{
       const isSelected=Number(selectedId)===Number(ticket.id);
@@ -52,7 +53,9 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
   const [draft,setDraft]=useState('');
   const [clientMessageId,setClientMessageId]=useState('');
   const sendingRef=useRef(false);
-  const endRef=useRef(null);
+  const logRef=useRef(null);
+  const stickToBottomRef=useRef(true);
+  const lastTicketRef=useRef(null);
   const ticket=detail?.ticket;
   const timeline=useMemo(()=>{
     const messages=(detail?.messages||[]).map(item=>({...item,kind:'message'}));
@@ -65,7 +68,11 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
     });
   },[detail]);
 
-  useEffect(()=>{endRef.current?.scrollIntoView({block:'nearest'});},[timeline.length]);
+  useEffect(() => {
+    if (lastTicketRef.current !== ticket?.id) stickToBottomRef.current = true;
+    lastTicketRef.current = ticket?.id;
+    if (stickToBottomRef.current && logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [timeline.length, ticket?.id]);
   useEffect(()=>{setDraft('');setClientMessageId('');},[ticket?.id]);
 
   const submit=async event=>{
@@ -88,28 +95,30 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
 
   if (loading) return <section className="min-h-[36rem] space-y-4 bg-surface p-6" role="status" aria-label="Carregando conversa"><div className="skeleton h-20 w-3/4 rounded-xl"/><div className="skeleton ml-auto h-20 w-2/3 rounded-xl"/><div className="skeleton h-28 w-full rounded-xl"/></section>;
   if (error) return <section className="flex min-h-[36rem] flex-col items-center justify-center bg-surface p-6 text-center"><p className="text-sm text-danger" role="alert">{error}</p><button type="button" onClick={onRetry} className="btn btn-secondary mt-4">Tentar novamente</button></section>;
-  if (!ticket) return <section className="flex min-h-[36rem] flex-col items-center justify-center bg-surface p-8 text-center"><span className="text-4xl text-text-muted" aria-hidden="true">◌</span><h2 className="mt-4 text-lg font-semibold text-text-default">Selecione um chamado</h2><p className="mt-2 max-w-sm text-sm leading-6 text-text-muted">Escolha um item da lista para visualizar todo o histórico e continuar o atendimento.</p></section>;
+  if (!ticket) return <section className="flex min-h-[36rem] flex-col items-center justify-center bg-surface p-8 text-center"><span className="text-4xl text-text-muted" aria-hidden="true"><MessagesSquare aria-hidden="true" className="!h-10 !w-10" /></span><h2 className="mt-4 text-lg font-semibold text-text-default">Selecione um chamado</h2><p className="mt-2 max-w-sm text-sm leading-6 text-text-muted">Escolha um item da lista para visualizar todo o histórico e continuar o atendimento.</p></section>;
 
   const managerBlocked=currentRole==='gestor'&&ticket.status==='Resolvido';
   return <section className="flex min-h-[36rem] flex-col bg-surface" aria-labelledby="support-conversation-title">
     <header className="border-b border-border bg-surface px-4 py-4 sm:px-6">
-      <button type="button" onClick={onBack} className="btn btn-ghost mb-3 px-2 lg:hidden" aria-label="Voltar para a lista de chamados">← Voltar</button>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Chamado #{ticket.id}</p>
-          <h2 id="support-conversation-title" className="mt-1 break-words text-xl font-bold text-text-default">{ticket.assunto}</h2>
-          <div className="mt-3 grid gap-2 text-xs text-text-muted sm:grid-cols-2">
-            <p><span className="font-semibold text-text-default">Categoria</span><br />{ticket.categoria || 'Outro'}</p>
-            {currentRole==='gestor'&&<p><span className="font-semibold text-text-default">Professor</span><br />{ticket.nome} · {ticket.contato}</p>}
-            <p><span className="font-semibold text-text-default">Aberto em</span><br />{formatSupportDate(ticket.data_abertura, true)}</p>
-            <p><span className="font-semibold text-text-default">Mensagens</span><br />{ticket.total_mensagens}</p>
-          </div>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end"><SupportStatusBadge status={ticket.status}/>{actions}</div>
+      <button type="button" onClick={onBack} className="btn btn-ghost mb-3 px-2 lg:hidden" aria-label="Voltar para a lista de chamados"><ArrowLeft aria-hidden="true" />Voltar</button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Chamado #{ticket.id} · {ticket.categoria || 'Outro'}</p>
+        <SupportStatusBadge status={ticket.status} />
       </div>
+      <h2 id="support-conversation-title" className="mt-3 break-words text-xl font-semibold leading-7 text-text-default">{ticket.assunto}</h2>
+      {currentRole === 'gestor' && <p className="mt-2 break-words text-sm text-text-muted">{ticket.nome}</p>}
+      <details className="mt-3 text-xs text-text-muted">
+        <summary className="w-fit cursor-pointer rounded py-1 font-medium hover:text-text-default">Detalhes do chamado</summary>
+        <div className="mt-2 grid gap-3 rounded-xl bg-surface-muted p-3 sm:grid-cols-2">
+          <p><span className="font-semibold text-text-default">Aberto em</span><br />{formatSupportDate(ticket.data_abertura, true)}</p>
+          <p><span className="font-semibold text-text-default">Mensagens</span><br />{detail?.messages?.length || 0}</p>
+          {currentRole === 'gestor' && <p className="break-all sm:col-span-2"><span className="font-semibold text-text-default">E-mail do professor</span><br />{ticket.contato}</p>}
+        </div>
+      </details>
+      {actions && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">{actions}</div>}
     </header>
 
-    <div className="max-h-[34rem] flex-1 space-y-4 overflow-y-auto bg-surface-muted/60 px-4 py-5 sm:px-6" role="log" aria-live="polite" aria-label="Histórico do chamado">
+    <div ref={logRef} onScroll={event => { const element = event.currentTarget; stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }} className="max-h-[34rem] flex-1 space-y-4 overflow-y-auto bg-surface-muted/60 px-4 py-5 sm:px-6" role="log" aria-live="polite" aria-label="Histórico do chamado">
       {timeline.map(item=>{
         if(item.kind==='event')return <div key={`event-${item.id}`} className="flex justify-center"><p className="rounded-full border border-border bg-surface px-3 py-1.5 text-center text-xs text-text-muted">{item.actor_name||'Equipe'} alterou o status de {item.from_status||'—'} para {item.to_status} · {formatSupportDate(item.created_at)}</p></div>;
         const own=Number(item.author_user_id)===Number(currentUserId);
@@ -121,7 +130,6 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
           </div>
         </article>;
       })}
-      <div ref={endRef}/>
     </div>
 
     <form onSubmit={submit} className="border-t border-border p-4 sm:p-5">
@@ -129,7 +137,7 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
         {currentRole==='professor'&&ticket.status==='Resolvido'&&<p className="mb-2 text-xs text-text-muted">Uma nova mensagem reabrirá automaticamente este chamado.</p>}
         <label htmlFor={`support-message-${ticket.id}`} className="sr-only">Digite sua mensagem</label>
         <textarea id={`support-message-${ticket.id}`} value={draft} onChange={event=>{setDraft(event.target.value);setClientMessageId('');}} onKeyDown={event=>{if((event.ctrlKey||event.metaKey)&&event.key==='Enter')event.currentTarget.form?.requestSubmit();}} rows="3" maxLength="4000" placeholder="Digite sua mensagem..." className="form-control min-h-24 resize-y" disabled={sending}/>
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-text-muted">Use Ctrl + Enter para enviar · {draft.length}/4000</p><button type="submit" disabled={sending||draft.trim().length<2} className="btn btn-primary w-full sm:w-auto">{sending?'Enviando...':'Enviar mensagem'}</button></div>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-text-muted">Use Ctrl + Enter para enviar · {draft.length}/4000</p><button type="submit" disabled={sending||draft.trim().length<2} className="btn btn-primary w-full sm:w-auto"><Send aria-hidden="true" />{sending?'Enviando...':'Enviar mensagem'}</button></div>
       </>}
     </form>
   </section>;

@@ -42,9 +42,9 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
             ) : error ? (
                 <div className="py-8 text-center text-danger">{error}</div>
             ) : (
-                <div className="overflow-x-auto">
+                <div className="table-scroll" tabIndex={0} role="region" aria-label="Resultados">
                     <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-success/10 px-3 py-1.5 text-xs font-semibold text-success"><span className="h-2 w-2 rounded-full bg-success"/>{readers.length} {readers.length === 1 ? 'visualização sincronizada' : 'visualizações sincronizadas'}</p>
-                    <table className="min-w-full divide-y divide-border text-sm">
+                    <table className="data-table min-w-full divide-y divide-border text-sm">
                         <thead className="bg-surface">
                             <tr>
                                 <th scope="col" className="px-4 py-3 text-left font-medium text-text-muted">Professor</th>

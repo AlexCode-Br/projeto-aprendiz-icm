@@ -59,7 +59,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
     const catalogsReady = courses.length > 0 && locations.length > 0;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'}>
+        <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'} maxWidth="max-w-2xl">
             <form onSubmit={handleSubmit} noValidate>
                 {!catalogsReady && <div className="alert-warning mb-4" role="alert">Cadastre pelo menos um curso e uma igreja na área “Cursos e igrejas” antes de adicionar professores.</div>}
                 <div className="space-y-4">
@@ -114,7 +114,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
                 </div>
                 <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
                     <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
-                    <button type="submit" disabled={isSubmitting || !catalogsReady} className="btn btn-primary">{isSubmitting ? 'Salvando...' : 'Salvar e enviar convite'}</button>
+                    <button type="submit" disabled={isSubmitting || !catalogsReady} className="btn btn-primary">{isSubmitting ? 'Salvando...' : professor ? 'Salvar alterações' : 'Salvar e enviar convite'}</button>
                 </div>
             </form>
         </Modal>

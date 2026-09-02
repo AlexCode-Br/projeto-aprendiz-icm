@@ -1,31 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
-const useDarkMode = () => {
-    // Inicializa o estado buscando o tema do localStorage ou a preferência do sistema
-    const [isDark, setIsDark] = useState(() => {
-        if (typeof window !== 'undefined') {
-            const storedTheme = localStorage.getItem('theme');
-            if (storedTheme) {
-                return storedTheme === 'dark';
-            }
-            return window.matchMedia('(prefers-color-scheme: dark)').matches;
-        }
-        return false;
-    });
-
-    // Efeito que aplica/remove a classe 'dark' no <html> e salva no localStorage
-    useEffect(() => {
-        const root = window.document.documentElement;
-        if (isDark) {
-            root.classList.add('dark');
-            localStorage.setItem('theme', 'dark');
-        } else {
-            root.classList.remove('dark');
-            localStorage.setItem('theme', 'light');
-        }
-    }, [isDark]);
-
-    return [isDark, setIsDark];
+const readTheme = () => {
+    const stored = localStorage.getItem('theme');
+    return stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
 };
 
-export default useDarkMode;
+export default function useDarkMode() {
+    const [isDark, setTheme] = useState(readTheme);
+    useEffect(() => {
+        const sync = () => {
+            const dark = readTheme();
+            document.documentElement.classList.toggle('dark', dark);
+            setTheme(dark);
+        };
+        const media = window.matchMedia('(prefers-color-scheme: dark)');
+        window.addEventListener('theme:changed', sync);
+        window.addEventListener('storage', sync);
+        media.addEventListener('change', sync);
+        return () => {
+            window.removeEventListener('theme:changed', sync);
+            window.removeEventListener('storage', sync);
+            media.removeEventListener('change', sync);
+        };
+    }, []);
+    const setIsDark = useCallback(value => {
+        const dark = typeof value === 'function' ? value(readTheme()) : Boolean(value);
+        localStorage.setItem('theme', dark ? 'dark' : 'light');
+        document.documentElement.classList.toggle('dark', dark);
+        window.dispatchEvent(new Event('theme:changed'));
+    }, []);
+    return [isDark, setIsDark];
+}

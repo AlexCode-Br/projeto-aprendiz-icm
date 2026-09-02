@@ -1,3 +1,4 @@
+import { Check, X, Clock3, Save, Download } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
@@ -10,9 +11,9 @@ const localToday = () => {
 };
 
 const attendanceOptions = [
-    { value: 'presente', label: 'Presente', selected: 'border-success bg-success/10 text-success' },
-    { value: 'ausente', label: 'Ausente', selected: 'border-danger bg-danger/10 text-danger' },
-    { value: 'justificado', label: 'Justificada', selected: 'border-warning bg-warning/10 text-warning' },
+    { value: 'presente', label: 'Presente', icon: Check, selected: 'border-success bg-success/10 text-success' },
+    { value: 'ausente', label: 'Ausente', icon: X, selected: 'border-danger bg-danger/10 text-danger' },
+    { value: 'justificado', label: 'Justificada', icon: Clock3, selected: 'border-warning bg-warning/10 text-warning' },
 ];
 
 const ProfessorFrequencia = () => {
@@ -165,7 +166,7 @@ const ProfessorFrequencia = () => {
             )}
 
             <div className="panel overflow-x-auto">
-                 <table className="min-w-full divide-y divide-border">
+                 <table className="data-table mobile-cards attendance-table min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Aluno</th>
@@ -182,16 +183,16 @@ const ProfessorFrequencia = () => {
                                 <tr key={aluno.id} className="hover:bg-border/50">
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-default">{aluno.nome}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex min-w-max items-center gap-2" role="group" aria-label={`Frequência de ${aluno.nome}`}>
+                                        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`Frequência de ${aluno.nome}`}>
                                             {attendanceOptions.map((option) => (
                                                 <button
                                                     type="button"
                                                     key={option.value}
                                                     onClick={() => handleFrequenciaChange(aluno.id, option.value)}
                                                     aria-pressed={frequencias[aluno.id] === option.value}
-                                                    className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${frequencias[aluno.id] === option.value ? option.selected : 'border-border bg-surface text-text-muted hover:bg-surface-hover'}`}
+                                                    className={`inline-flex items-center justify-center gap-1.5 min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${frequencias[aluno.id] === option.value ? option.selected : 'border-border bg-surface text-text-muted hover:bg-surface-hover'}`}
                                                 >
-                                                    {option.label}
+                                                    <option.icon aria-hidden="true" className="!h-4 !w-4" />{option.label}
                                                 </button>
                                             ))}
                                         </div>
@@ -208,14 +209,14 @@ const ProfessorFrequencia = () => {
             {/* Botão de Salvar */}
             {alunos.length > 0 && (
                 <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                    <button type="button" onClick={handleExportAttendance} className="btn btn-secondary px-6">Exportar CSV</button>
+                    <button type="button" onClick={handleExportAttendance} className="btn btn-secondary px-6"><Download aria-hidden="true" />Exportar CSV</button>
                     <button
                         type="button"
                         onClick={handleSalvarFrequencia}
                         disabled={loading}
                         className="btn btn-primary px-6"
                     >
-                        {loading ? 'Salvando...' : 'Salvar chamada'}
+                        <Save aria-hidden="true" />{loading ? 'Salvando...' : 'Salvar chamada'}
                     </button>
                 </div>
             )}

@@ -1,3 +1,4 @@
+import { ExternalLink, Download, FileText } from 'lucide-react';
 import React from 'react';
 
 const formatFileSize = bytes => {
@@ -7,8 +8,8 @@ const formatFileSize = bytes => {
     return `${(size / (1024 * 1024)).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 };
 
-const OpenIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>;
-const DownloadIcon = () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 19h14"/></svg>;
+const OpenIcon = () => <ExternalLink aria-hidden="true" className="h-4 w-4" />;
+const DownloadIcon = () => <Download aria-hidden="true" className="h-4 w-4" />;
 
 const AnnouncementAttachments = ({ attachments = [] }) => {
     if (!Array.isArray(attachments) || attachments.length === 0) return null;
@@ -25,7 +26,7 @@ const AnnouncementAttachments = ({ attachments = [] }) => {
                     const name = attachment.nome || (isImage ? 'Imagem' : 'Documento');
                     const downloadUrl = attachment.url ? `${attachment.url}${attachment.url.includes('?') ? '&' : '?'}download=1` : attachment.dataUrl;
                     return <div key={attachment.id || `${name}-${index}`} className="group grid min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-lg border border-border bg-surface-muted p-2 text-sm text-text-default transition-colors hover:bg-surface-hover">
-                        {isImage && fileUrl ? <a href={fileUrl} target="_blank" rel="noreferrer" className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md bg-surface" aria-label={`Visualizar imagem ${name}`}><img src={fileUrl} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" /></a> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-surface text-lg" aria-hidden="true">📄</span>}
+                        {isImage && fileUrl ? <a href={fileUrl} target="_blank" rel="noreferrer" className="relative h-11 w-11 shrink-0 overflow-hidden rounded-md bg-surface" aria-label={`Visualizar imagem ${name}`}><img src={fileUrl} alt="" loading="lazy" className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105" /></a> : <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-surface text-lg" aria-hidden="true"><FileText aria-hidden="true" /></span>}
                         <span className="min-w-0 overflow-hidden">
                             <span className="block truncate font-medium leading-5" title={name}>{name}</span>
                             <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.7rem] text-text-muted"><span className="rounded bg-surface px-1.5 py-0.5 font-semibold uppercase">{isImage ? 'Imagem' : 'PDF'}</span><span className="truncate">{formatFileSize(attachment.tamanho)}</span></span>

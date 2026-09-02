@@ -1,3 +1,4 @@
+import { Download as DownloadIcon } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { exportToPdf } from '../../utils/exportUtils.js';
@@ -6,7 +7,7 @@ import FormRadio from '../../components/FormRadio';
 import { downloadCsv } from '../../utils/csv.js';
 
 // --- Ícones SVG ---
-const DownloadIcon = () => <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>;
+
 
 const ProfessorRelatorios = () => {
     // Estado para os filtros do formulário
@@ -35,6 +36,8 @@ const ProfessorRelatorios = () => {
     }, [fetchClasses]);
 
     const handleGenerateReport = async () => {
+        if (isGenerating) return;
+        if (startDate && endDate && endDate < startDate) return setError('A data final não pode ser anterior à inicial.');
         setIsGenerating(true);
         setError('');
         try {
@@ -49,7 +52,7 @@ const ProfessorRelatorios = () => {
             }
             const filename = `relatorio_${reportType}_${new Date().toISOString().split('T')[0]}.${format}`;
             if (format === 'pdf') {
-                exportToPdf('Relatório da Turma', ['Curso','Aluno','Professor','Igreja','Frequência'], rows.map(Object.values));
+                exportToPdf('Relatório da Turma', ['Curso','Aluno','Professor','Igreja','Frequência'], rows.map(row => [row.curso,row.aluno,row.professor,row.local,row.frequencia]));
             } else {
                 downloadCsv(filename, ['Curso','Aluno','Professor','Igreja','Frequência'], rows.map(row => [row.curso,row.aluno,row.professor,row.local,row.frequencia]));
             }
@@ -82,6 +85,7 @@ const ProfessorRelatorios = () => {
                             <label htmlFor="report-type" className="form-label">Tipo de relatório</label>
                             <FormSelect
                                 id="report-type"
+                                isClearable={false}
                                 value={reportType}
                                 onChange={e => setReportType(e.target.value)}
                                 options={[{ value: 'frequencia_turma', label: 'Frequência da Turma' }]}
@@ -116,6 +120,7 @@ const ProfessorRelatorios = () => {
                             <input
                                 type="date"
                                 id="end-date"
+                                min={startDate || undefined}
                                 value={endDate}
                                 onChange={e => setEndDate(e.target.value)}
                                 className="form-control"

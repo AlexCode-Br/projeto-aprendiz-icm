@@ -1,3 +1,4 @@
+import PasswordInput from '../components/PasswordInput';
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import AuthLayout from '../layouts/AuthLayout';
@@ -47,17 +48,11 @@ const ResetPassword = () => {
             ) : (
                 <form onSubmit={submit} className="space-y-5">
                     {error && <div className="alert-error" role="alert">{error}</div>}
-                    <label className="block" htmlFor="new-password">
-                        <span className="form-label">Nova senha</span>
-                        <input id="new-password" type="password" autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} className="form-control" />
-                    </label>
+                    <div><label className="form-label" htmlFor="new-password">Nova senha</label><PasswordInput id="new-password"  autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} className="form-control" /></div>
                     <ul className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2" aria-label="Requisitos da senha">
                         {Object.entries(rules).map(([key, valid]) => <li key={key} className={valid ? 'text-green-700 dark:text-green-400' : 'text-text-muted'}><span aria-hidden="true">{valid ? '✓' : '○'}</span> {labels[key]}</li>)}
                     </ul>
-                    <label className="block" htmlFor="confirm-password">
-                        <span className="form-label">Confirmar nova senha</span>
-                        <input id="confirm-password" type="password" autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} className="form-control" />
-                    </label>
+                    <div><label className="form-label" htmlFor="confirm-password">Confirmar nova senha</label><PasswordInput id="confirm-password"  autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} className="form-control" /></div>
                     <button type="submit" disabled={loading} className="submit-btn w-full">{loading ? 'Alterando...' : 'Redefinir senha'}</button>
                     <Link to="/login" className="block text-center font-medium text-text-muted hover:text-text-default hover:underline">Voltar ao login</Link>
                 </form>

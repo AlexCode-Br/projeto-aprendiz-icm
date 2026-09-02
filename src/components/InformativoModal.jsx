@@ -1,3 +1,4 @@
+import { Bold, Italic, Underline, List, ListOrdered, Link2, Paperclip, FileText, X } from 'lucide-react';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
@@ -378,16 +379,16 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                         </div>
                         <div>
                             <label htmlFor="info-content" className="form-label">Conteúdo</label>
-                                <div className="mb-2 flex flex-wrap items-center gap-1 rounded-t-lg border border-border bg-surface-muted p-2" role="toolbar" aria-label="Formatação do conteúdo">
-                                    {[['bold','Negrito','B'],['italic','Itálico','I'],['underline','Sublinhado','U']].map(([command,label,icon]) => {
+                                <div className="editor-toolbar" role="toolbar" aria-label="Formatação do conteúdo">
+                                    {[['bold','Negrito',Bold],['italic','Itálico',Italic],['underline','Sublinhado',Underline]].map(([command,label,icon]) => {
                                         const active = formatState[command];
-                                        return <button key={command} type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format(command)} className={`min-h-9 min-w-9 rounded px-2 font-semibold text-text-default hover:bg-surface-hover ${active ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label={label} aria-pressed={active}><span className={command}>{icon}</span></button>;
+                                        return <button key={command} type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format(command)} className="editor-tool" title={label} aria-label={label} aria-pressed={active}>{React.createElement(icon, { 'aria-hidden': true })}</button>;
                                     })}
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertUnorderedList')} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.unorderedList ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Lista com marcadores" aria-pressed={formatState.unorderedList}>• Lista</button>
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.orderedList ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Lista numerada" aria-pressed={formatState.orderedList}>1. Lista</button>
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className={`min-h-9 rounded px-2 text-sm text-text-default hover:bg-surface-hover ${formatState.link ? 'bg-primary/20 text-primary ring-1 ring-primary/50' : ''}`} aria-label="Inserir link" aria-pressed={formatState.link}>🔗 Link</button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertUnorderedList')} className="editor-tool" aria-label="Lista com marcadores" aria-pressed={formatState.unorderedList} title="Lista com marcadores"><List aria-hidden="true" /><span className="sr-only sm:not-sr-only">Lista</span></button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className="editor-tool" aria-label="Lista numerada" aria-pressed={formatState.orderedList} title="Lista numerada"><ListOrdered aria-hidden="true" /><span className="sr-only sm:not-sr-only">Lista</span></button>
+                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className="editor-tool" aria-label="Inserir link" aria-pressed={formatState.link} title="Inserir ou editar link"><Link2 aria-hidden="true" />Link</button>
                                 </div>
-                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); updateFormatState(); }} onFocus={updateFormatState} onBlur={saveSelection} onKeyUp={updateFormatState} onMouseUp={updateFormatState} onSelect={updateFormatState} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
+                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-label="Conteúdo do informativo" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); updateFormatState(); }} onFocus={updateFormatState} onBlur={saveSelection} onKeyUp={updateFormatState} onMouseUp={updateFormatState} onSelect={updateFormatState} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
                                 <div className="mt-4">
                                     <p className="form-label">Anexos</p>
                                     <button
@@ -400,7 +401,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                         onDrop={event => { event.preventDefault(); setDragActive(false); addFiles(event.dataTransfer.files); }}
                                         className={`flex min-h-24 w-full flex-col items-center justify-center rounded-lg border border-dashed px-4 py-4 text-center transition-colors ${dragActive ? 'border-primary bg-primary/10' : 'border-border bg-surface-muted hover:bg-surface-hover'}`}
                                     >
-                                        <span className="font-semibold text-text-default">+ Adicionar arquivos</span>
+                                        <span className="font-semibold text-text-default flex items-center gap-2"><Paperclip aria-hidden="true" />Adicionar arquivos</span>
                                         <span className="mt-1 text-xs text-text-muted">Arraste aqui ou selecione até 5 arquivos</span>
                                     </button>
                                     <input ref={fileInputRef} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.pdf" onChange={handleFileInput} />
@@ -412,9 +413,9 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                     const isImage = String(attachment.tipo || '').startsWith('image/');
                                     const previewUrl = attachment.dataUrl || attachment.url;
                                     return <div key={attachment.id || `${attachment.nome}-${index}`} className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-surface p-2 text-sm text-text-default">
-                                        {isImage && previewUrl ? <a href={previewUrl} target="_blank" rel="noreferrer" className="shrink-0"><img src={previewUrl} alt="" className="h-12 w-12 rounded object-cover" /></a> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-surface-muted text-xl" aria-hidden="true">📄</span>}
+                                        {isImage && previewUrl ? <a href={previewUrl} target="_blank" rel="noreferrer" className="shrink-0"><img src={previewUrl} alt="" className="h-12 w-12 rounded object-cover" /></a> : <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-surface-muted text-xl" aria-hidden="true"><FileText aria-hidden="true" /></span>}
                                         <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={attachment.nome}>{attachment.nome}</span><span className="text-xs text-text-muted">{isImage ? 'Imagem' : 'Documento PDF'} · {formatFileSize(attachment.tamanho)}</span></span>
-                                        <button type="button" onClick={() => { setFormData(prev => ({ ...prev, anexos: prev.anexos.filter((_, itemIndex) => itemIndex !== index) })); setErrors(prev => ({ ...prev, anexos: null })); setUploadMessage(''); }} className="shrink-0 rounded p-2 text-text-muted hover:bg-surface-hover hover:text-danger" aria-label={`Remover anexo ${attachment.nome}`}>×</button>
+                                        <button type="button" onClick={() => { setFormData(prev => ({ ...prev, anexos: prev.anexos.filter((_, itemIndex) => itemIndex !== index) })); setErrors(prev => ({ ...prev, anexos: null })); setUploadMessage(''); }} className="shrink-0 rounded p-2 text-text-muted hover:bg-surface-hover hover:text-danger" aria-label={`Remover anexo ${attachment.nome}`}><X aria-hidden="true" /></button>
                                     </div>;
                                 })}</div>}
                                 {errors.anexos && <p className="text-danger text-xs mt-1" role="alert">{errors.anexos}</p>}

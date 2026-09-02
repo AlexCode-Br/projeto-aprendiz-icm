@@ -1,7 +1,9 @@
+import { Pin } from 'lucide-react';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../services/api';
 import AnnouncementDetailModal from '../../components/AnnouncementDetailModal';
 import useLiveRefresh from '../../hooks/useLiveRefresh';
+import SearchInput from '../../components/SearchInput';
 
 const plainText = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -69,14 +71,13 @@ const ProfessorInformativos = () => {
                     <h1 className="page-title">Informativos e avisos</h1>
                     <p className="page-description">Fique por dentro das últimas novidades e comunicados{unread ? ` · ${unread} não ${unread === 1 ? 'lido' : 'lidos'}` : ''}.</p>
                 </div>
-                <span className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-2 text-xs font-semibold text-success"><span className="h-2 w-2 rounded-full bg-success"/>Sincronizado ao vivo</span>
             </div>
 
             <div className="panel mb-6 grid gap-3 p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
                 <label className="sr-only" htmlFor="announcement-search">Pesquisar informativos</label>
-                <input id="announcement-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Pesquisar por título ou conteúdo..." className="form-control" />
+                <SearchInput id="announcement-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Pesquisar por título ou conteúdo..." />
                 <div className="flex flex-wrap gap-2" aria-label="Filtrar informativos">
-                    {[['todos','Todos'],['nao-lidos','Não lidos'],['lidos','Lidos'],['fixados','Fixados']].map(([value,label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={`btn ${filter === value ? 'btn-primary' : 'btn-secondary'}`}>{label}</button>)}
+                    {[['todos','Todos'],['nao-lidos','Não lidos'],['lidos','Lidos'],['fixados','Fixados']].map(([value,label]) => <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)} className={`btn ${filter === value ? 'btn-primary' : 'btn-secondary'}`}>{label}</button>)}
                 </div>
             </div>
 
@@ -87,10 +88,10 @@ const ProfessorInformativos = () => {
                             <span className="text-xs font-semibold uppercase text-primary">{info.tipo}</span>
                             <span className="flex items-center gap-2">
                                 {!info.hasRead && <span className="inline-flex items-center gap-1 text-xs font-semibold text-primary"><span className="h-2 w-2 rounded-full bg-primary" />Novo</span>}
-                                {info.fixado && <span title="Fixado">📌</span>}
+                                {info.fixado && <span title="Fixado"><Pin aria-hidden="true" className="text-primary !h-4 !w-4" /></span>}
                             </span>
                         </div>
-                        <h2 className="text-lg font-bold text-text-default">{info.titulo}</h2>
+                        <h2 className="break-words text-lg font-bold text-text-default">{info.titulo}</h2>
                         <p className="mt-2 line-clamp-3 flex-1 text-sm leading-relaxed text-text-muted">{plainText(info.conteudo)}</p>
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
                             <span className="text-xs text-text-muted">{new Date(info.data_publicacao).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: 'short', year: 'numeric' })}{info.anexos?.length ? ` · ${info.anexos.length} anexo${info.anexos.length === 1 ? '' : 's'}` : ''}</span>

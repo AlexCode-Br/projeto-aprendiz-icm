@@ -1,4 +1,8 @@
+import PageSkeleton from '../../components/PageSkeleton';
+import { Pencil, Trash2 } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Plus, CirclePause } from 'lucide-react';
+import SearchInput from '../../components/SearchInput';
 import CursoModal from '../../components/CursoModal';
 import CatalogItemModal from '../../components/CatalogItemModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
@@ -7,6 +11,8 @@ import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 
 const Cursos = () => {
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
     const { showToast } = useToast();
     const [cursos, setCursos] = useState([]);
     const [professoresDisponiveis, setProfessoresDisponiveis] = useState([]);
@@ -22,6 +28,7 @@ const Cursos = () => {
     const [isDeletingCatalog, setDeletingCatalog] = useState(false);
 
     const fetchCursos = useCallback(async () => {
+        setLoadError('');
         try {
             const [classesResponse, catalogsResponse] = await Promise.all([api.get('/cursos'), api.get('/api/catalogos')]);
             setCursos(classesResponse.data.cursos);
@@ -29,8 +36,9 @@ const Cursos = () => {
             setCatalogos(catalogsResponse.data);
             setLocaisDisponiveis(catalogsResponse.data.locais.filter(item => item.ativo).map(item => item.nome));
         } catch (error) {
+            setLoadError(error.message || 'Erro ao carregar os cursos.');
             showToast(error.message || 'Erro ao carregar os cursos.', 'error');
-        }
+        } finally { setLoading(false); }
     }, [showToast]);
 
     useEffect(() => { fetchCursos(); }, [fetchCursos]);
@@ -119,6 +127,9 @@ const Cursos = () => {
         });
     }, [cursos, searchTerm, selectedLocal]);
 
+    if (loading) return <PageSkeleton label="Carregando cursos" />;
+    if (loadError) return <div className="panel empty-state"><p role="alert">{loadError}</p><button type="button" className="btn btn-secondary mt-3" onClick={fetchCursos}>Tentar novamente</button></div>;
+
     return (
         <>
             <div className="page-header">
@@ -128,18 +139,18 @@ const Cursos = () => {
             <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
                 {['cursos', 'locais'].map(type => (
                     <section key={type} className="panel overflow-hidden" aria-labelledby={`${type}-catalog-title`}>
-                        <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
                             <div><h2 id={`${type}-catalog-title`} className="font-semibold">{type === 'cursos' ? 'Catálogo de cursos' : 'Igrejas'}</h2><p className="text-sm text-text-muted">{type === 'cursos' ? 'Opções disponíveis para professores e turmas.' : 'Igrejas que podem receber professores e turmas.'}</p></div>
-                            <button type="button" onClick={() => setCatalogModal({ open: true, type, item: null })} className="btn btn-secondary">Adicionar</button>
+                            <button type="button" onClick={() => setCatalogModal({ open: true, type, item: null })} className="btn btn-secondary"><Plus aria-hidden="true" />Adicionar</button>
                         </div>
                         <div className="max-h-80 overflow-auto">
-                            <table className="w-full text-left text-sm">
+                            <table className="data-table w-full text-left text-sm">
                                 <thead className="bg-surface-muted text-xs uppercase text-text-muted"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
                                 <tbody>{catalogos[type].map(item => <tr key={item.id} className="border-t border-border">
                                     <td className="px-5 py-3 font-medium">{item.nome}</td>
                                     <td className="px-5 py-3 text-center">{item.turmas}{type === 'locais' ? ` turma(s) · ${item.professores} professor(es)` : ' turma(s)'}</td>
                                     <td className="px-5 py-3 text-center"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.ativo ? 'bg-success/10 text-success' : 'bg-gray-100 text-text-muted dark:bg-white/10'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span></td>
-                                    <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}>✎</button><button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Excluir definitivamente ${item.nome}`}>×</button></td>
+                                    <td className="px-5 py-3 text-right"><button type="button" onClick={() => setCatalogModal({ open: true, type, item })} className="icon-button text-primary" aria-label={`Editar ${item.nome}`}><Pencil aria-hidden="true" /></button><button type="button" onClick={() => setCatalogToDelete({ type, item })} className="icon-button text-danger" aria-label={`Excluir definitivamente ${item.nome}`}><Trash2 aria-hidden="true" /></button></td>
                                 </tr>)}</tbody>
                             </table>
                             {!catalogos[type].length && <div className="p-8 text-center text-sm text-text-muted"><strong className="block text-text-default">Nenhum cadastro encontrado</strong><span className="mt-1 block">Use “Adicionar” para criar a primeira opção deste catálogo.</span></div>}
@@ -148,13 +159,13 @@ const Cursos = () => {
                 ))}
             </div>
 
-            <div className="mb-3 flex items-center justify-between gap-4"><div><h2 className="text-lg font-semibold">Turmas</h2><p className="text-sm text-text-muted">Combine um curso, uma igreja e um professor.</p></div><button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary">Adicionar</button></div>
+            <div className="mb-3 flex items-center justify-between gap-4"><div><h2 className="text-lg font-semibold">Turmas</h2><p className="text-sm text-text-muted">Combine um curso, uma igreja e um professor.</p></div><button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary"><Plus aria-hidden="true" />Adicionar</button></div>
 
             <section className="panel mb-6 p-4 md:p-6" aria-label="Filtros de cursos">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label htmlFor="course-search" className="form-label">Pesquisar por nome</label>
-                        <input
+                        <SearchInput
                             id="course-search"
                             type="text"
                             placeholder="Nome do curso..."
@@ -177,8 +188,8 @@ const Cursos = () => {
             </section>
 
             <div className="panel overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-text-default">
+                <div className="table-scroll" tabIndex={0} role="region" aria-label="Resultados">
+                    <table className="data-table mobile-cards w-full text-sm text-left text-text-default">
                         <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                             <tr>
                                 <th scope="col" className="px-6 py-3">Curso</th>
@@ -193,13 +204,13 @@ const Cursos = () => {
                         <tbody>
                             {filteredCursos.map(curso => (
                                 <tr key={curso.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-                                    <td className="px-6 py-4 font-medium">{curso.nome}</td>
-                                    <td className="px-6 py-4">{curso.local}</td>
-                                    <td className="px-6 py-4">{curso.professor}</td>
-                                    <td className="px-6 py-4 text-xs">
+                                    <td data-label="Curso" className="px-6 py-4 font-medium">{curso.nome}</td>
+                                    <td data-label="Igreja" className="px-6 py-4">{curso.local}</td>
+                                    <td data-label="Professor" className="px-6 py-4">{curso.professor}</td>
+                                    <td data-label="Horário" className="px-6 py-4 text-xs">
                                         {curso.weekday ? `${curso.weekday} às ${curso.start_time || '--:--'}` : 'A definir'}
                                     </td>
-                                    <td className="px-6 py-4 text-center">{curso.alunos}</td>
+                                    <td data-label="Alunos" className="px-6 py-4 text-center">{curso.alunos}</td>
                                     <td className="px-6 py-4 text-center">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${curso.status === 'Ativo' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                                             {curso.status}
@@ -208,10 +219,10 @@ const Cursos = () => {
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center space-x-2">
                                             <button type="button" aria-label={`Editar ${curso.nome}`} onClick={() => handleOpenCursoModal(curso)} className="icon-button text-primary hover:bg-primary/10" title="Editar">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                                <Pencil aria-hidden="true" className="w-5 h-5" />
                                             </button>
-                                            <button type="button" aria-label={`Excluir ${curso.nome}`} onClick={() => handleOpenConfirmModal(curso)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Excluir">
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                            <button type="button" aria-label={`Desativar turma ${curso.nome}`} onClick={() => handleOpenConfirmModal(curso)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Desativar turma">
+                                                <CirclePause aria-hidden="true" className="w-5 h-5" />
                                             </button>
                                         </div>
                                     </td>
@@ -239,8 +250,8 @@ const Cursos = () => {
                 isOpen={isConfirmModalOpen}
                 onClose={handleCloseConfirmModal}
                 onConfirm={handleDeleteCurso}
-                title="Desativar curso?"
-                message="O curso deixará de aparecer como ativo. Você poderá manter o histórico já registrado."
+                title="Desativar turma?"
+                message="A turma deixará de aparecer como ativa. Você poderá manter o histórico já registrado."
                 confirmLabel="Desativar"
             />
             <ConfirmationModal

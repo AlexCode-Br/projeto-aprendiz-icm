@@ -1,3 +1,7 @@
+import FormSelect from '../../components/FormSelect';
+import SearchInput from '../../components/SearchInput';
+import { Plus } from 'lucide-react';
+import { Pin, Eye } from 'lucide-react';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import InformativoModal from '../../components/InformativoModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
@@ -152,38 +156,36 @@ const Informativos = () => {
             <div className="page-header">
                 <div><h1 className="page-title">Informativos</h1><p className="page-description">Publique comunicados e acompanhe quem visualizou.</p></div>
                 <button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">
-                    Criar informativo
+                    <Plus aria-hidden="true" />Criar informativo
                 </button>
             </div>
 
             <div className="panel mb-6 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_14rem]">
                 <label className="sr-only" htmlFor="manager-announcement-search">Pesquisar informativos</label>
-                <input id="manager-announcement-search" type="search" value={search} onChange={event => setSearch(event.target.value)} className="form-control" placeholder="Pesquisar por título, conteúdo ou anexo..." />
+                <SearchInput id="manager-announcement-search" value={search} onChange={event => setSearch(event.target.value)} className="form-control" placeholder="Pesquisar por título, conteúdo ou anexo..." />
                 <label className="sr-only" htmlFor="manager-announcement-status">Filtrar por estado</label>
-                <select id="manager-announcement-status" value={statusFilter} onChange={event => setStatusFilter(event.target.value)} className="form-control">
-                    <option>Todos</option><option value="Publicado">Publicados</option><option value="Agendado">Agendados</option>
-                </select>
+                <FormSelect id="manager-announcement-status" value={statusFilter} isClearable={false} isSearchable={false} onChange={event => setStatusFilter(event.target.value)} options={[{ value: 'Todos', label: 'Todos os informativos' }, { value: 'Publicado', label: 'Publicados' }, { value: 'Agendado', label: 'Agendados' }]} />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
                 {visibleInformativos.map(info => (
                     <article key={info.id} className="panel flex flex-col overflow-hidden">
-                        <div className="p-4 flex-grow">
+                        <div className="p-5 flex-grow">
                             <div className="flex justify-between items-start mb-2">
                                 <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${getCategoryClass(info.categoria)}`}>{info.categoria}</span>
-                                <span className="flex items-center gap-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${info.status === 'Agendado' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200' : 'bg-success/10 text-success'}`}>{info.status}</span>{info.fixado && <span title="Fixado no topo">📌</span>}</span>
+                                <span className="flex items-center gap-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${info.status === 'Agendado' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200' : 'bg-success/10 text-success'}`}>{info.status}</span>{info.fixado && <span title="Fixado no topo"><Pin aria-hidden="true" className="text-primary !h-4 !w-4" /></span>}</span>
                             </div>
-                            <h3 className="font-bold text-lg text-text-default">{info.titulo}</h3>
+                            <h3 className="break-words font-bold text-lg text-text-default">{info.titulo}</h3>
                             <p className="text-sm text-text-muted mt-1">{info.data} às {info.hora}</p>
                             <div className="announcement-content mt-4 max-w-none text-sm text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
                             <AnnouncementAttachments attachments={info.anexos} />
                         </div>
-                        <div className="p-4 border-t border-border flex justify-between items-center text-xs text-text-muted">
+                        <div className="px-4 py-3 border-t border-border flex flex-wrap gap-2 justify-between items-center text-xs text-text-muted">
                             <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem visualizou">
-                                <span>👁️ {info.lido} visualizações</span>
+                                <span className="inline-flex items-center gap-1.5"><Eye aria-hidden="true" className="!h-4 !w-4" />{info.lido} visualizações</span>
                             </button>
                             <div className="flex items-center space-x-2">
-                                <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-blue-600 hover:bg-blue-50 hover:underline dark:hover:bg-blue-950/30">Editar</button>
+                                <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-primary hover:bg-primary/10">Editar</button>
                                 <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-10 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
                             </div>
                         </div>

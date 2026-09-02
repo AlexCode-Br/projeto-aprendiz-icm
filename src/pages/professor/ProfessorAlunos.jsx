@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import ProfileAvatar from '../../components/ProfileAvatar';
 import { useToast } from '../../contexts/ToastContext';
+import { Download } from 'lucide-react';
+import SearchInput from '../../components/SearchInput';
 import Pagination from '../../components/Pagination';
 import { downloadCsv } from '../../utils/csv.js';
 
@@ -46,7 +48,8 @@ const ProfessorAlunos = () => {
     }, [currentPage, itemsPerPage, searchTerm, showToast]);
 
     useEffect(() => {
-        fetchAlunos();
+        const timer = setTimeout(fetchAlunos, 250);
+        return () => clearTimeout(timer);
     }, [fetchAlunos]);
 
     const handleSearchChange = (e) => {
@@ -83,7 +86,7 @@ const ProfessorAlunos = () => {
              {/* Barra de Busca */}
             <div className="panel mb-6 flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <label htmlFor="professor-student-search" className="sr-only">Buscar aluno</label>
-                <input
+                <SearchInput
                     id="professor-student-search"
                     type="text"
                     placeholder="Buscar aluno por nome ou email..."
@@ -91,33 +94,31 @@ const ProfessorAlunos = () => {
                     onChange={handleSearchChange}
                     className="form-control sm:max-w-md"
                 />
-                <button type="button" onClick={handleExportStudents} disabled={exporting} className="btn btn-secondary">{exporting ? 'Exportando...' : 'Exportar CSV'}</button>
+                <button type="button" onClick={handleExportStudents} disabled={exporting} className="btn btn-secondary"><Download aria-hidden="true" />{exporting ? 'Exportando...' : 'Exportar CSV'}</button>
             </div>
             
             {/* Tabela de Alunos */}
             <div className="panel overflow-x-auto">
-                <table className="min-w-full divide-y divide-border">
+                <table className="data-table mobile-cards min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Foto</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Nome</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Aluno</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Email</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Curso(s)</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                          {loading ? (
-                            Array.from({ length: 4 }, (_, index) => <tr key={index}><td colSpan="4" className="px-6 py-4"><div className="skeleton h-10 rounded" /></td></tr>)
+                            Array.from({ length: 4 }, (_, index) => <tr key={index}><td colSpan="3" className="px-6 py-4"><div className="skeleton h-10 rounded" /></td></tr>)
                         ) : error ? (
-                             <tr><td colSpan="4" className="text-center py-4 text-danger">{error}</td></tr>
+                             <tr><td colSpan="3" className="text-center py-4 text-danger">{error}</td></tr>
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className="hover:bg-border/50">
                                 <td className="px-6 py-4">
-                                    <ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" />
+                                    <div className="flex min-w-0 items-center gap-3"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-default">{aluno.nome}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.cursos?.map(c => c.nome).join(', ') || 'N/A'}</td>
+                                <td data-label="E-mail" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email}</td>
+                                <td data-label="Cursos" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.cursos?.map(c => c.nome).join(', ') || 'Sem turma vinculada'}</td>
                             </tr>
                         ))}
                     </tbody>

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowUpRight } from 'lucide-react';
 
-const StatCard = ({ to, title, value, detail, icon, colorClass = 'primary', delay, loading = false }) => {
+const StatCard = ({ to, title, value, detail, icon, colorClass = 'primary', delay = 0, loading = false }) => {
     const iconColorClass = {
         primary: 'bg-primary/10 text-primary',
         success: 'bg-success/10 text-success',
@@ -12,12 +13,14 @@ const StatCard = ({ to, title, value, detail, icon, colorClass = 'primary', dela
     return (
         <Link
             to={to}
-            className={`interactive-card fade-in-up block rounded-xl border border-border bg-surface p-5 shadow-sm delay-${delay}`}
+            className="interactive-card fade-in-up group block min-h-36 rounded-2xl border border-border bg-surface p-5 shadow-sm"
+            style={{ animationDelay: `${Number(delay) || 0}ms` }}
             aria-busy={loading}
         >
-            <div className="grid grid-cols-[1fr,auto] items-center gap-4">
+            <div className="mb-4 flex items-center justify-between"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${iconColorClass[colorClass] || iconColorClass.primary}`}>{icon}</div><ArrowUpRight aria-hidden="true" className="text-text-muted opacity-50 transition group-hover:text-primary group-hover:opacity-100" /></div>
+            <div className="grid grid-cols-1 items-center gap-4">
                 <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-text-muted">{title}</p>
+                    <p className="text-xs font-medium text-text-muted">{title}</p>
                     {loading ? (
                         <div className="skeleton mt-2 h-8 w-16" aria-hidden="true" />
                     ) : (
@@ -26,9 +29,6 @@ const StatCard = ({ to, title, value, detail, icon, colorClass = 'primary', dela
                             {detail && <p className="mt-2 text-xs leading-5 text-text-muted">{detail}</p>}
                         </>
                     )}
-                </div>
-                <div className={`rounded-xl p-3 ${iconColorClass[colorClass] || iconColorClass.primary}`}>
-                    {icon}
                 </div>
             </div>
         </Link>

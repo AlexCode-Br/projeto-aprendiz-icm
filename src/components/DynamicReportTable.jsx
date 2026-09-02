@@ -10,8 +10,8 @@ const DynamicReportTable = ({ columns, data, loading }) => {
     }
 
     return (
-        <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-border">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="Resultados">
+            <table className="data-table min-w-full divide-y divide-border">
                 <thead className="bg-surface">
                     <tr>
                         {columns.map((col) => (

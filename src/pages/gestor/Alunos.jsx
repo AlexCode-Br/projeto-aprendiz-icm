@@ -3,6 +3,8 @@ import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 // --- Componentes ---
+import { Plus, Church } from 'lucide-react';
+import SearchInput from '../../components/SearchInput';
 import Pagination from '../../components/Pagination';
 import AlunoFormModal from '../../components/AlunoFormModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
@@ -160,7 +162,7 @@ const Alunos = () => {
             {/* Barra de Ações */}
             <div className="panel mb-6 flex flex-col items-stretch justify-between gap-4 p-4 sm:flex-row sm:items-center">
                 <label htmlFor="student-search" className="sr-only">Buscar aluno</label>
-                <input
+                <SearchInput
                     id="student-search"
                     type="text"
                     placeholder="Buscar aluno por nome ou email..."
@@ -169,18 +171,17 @@ const Alunos = () => {
                     className="form-control sm:max-w-sm"
                 />
                 <div className="flex flex-col gap-2 sm:flex-row">
-                    <button type="button" onClick={() => setIsChurchModalOpen(true)} className="btn btn-secondary w-full sm:w-auto">Nova igreja de origem</button>
-                    <button onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">Adicionar Aluno</button>
+                    <button type="button" onClick={() => setIsChurchModalOpen(true)} className="btn btn-secondary w-full sm:w-auto"><Church aria-hidden="true" />Nova igreja de origem</button>
+                    <button onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto"><Plus aria-hidden="true" />Adicionar aluno</button>
                 </div>
             </div>
 
             {/* Tabela de Alunos */}
             <div className="panel overflow-x-auto">
-                <table className="min-w-full divide-y divide-border">
+                <table className="data-table mobile-cards min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Foto</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Nome</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Aluno</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Email</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Telefone</th>
                             <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">Ações</th>
@@ -188,17 +189,16 @@ const Alunos = () => {
                     </thead>
                     <tbody className="divide-y divide-border">
                         {loading ? (
-                            Array.from({ length: 4 }, (_, index) => <tr key={index}><td colSpan="5" className="px-6 py-4"><div className="skeleton h-10 rounded" /></td></tr>)
+                            Array.from({ length: 4 }, (_, index) => <tr key={index}><td colSpan="4" className="px-6 py-4"><div className="skeleton h-10 rounded" /></td></tr>)
                         ) : error ? (
-                             <tr><td colSpan="5" className="text-center py-4 text-danger">{error}</td></tr>
+                             <tr><td colSpan="4" className="text-center py-4 text-danger">{error}</td></tr>
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className="hover:bg-border/50">
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" />
+                                    <div className="flex min-w-0 items-center gap-3"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></div>
                                 </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-text-default">{aluno.nome}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email || 'Não informado'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.telefone}</td>
+                                <td data-label="E-mail" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email || 'Não informado'}</td>
+                                <td data-label="Telefone" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.telefone}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex justify-end space-x-2">
                                         <button type="button" aria-label={`Editar ${aluno.nome}`} onClick={() => handleOpenFormModal(aluno)} className="icon-button text-primary hover:text-primary-dark hover:bg-primary/10">

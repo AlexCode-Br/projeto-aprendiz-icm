@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import useDarkMode from '../hooks/useDarkMode';
 import ProfileAvatar from './ProfileAvatar';
+import { Menu, X, ChevronDown, UserRound, Sun, Moon, LogOut } from 'lucide-react';
 
 const Header = ({ sidebarOpen, setSidebarOpen }) => {
+    const location = useLocation();
+    const sectionNames = { dashboard: 'Visão geral', cursos: 'Cursos e igrejas', alunos: 'Alunos', professores: 'Professores', relatorios: 'Relatórios', informativos: 'Informativos', suporte: 'Suporte', frequencia: 'Chamada', configuracoes: 'Configurações' };
+    const section = sectionNames[location.pathname.split('/').pop()] || 'Projeto Aprendiz';
+    const triggerRef = useRef(null);
     const { user, logout } = useContext(AuthContext);
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -26,18 +31,33 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
         return () => window.removeEventListener('profile-photo:updated', refreshPhoto);
     }, []);
 
+    useEffect(() => {
+        if (!dropdownOpen) return;
+        const keyDown = event => {
+            if (event.key === 'Escape') { setDropdownOpen(false); triggerRef.current?.focus(); }
+            if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+            event.preventDefault();
+            const items = [...dropdownRef.current.querySelectorAll('[role="menuitem"]')];
+            const index = items.indexOf(document.activeElement);
+            items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+        };
+        const container = dropdownRef.current;
+        container.addEventListener('keydown', keyDown);
+        return () => container.removeEventListener('keydown', keyDown);
+    }, [dropdownOpen]);
+
     return (
-        <header className="relative sticky top-0 z-20 flex h-20 shrink-0 items-center justify-between border-b border-border bg-surface/90 px-3 backdrop-blur-md sm:px-5 lg:px-6">
+        <header className="sticky top-0 z-20 flex h-[76px] shrink-0 items-center justify-between border-b border-border bg-surface/95 px-3 backdrop-blur-md sm:px-5 lg:px-6">
             <button id="menu-button" type="button" aria-label={sidebarOpen ? 'Fechar menu de navegação' : 'Abrir menu de navegação'} aria-controls="sidebar" aria-expanded={sidebarOpen} className={`icon-button mr-2 lg:hidden ${sidebarOpen ? 'menu-open' : ''}`} onClick={() => setSidebarOpen(!sidebarOpen)}>
-                <svg className="w-6 h-6 icon-hamburger" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                <svg className="w-6 h-6 icon-close" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                {sidebarOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
             </button>
             <div className="flex min-w-0 flex-1 justify-start">
-                <p className="truncate text-lg font-semibold text-text-default sm:text-xl">Projeto Aprendiz</p>
+                <p className="truncate text-sm font-semibold text-text-default"><span className="hidden font-normal text-text-muted sm:inline">{user?.role === 'gestor' ? 'Gestão' : 'Professor'}<span className="mx-3 text-text-muted/60">/</span></span>{section}</p>
             </div>
-            <div className="relative flex items-center" ref={dropdownRef}>
-                <button type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen(!dropdownOpen)} className="group flex min-h-11 min-w-11 items-center justify-center rounded-full ring-2 ring-transparent transition hover:ring-primary/20">
-                    <ProfileAvatar name={user?.nome} src={`/api/profile-photo?v=${photoVersion}`} className="h-10 w-10" />
+            <div className="relative flex items-center" ref={dropdownRef} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropdownOpen(false); }}>
+                <button ref={triggerRef} type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen(!dropdownOpen)} className="group flex min-h-11 min-w-11 items-center justify-center gap-3 rounded-xl p-1.5 transition hover:bg-surface-hover">
+                    <ProfileAvatar name={user?.nome} src={`/api/profile-photo?v=${photoVersion}`} className="h-9 w-9" />
+                    <span className="hidden max-w-40 text-left sm:block"><span className="block truncate text-sm font-semibold">{user?.nome}</span><span className="block text-xs text-text-muted">{user?.role === 'gestor' ? 'Gestor' : 'Professor'}</span></span><ChevronDown aria-hidden="true" className={`!h-4 !w-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <div
                     id="profile-dropdown"
@@ -50,20 +70,20 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
                     </div>
 
                     <div className="py-1">
-                        <Link to="/configuracoes" role="menuitem" onClick={() => setDropdownOpen(false)} className="flex min-h-11 items-center px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-primary transition-colors">
-                            <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                        <Link to="/configuracoes" role="menuitem" onClick={() => setDropdownOpen(false)} className="flex min-h-11 items-center gap-3 px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-primary transition-colors">
+                            <UserRound aria-hidden="true" />
                             Editar Perfil
                         </Link>
 
-                        <button role="menuitem" type="button" onClick={() => { setIsDark(!isDark); setDropdownOpen(false); }} className="flex min-h-11 w-full items-center px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-primary transition-colors">
+                        <button role="menuitem" type="button" onClick={() => { setIsDark(!isDark); setDropdownOpen(false); }} className="flex min-h-11 w-full items-center gap-3 px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-primary transition-colors">
                             {isDark ? (
                                 <>
-                                    <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                                    <Sun aria-hidden="true" />
                                     Tema Claro
                                 </>
                             ) : (
                                 <>
-                                    <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
+                                    <Moon aria-hidden="true" />
                                     Tema Escuro
                                 </>
                             )}
@@ -71,8 +91,8 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
                     </div>
 
                     <div className="border-t border-border py-1">
-                        <button role="menuitem" type="button" onClick={logout} className="flex min-h-11 w-full items-center px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-danger transition-colors">
-                            <svg className="w-4 h-4 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                        <button role="menuitem" type="button" onClick={logout} className="flex min-h-11 w-full items-center gap-3 px-4 py-2 text-sm text-text-default hover:bg-surface-hover hover:text-danger transition-colors">
+                            <LogOut aria-hidden="true" />
                             Sair
                         </button>
                     </div>

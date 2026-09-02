@@ -1,31 +1,42 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useId } from 'react';
+import { createPortal } from 'react-dom';
+import { EllipsisVertical } from 'lucide-react';
 
-const KebabMenu = ({ children }) => {
-    const [isOpen, setIsOpen] = useState(false);
+export default function KebabMenu({ children, label = 'Abrir menu de ações' }) {
+    const [open, setOpen] = useState(false);
+    const [position, setPosition] = useState({ left: 0, top: 0 });
+    const buttonRef = useRef(null);
     const menuRef = useRef(null);
-
+    const id = useId();
+    useLayoutEffect(() => {
+        if (!open) return;
+        const anchor = buttonRef.current.getBoundingClientRect();
+        const height = menuRef.current.offsetHeight;
+        setPosition({ left: Math.max(12, Math.min(anchor.right - 208, window.innerWidth - 220)), top: anchor.bottom + height + 12 > window.innerHeight ? Math.max(12, anchor.top - height - 4) : anchor.bottom + 4 });
+        menuRef.current.querySelector('button:not([disabled]),a')?.focus();
+    }, [open]);
     useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (menuRef.current && !menuRef.current.contains(event.target)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
-
-    return (
-        <div className="relative" ref={menuRef}>
-            <button type="button" aria-label="Abrir menu de ações" aria-haspopup="menu" aria-expanded={isOpen} onClick={() => setIsOpen(!isOpen)} className="icon-button">
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
-            </button>
-            {isOpen && (
-                <div role="menu" className="action-menu-dropdown absolute right-0 z-10 mt-1 w-40 origin-top-right rounded-lg border border-border bg-surface py-1 shadow-lg">
-                    {children}
-                </div>
-            )}
-        </div>
-    );
-};
-
-export default KebabMenu;
+        if (!open) return;
+        const outside = event => { if (!menuRef.current?.contains(event.target) && !buttonRef.current?.contains(event.target)) setOpen(false); };
+        const reposition = () => setOpen(false);
+        const scroll = event => { if (!menuRef.current?.contains(event.target)) setOpen(false); };
+        document.addEventListener('pointerdown', outside);
+        window.addEventListener('resize', reposition);
+        document.addEventListener('scroll', scroll, true);
+        return () => { document.removeEventListener('pointerdown', outside); window.removeEventListener('resize', reposition); document.removeEventListener('scroll', scroll, true); };
+    }, [open]);
+    const keyDown = event => {
+        if (event.key === 'Escape') { event.stopPropagation(); event.preventDefault(); setOpen(false); buttonRef.current?.focus(); }
+        if (event.key === 'Tab') setOpen(false);
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+        event.preventDefault();
+        const items = [...menuRef.current.querySelectorAll('button:not([disabled]),a')];
+        const index = items.indexOf(document.activeElement);
+        const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items[next]?.focus();
+    };
+    return <>
+        <button ref={buttonRef} type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(value => !value)} className="icon-button"><EllipsisVertical aria-hidden="true" /></button>
+        {open && createPortal(<div ref={menuRef} id={id} role="menu" aria-label="Ações do registro" onKeyDown={keyDown} onClick={event => { if (event.target.closest('button:not([disabled]),a')) setOpen(false); }} className="fixed z-[60] w-52 rounded-xl border border-border bg-surface p-1.5 shadow-lg" style={position}>{children}</div>, document.body)}
+    </>;
+}
