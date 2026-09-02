@@ -14,7 +14,6 @@ const GestorDashboard = React.lazy(() => import('./pages/gestor/Dashboard.jsx'))
 const Cursos = React.lazy(() => import('./pages/gestor/Cursos.jsx'));
 const Alunos = React.lazy(() => import('./pages/gestor/Alunos.jsx'));
 const Professores = React.lazy(() => import('./pages/gestor/Professores.jsx'));
-const GestorRelatorios = React.lazy(() => import('./pages/gestor/Relatorios.jsx'));
 const GestorInformativos = React.lazy(() => import('./pages/gestor/Informativos.jsx'));
 const GestorSuporte = React.lazy(() => import('./pages/gestor/Suporte.jsx'));
 const ProfessorDashboard = React.lazy(() => import('./pages/professor/ProfessorDashboard.jsx'));
@@ -65,7 +64,7 @@ const AppRoutes = () => {
             <Route path="/gestor/cursos" element={<Cursos />} />
             <Route path="/gestor/alunos" element={<Alunos />} />
             <Route path="/gestor/professores" element={<Professores />} />
-            <Route path="/gestor/relatorios" element={<GestorRelatorios />} />
+            <Route path="/gestor/relatorios" element={<Navigate to="/gestor/dashboard" replace />} />
             <Route path="/gestor/informativos" element={<GestorInformativos />} />
             <Route path="/gestor/suporte" element={<GestorSuporte />} />
         </>

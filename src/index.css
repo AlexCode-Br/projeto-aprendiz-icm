@@ -4,7 +4,21 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+@font-face {
+    font-family: 'Allura';
+    src: url('./assets/fonts/Allura-Regular.ttf') format('truetype');
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+}
+
+.login-scripture {
+    font-family: 'Allura', 'Segoe Script', 'Brush Script MT', cursive;
+    font-weight: 400;
+    text-shadow: 0 2px 8px rgb(0 0 0 / 45%);
+}
+
+:root, .auth-page--light {
     --color-primary-rgb: 183 28 28;
     --color-surface-rgb: 255 255 255;
     --color-surface-muted-rgb: 246 246 247;
@@ -197,6 +211,8 @@
     .auth-brand .lucide { width: 1.125rem; height: 1.125rem; }
     .form-section-title { @apply mb-4 flex items-center gap-2 text-base font-semibold; }
     .form-section-title .lucide { @apply text-text-muted; }
+    .settings-section-header { @apply grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3; }
+    .settings-section-header .form-section-title { @apply mb-0 min-h-11; }
     .modal-body { overscroll-behavior: contain; }
     .sidebar-link { @apply relative flex min-h-12 items-center gap-3 rounded-xl px-3 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white; }
     .sidebar-link[aria-current='page'] { @apply bg-white text-primary shadow-sm; }
@@ -230,12 +246,16 @@
         @apply flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 via-white to-red-50/40 px-4 py-8 dark:from-[#18191a] dark:via-[#1f2021] dark:to-[#251d1d];
     }
 
+    .auth-page.auth-page--light { background: #f7f7f8; color: var(--color-text-default); color-scheme: light; }
+    .dark .auth-page--light .text-primary { color: #b71c1c; }
+    .dark .auth-page--light .alert-error { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+
     .auth-wrap {
         @apply w-full max-w-md;
     }
 
     .auth-logo {
-        @apply mx-auto mb-7 h-14 w-40 rounded-xl bg-primary object-cover;
+        @apply mx-auto mb-7 h-auto w-44 object-contain;
     }
 
     .auth-card {

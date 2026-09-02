@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import StatCard from '../../components/StatCard';
 import EnrollmentOverviewChart from '../../components/charts/EnrollmentOverviewChart.jsx';
 import RecentActivities from '../../components/RecentActivities';
+import StudentDetailsModal from '../../components/StudentDetailsModal';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
@@ -10,6 +11,11 @@ const Dashboard = () => {
     const [dashboard, setDashboard] = useState({ stats: {}, alunosPorTurma: [], ultimasInscricoes: [] });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [selectedStudentId, setSelectedStudentId] = useState(null);
+    const [studentDetails, setStudentDetails] = useState(null);
+    const [studentLoading, setStudentLoading] = useState(false);
+    const [studentError, setStudentError] = useState('');
+    const [studentRetry, setStudentRetry] = useState(0);
     const { showToast } = useToast();
 
     const load = useCallback(() => {
@@ -21,6 +27,18 @@ const Dashboard = () => {
             .finally(() => setLoading(false));
     }, [showToast]);
     useEffect(load, [load]);
+    useEffect(() => {
+        if (!selectedStudentId) return undefined;
+        let active = true;
+        setStudentLoading(true);
+        setStudentError('');
+        setStudentDetails(null);
+        api.get(`/alunos/${selectedStudentId}`)
+            .then(({ data }) => { if (active) setStudentDetails(data); })
+            .catch(error => { if (active) setStudentError(error.message || 'Não foi possível carregar o aluno.'); })
+            .finally(() => { if (active) setStudentLoading(false); });
+        return () => { active = false; };
+    }, [selectedStudentId, studentRetry]);
 
     if (error) return <div className="panel empty-state"><p role="alert">{error}</p><button type="button" onClick={load} className="btn btn-secondary mt-3">Tentar novamente</button></div>;
 
@@ -45,8 +63,9 @@ const Dashboard = () => {
                         {loading ? <div className="skeleton h-full rounded-xl" /> : <EnrollmentOverviewChart data={dashboard.alunosPorTurma || []} />}
                     </div>
                 </section>
-                <RecentActivities students={dashboard.ultimasInscricoes || []} />
+                <RecentActivities students={dashboard.ultimasInscricoes || []} onSelectStudent={setSelectedStudentId} />
             </div>
+            <StudentDetailsModal isOpen={Boolean(selectedStudentId)} onClose={() => setSelectedStudentId(null)} student={studentDetails} loading={studentLoading} error={studentError} onRetry={() => setStudentRetry(value => value + 1)} />
         </>
     );
 };

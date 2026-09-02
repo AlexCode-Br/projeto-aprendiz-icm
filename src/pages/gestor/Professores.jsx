@@ -126,7 +126,7 @@ const Professores = () => {
     };
 
     const handleResendInvite = async (prof) => {
-        if (resendingProfessorId) return;
+        if (resendingProfessorId || prof.acesso === 'Ativo' || prof.status !== 'Ativo') return;
         setResendingProfessorId(prof.id);
         try {
             const response = await api.post(`/professores/${prof.id}/reenviar-convite`, {});
@@ -213,7 +213,7 @@ const Professores = () => {
                                         <div className="hidden md:flex items-center justify-center space-x-2">
                                             <button type="button" aria-label={`Ver detalhes de ${prof.nome}`} onClick={() => handleOpenDetailsModal(prof)} className="icon-button text-text-muted" title="Detalhes"><DetailsIcon/></button>
                                             <button type="button" aria-label={`Editar ${prof.nome}`} onClick={() => handleOpenFormModal(prof)} className="icon-button text-primary" title="Editar"><EditIcon/></button>
-                                            {prof.acesso !== 'Ativo' && prof.status === 'Ativo' && <button type="button" aria-label={`Reenviar convite para ${prof.nome}`} disabled={resendingProfessorId === prof.id} onClick={() => handleResendInvite(prof)} className="icon-button text-amber-700 dark:text-amber-300" title="Reenviar convite"><InviteIcon/></button>}
+                                            <button type="button" aria-label={prof.acesso === 'Ativo' ? `Convite indisponível: ${prof.nome} já tem acesso ativo` : `Reenviar convite para ${prof.nome}`} disabled={Boolean(resendingProfessorId) || prof.acesso === 'Ativo' || prof.status !== 'Ativo'} onClick={() => handleResendInvite(prof)} className="icon-button text-amber-700 dark:text-amber-300" title={prof.acesso === 'Ativo' ? 'O professor já tem acesso ativo' : 'Reenviar convite'}><InviteIcon/></button>
                                             <button type="button" aria-label={`Excluir ${prof.nome}`} onClick={() => handleOpenDeleteImpact(prof)} className="icon-button text-danger" title="Excluir definitivamente"><DeleteIcon/></button>
                                         </div>
                                         <div className="md:hidden">
@@ -224,9 +224,9 @@ const Professores = () => {
                                                 <button type="button" role="menuitem" onClick={() => handleOpenFormModal(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-text-default hover:bg-surface-hover transition-colors">
                                                     <EditIcon /> Editar
                                                 </button>
-                                                {prof.acesso !== 'Ativo' && prof.status === 'Ativo' && <button type="button" role="menuitem" disabled={resendingProfessorId === prof.id} onClick={() => handleResendInvite(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-amber-800 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/30">
-                                                    <InviteIcon /> Reenviar convite
-                                                </button>}
+                                                <button type="button" role="menuitem" disabled={Boolean(resendingProfessorId) || prof.acesso === 'Ativo' || prof.status !== 'Ativo'} onClick={() => handleResendInvite(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-amber-800 hover:bg-amber-50 disabled:opacity-40 dark:text-amber-200 dark:hover:bg-amber-950/30">
+                                                    <InviteIcon /> {prof.acesso === 'Ativo' ? 'Acesso já ativo' : 'Reenviar convite'}
+                                                </button>
                                                 <button type="button" role="menuitem" onClick={() => handleOpenDeleteImpact(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-danger hover:bg-red-50 dark:hover:bg-red-950/30">
                                                     <DeleteIcon /> Excluir
                                                 </button>

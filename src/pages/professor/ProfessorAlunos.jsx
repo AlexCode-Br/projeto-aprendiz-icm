@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import ProfileAvatar from '../../components/ProfileAvatar';
+import ContactLink from '../../components/ContactLink';
+import StudentDetailsModal from '../../components/StudentDetailsModal';
 import { useToast } from '../../contexts/ToastContext';
 import { Download } from 'lucide-react';
 import SearchInput from '../../components/SearchInput';
@@ -21,6 +23,7 @@ const ProfessorAlunos = () => {
     // Busca
     const [searchTerm, setSearchTerm] = useState('');
     const [exporting, setExporting] = useState(false);
+    const [detailsAluno, setDetailsAluno] = useState(null);
     const { showToast } = useToast();
 
     // Carrega os alunos dos cursos do professor
@@ -104,20 +107,22 @@ const ProfessorAlunos = () => {
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Aluno</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Email</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Telefone</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase">Curso(s)</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
                          {loading ? (
-                            Array.from({ length: 4 }, (_, index) => <tr key={index}><td colSpan="3" className="px-6 py-4"><div className="skeleton h-10 rounded" /></td></tr>)
+                            Array.from({ length: 4 }, (_, index) => <tr key={index}><td colSpan="4" className="px-6 py-4"><div className="skeleton h-10 rounded" /></td></tr>)
                         ) : error ? (
-                             <tr><td colSpan="3" className="text-center py-4 text-danger">{error}</td></tr>
+                             <tr><td colSpan="4" className="text-center py-4 text-danger">{error}</td></tr>
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className="hover:bg-border/50">
                                 <td className="px-6 py-4">
-                                    <div className="flex min-w-0 items-center gap-3"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></div>
+                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
                                 </td>
-                                <td data-label="E-mail" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email}</td>
+                                <td data-label="E-mail" className="px-6 py-4 text-sm text-text-muted"><ContactLink type="email" value={aluno.email} /></td>
+                                <td data-label="Telefone" className="px-6 py-4 text-sm text-text-muted"><ContactLink type="phone" value={aluno.telefone} /></td>
                                 <td data-label="Cursos" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.cursos?.map(c => c.nome).join(', ') || 'Sem turma vinculada'}</td>
                             </tr>
                         ))}
@@ -134,6 +139,7 @@ const ProfessorAlunos = () => {
                 itemsPerPage={itemsPerPage}
                 onPageChange={setCurrentPage}
             />
+            <StudentDetailsModal isOpen={Boolean(detailsAluno)} onClose={() => setDetailsAluno(null)} student={detailsAluno} />
         </div>
     );
 };

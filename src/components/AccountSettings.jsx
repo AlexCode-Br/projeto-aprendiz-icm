@@ -103,24 +103,35 @@ export default function AccountSettings() {
     return <div className="space-y-6 max-w-5xl">
         <div><h1 className="page-title">Configurações da conta</h1><p className="page-description">Personalize seu perfil, proteja sua conta e escolha o que deseja receber.</p></div>
         <form onSubmit={saveProfile} className="panel p-5 md:p-7">
-            <h2 className="form-section-title"><UserRound aria-hidden="true" />Seu perfil</h2><p className="text-sm text-text-muted">Escolha como seu nome e sua foto aparecem no projeto.</p>
-            <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,1fr)]">
-                <label className="text-sm font-medium text-text-default">Nome completo<input required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label>
-                <ProfilePhotoPicker name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={setPhotoChange} disabled={saving === 'profile'} />
+            <div className="settings-section-header">
+                <h2 className="form-section-title"><UserRound aria-hidden="true" />Seu perfil</h2>
+                <button disabled={Boolean(saving)} className="submit-btn justify-self-end disabled:opacity-60"><Save aria-hidden="true" />{saving === 'profile' ? 'Salvando...' : 'Salvar perfil'}</button>
+                <p className="col-span-2 text-sm text-text-muted">Escolha como seu nome e sua foto aparecem no projeto.</p>
             </div>
-            <div className="mt-5 flex justify-end"><button disabled={Boolean(saving)} className="submit-btn disabled:opacity-60"><Save aria-hidden="true" />{saving === 'profile' ? 'Salvando...' : 'Salvar perfil'}</button></div>
+            <div className="mt-5 grid grid-cols-1 gap-5">
+                <ProfilePhotoPicker name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={setPhotoChange} disabled={saving === 'profile'} />
+                <label className="text-sm font-medium text-text-default">Nome completo<input required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label>
+            </div>
         </form>
         <form onSubmit={changePassword} className="panel p-5 md:p-7">
-            <h2 className="form-section-title"><LockKeyhole aria-hidden="true" />Segurança da conta</h2><p className="text-sm text-text-muted mt-1">A alteração encerra suas outras sessões abertas.</p>
+            <div className="settings-section-header">
+                <h2 className="form-section-title"><LockKeyhole aria-hidden="true" />Segurança da conta</h2>
+                <button disabled={Boolean(saving)} className="submit-btn justify-self-end disabled:opacity-60">{saving === 'password' ? 'Alterando...' : 'Alterar senha'}</button>
+                <p className="col-span-2 text-sm text-text-muted">A alteração encerra suas outras sessões abertas.</p>
+            </div>
             <div className="grid md:grid-cols-3 gap-5 mt-5"><div><label className="form-label" htmlFor="settings-currentPassword">Senha atual</label><PasswordInput id="settings-currentPassword" required autoComplete="current-password" value={password.currentPassword} onChange={event => setPassword({ ...password, currentPassword: event.target.value })} className={fieldClass} /></div><div><label className="form-label" htmlFor="settings-newPassword">Nova senha</label><PasswordInput id="settings-newPassword" required autoComplete="new-password" value={password.newPassword} onChange={event => setPassword({ ...password, newPassword: event.target.value })} className={fieldClass} /></div><div><label className="form-label" htmlFor="settings-confirmation">Confirmar nova senha</label><PasswordInput id="settings-confirmation" required autoComplete="new-password" value={password.confirmation} onChange={event => setPassword({ ...password, confirmation: event.target.value })} className={fieldClass} /></div></div>
             <p className={`text-xs mt-3 ${password.newPassword && passwordValid ? 'text-success' : 'text-text-muted'}`}>Use ao menos 10 caracteres, com maiúscula, minúscula, número e símbolo.</p>
-            <div className="mt-5 flex justify-end"><button disabled={Boolean(saving)} className="submit-btn disabled:opacity-60">{saving === 'password' ? 'Alterando...' : 'Alterar senha'}</button></div>
         </form>
         <section className="panel p-5 md:p-7">
-            <h2 className="form-section-title"><Bell aria-hidden="true" />Notificações por e-mail</h2>
-            <p className="mt-1 text-sm text-text-muted">Escolha quais atualizações serão enviadas ao e-mail de acesso cadastrado.</p>
+            <div className="settings-section-header">
+                <h2 className="form-section-title"><Bell aria-hidden="true" />Notificações por e-mail</h2>
+                <button type="button" onClick={savePreferences} disabled={Boolean(saving)} className="submit-btn justify-self-end disabled:opacity-60">{saving === 'preferences' ? 'Salvando...' : 'Salvar preferências'}</button>
+                <div className="col-span-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-text-muted">Escolha quais atualizações serão enviadas ao e-mail de acesso cadastrado.</p>
+                    <button type="button" onClick={testNotifications} disabled={Boolean(saving)} className="inline-flex min-h-9 items-center gap-2 rounded text-sm font-semibold text-primary hover:underline disabled:opacity-60"><Mail aria-hidden="true" />{saving === 'test-notification' ? 'Enviando...' : 'Enviar teste'}</button>
+                </div>
+            </div>
             <div className="mt-4 divide-y divide-border">{options.map(([key, title, description]) => <div key={key} className="py-4"><FormSwitch checked={Boolean(preferences[key])} onChange={event => setPreferences({ ...preferences, [key]: event.target.checked })} label={title} description={description} /></div>)}</div>
-            <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={testNotifications} disabled={Boolean(saving)} className="btn btn-secondary disabled:opacity-60"><Mail aria-hidden="true" />{saving === 'test-notification' ? 'Enviando...' : 'Enviar teste'}</button><button type="button" onClick={savePreferences} disabled={Boolean(saving)} className="submit-btn disabled:opacity-60">{saving === 'preferences' ? 'Salvando...' : 'Salvar preferências'}</button></div>
         </section>
     </div>;
 }

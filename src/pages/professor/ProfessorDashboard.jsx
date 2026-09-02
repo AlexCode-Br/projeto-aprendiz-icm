@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import StatCard from '../../components/StatCard';
 import ProfileAvatar from '../../components/ProfileAvatar';
+import ContactLink from '../../components/ContactLink';
+import StudentDetailsModal from '../../components/StudentDetailsModal';
 import { AuthContext } from '../../contexts/AuthContext';
 
 // --- Ícones SVG (estilo outline, traço consistente) ---
@@ -29,6 +31,7 @@ const ProfessorDashboard = () => {
     const [informativos, setInformativos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [detailsStudent, setDetailsStudent] = useState(null);
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -107,12 +110,12 @@ const ProfessorDashboard = () => {
                     </div>
                     <ul className="divide-y divide-border">
                         {recentStudents.length > 0 ? recentStudents.map(student => (
-                            <li key={student.id} className="p-4 flex items-center justify-between hover:bg-surface-hover transition-colors">
+                            <li key={student.id} className="p-4 flex items-center justify-between gap-3 hover:bg-surface-hover transition-colors">
                                 <div className="flex min-w-0 items-center gap-3"><ProfileAvatar name={student.nome} src={student.foto_url} /><div className="min-w-0">
-                                    <p className="truncate font-medium text-text-default">{student.nome}</p>
-                                    <p className="truncate text-sm text-text-muted">{student.email || 'E-mail não informado'}</p></div>
+                                    <button type="button" onClick={() => setDetailsStudent(student)} aria-label={`Ver dados de ${student.nome}`} className="max-w-full truncate rounded text-left font-medium text-text-default hover:text-primary">{student.nome}</button>
+                                    <p className="text-sm text-text-muted"><ContactLink type="email" value={student.email} /></p></div>
                                 </div>
-                                <span className="text-xs text-text-muted">{new Date(student.created_at).toLocaleDateString()}</span>
+                                <span className="shrink-0 text-xs text-text-muted">{new Date(student.created_at).toLocaleDateString()}</span>
                             </li>
                         )) : (
                             <li className="p-5 text-center text-text-muted"><strong className="block text-text-default">Nenhum aluno recente</strong><span className="mt-1 block text-sm">Novas matrículas nas suas turmas aparecerão aqui.</span></li>
@@ -141,6 +144,7 @@ const ProfessorDashboard = () => {
                     </ul>
                 </div>
             </div>
+            <StudentDetailsModal isOpen={Boolean(detailsStudent)} onClose={() => setDetailsStudent(null)} student={detailsStudent} />
         </div>
     );
 };

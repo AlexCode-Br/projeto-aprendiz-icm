@@ -1,20 +1,25 @@
 import React from 'react';
 import Modal from './Modal';
+import ContactLink from './ContactLink';
+import ProfileAvatar from './ProfileAvatar';
 
-const StudentDetailsModal = ({ student, isOpen, onClose }) => {
+const StudentDetailsModal = ({ student, isOpen, onClose, loading = false, error = '', onRetry }) => {
+    if (loading || error) return <Modal isOpen={isOpen} onClose={onClose} title="Dados do aluno">
+        {loading ? <p role="status" className="py-8 text-center text-text-muted">Carregando dados do aluno...</p> : <div className="space-y-4"><p role="alert" className="text-danger">{error}</p><button type="button" onClick={onRetry} className="btn btn-secondary">Tentar novamente</button></div>}
+    </Modal>;
     if (!student) return null;
     const fields = [
         ['Nome completo', student.nome],
-        ['E-mail', student.contato],
-        ['Telefone (WhatsApp)', student.telefone],
-        ['Igreja', student.igreja || student.local],
+        ['E-mail', <ContactLink type="email" value={student.contato || student.email} />],
+        ['Telefone (WhatsApp)', <ContactLink type="phone" value={student.telefone} />],
+        ['Igreja', student.igreja],
         ['Classe', student.classe],
         ['Possui instrumento?', student.instrumento],
     ];
     if (student.classe === 'Adolescente') {
         fields.splice(5, 0,
             ['Responsável', student.guardian_name],
-            ['Telefone do responsável', student.guardian_phone],
+            ['Telefone do responsável', <ContactLink type="phone" value={student.guardian_phone} />],
         );
     }
     const courses = Array.isArray(student.turmas) && student.turmas.length
@@ -23,6 +28,7 @@ const StudentDetailsModal = ({ student, isOpen, onClose }) => {
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Dados do aluno">
+            <div className="mb-5"><ProfileAvatar name={student.nome} src={student.foto_url} className="h-16 w-16" /></div>
             <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {fields.map(([label, value]) => <div key={label}><dt className="text-sm font-medium text-text-muted">{label}</dt><dd className="mt-1 break-words text-text-default">{value || 'Não informado'}</dd></div>)}
                 <div className="sm:col-span-2">

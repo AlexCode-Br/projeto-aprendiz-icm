@@ -1,12 +1,13 @@
 import React from 'react';
 import Modal from './Modal';
+import ContactLink from './ContactLink';
 
 const ProfessorDetailsModal = ({ isOpen, onClose, professor }) => {
     if (!professor) return null;
     const fields = [
         ['Nome completo', professor.nome],
-        ['E-mail', professor.contato],
-        ['Telefone', professor.telefone],
+        ['E-mail', <ContactLink type="email" value={professor.contato || professor.email} />],
+        ['Telefone', <ContactLink type="phone" value={professor.telefone} />],
         ['Igreja principal', professor.local],
     ];
 

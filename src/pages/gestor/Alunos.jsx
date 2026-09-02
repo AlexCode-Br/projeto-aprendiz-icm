@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 // --- Componentes ---
-import { Plus, Church } from 'lucide-react';
+import { Plus, Eye, ListFilter } from 'lucide-react';
 import SearchInput from '../../components/SearchInput';
 import Pagination from '../../components/Pagination';
 import AlunoFormModal from '../../components/AlunoFormModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
-import CatalogItemModal from '../../components/CatalogItemModal';
+import FormSelect from '../../components/FormSelect';
+import StudentDetailsModal from '../../components/StudentDetailsModal';
+import ContactLink from '../../components/ContactLink';
 import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
 import ProfileAvatar from '../../components/ProfileAvatar';
 
@@ -29,15 +31,21 @@ const Alunos = () => {
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [selectedAluno, setSelectedAluno] = useState(null);
-    const [isChurchModalOpen, setIsChurchModalOpen] = useState(false);
+    const [detailsAluno, setDetailsAluno] = useState(null);
 
     // Estado de Busca
     const [searchTerm, setSearchTerm] = useState('');
+    const [filters, setFilters] = useState({ curso: '', church_id: '', classe: '', turma_id: '' });
+    const requestSequence = useRef(0);
+    const courseOptions = useMemo(() => [...new Set(offerings.map(item => item.nome))].sort((a,b) => a.localeCompare(b)), [offerings]);
+    const classOptions = useMemo(() => offerings.filter(item => !filters.curso || item.nome === filters.curso).map(item => ({ value: item.id, label: `${item.nome} — ${item.local}${item.professor ? ` · ${item.professor}` : ''}` })), [offerings, filters.curso]);
+    const hasFilters = Boolean(searchTerm || Object.values(filters).some(Boolean));
 
     const { showToast } = useToast();
 
     // --- Carregamento de Dados ---
     const fetchAlunos = useCallback(async () => {
+        const sequence = ++requestSequence.current;
         setLoading(true);
         try {
             const response = await api.get('/alunos', {
@@ -45,25 +53,28 @@ const Alunos = () => {
                     page: currentPage,
                     limit: itemsPerPage,
                     search: searchTerm,
+                    ...filters,
                 }
             });
+            if (sequence !== requestSequence.current) return;
             setAlunos(response.data.alunos);
             setTotalAlunos(response.data.total);
             setError(null);
         } catch (err) {
+            if (sequence !== requestSequence.current) return;
             setError("Não foi possível carregar os alunos.");
             showToast("Erro ao carregar alunos.", 'error');
             console.error(err);
         } finally {
-            setLoading(false);
+            if (sequence === requestSequence.current) setLoading(false);
         }
-    }, [currentPage, itemsPerPage, searchTerm, showToast]);
+    }, [currentPage, itemsPerPage, searchTerm, filters, showToast]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
             fetchAlunos();
         }, 300);
-        return () => clearTimeout(timer);
+        return () => { clearTimeout(timer); requestSequence.current += 1; };
     }, [fetchAlunos]);
 
     const fetchAcademicOptions = useCallback(async () => {
@@ -80,18 +91,6 @@ const Alunos = () => {
     useEffect(() => {
         fetchAcademicOptions();
     }, [fetchAcademicOptions]);
-
-    const handleSaveChurch = async data => {
-        try {
-            await api.post('/api/churches', data);
-            showToast('Igreja de origem cadastrada com sucesso!', 'success');
-            setIsChurchModalOpen(false);
-            await fetchAcademicOptions();
-        } catch (error) {
-            showToast(error.response?.data?.message || error.message || 'Erro ao cadastrar a igreja.', 'error');
-            throw error;
-        }
-    };
 
     // --- Handlers de Ações ---
     const handleOpenFormModal = (aluno = null) => {
@@ -154,27 +153,36 @@ const Alunos = () => {
         setSearchTerm(e.target.value);
         setCurrentPage(1); // Reseta para a primeira página ao buscar
     };
+    const changeFilter = (key, value) => {
+        setFilters(current => ({ ...current, [key]: value, ...(key === 'curso' ? { turma_id: '' } : {}) }));
+        setCurrentPage(1);
+    };
+    const clearFilters = () => { setSearchTerm(''); setFilters({ curso: '', church_id: '', classe: '', turma_id: '' }); setCurrentPage(1); };
 
     return (
         <div>
-            <div className="page-header"><div><h1 className="page-title">Alunos</h1><p className="page-description">Consulte cadastros e mantenha os dados dos alunos atualizados.</p></div></div>
+            <div className="page-header"><div><h1 className="page-title">Alunos</h1><p className="page-description">Consulte cadastros e mantenha os dados dos alunos atualizados.</p></div><button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto"><Plus aria-hidden="true" />Adicionar aluno</button></div>
 
             {/* Barra de Ações */}
-            <div className="panel mb-6 flex flex-col items-stretch justify-between gap-4 p-4 sm:flex-row sm:items-center">
-                <label htmlFor="student-search" className="sr-only">Buscar aluno</label>
+            <section className="panel mb-6 space-y-4 p-4" aria-label="Filtros de alunos">
+                <div className="flex items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-sm font-semibold"><ListFilter aria-hidden="true" />Filtros</h2><button type="button" onClick={clearFilters} disabled={!hasFilters} className="btn btn-ghost text-sm disabled:opacity-40">Limpar filtros</button></div>
+                <div><label htmlFor="student-search" className="form-label">Buscar aluno</label>
                 <SearchInput
                     id="student-search"
                     type="text"
-                    placeholder="Buscar aluno por nome ou email..."
+                    placeholder="Nome, e-mail ou telefone..."
                     value={searchTerm}
                     onChange={handleSearchChange}
-                    className="form-control sm:max-w-sm"
+                    className="form-control"
                 />
-                <div className="flex flex-col gap-2 sm:flex-row">
-                    <button type="button" onClick={() => setIsChurchModalOpen(true)} className="btn btn-secondary w-full sm:w-auto"><Church aria-hidden="true" />Nova igreja de origem</button>
-                    <button onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto"><Plus aria-hidden="true" />Adicionar aluno</button>
                 </div>
-            </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div><label htmlFor="student-course" className="form-label">Curso</label><FormSelect id="student-course" value={filters.curso} options={courseOptions} onChange={event => changeFilter('curso', event.target.value)} placeholder="Todos os cursos" /></div>
+                    <div><label htmlFor="student-class" className="form-label">Turma</label><FormSelect id="student-class" value={filters.turma_id} options={classOptions} onChange={event => changeFilter('turma_id', event.target.value)} placeholder="Todas as turmas" /></div>
+                    <div><label htmlFor="student-church" className="form-label">Igreja do aluno</label><FormSelect id="student-church" value={filters.church_id} options={churches} onChange={event => changeFilter('church_id', event.target.value)} placeholder="Todas as igrejas" /></div>
+                    <div><label htmlFor="student-group" className="form-label">Classe</label><FormSelect id="student-group" value={filters.classe} options={['Adolescente', 'Jovem', 'Senhora', 'Varão']} onChange={event => changeFilter('classe', event.target.value)} placeholder="Todas as classes" /></div>
+                </div>
+            </section>
 
             {/* Tabela de Alunos */}
             <div className="panel overflow-x-auto">
@@ -195,12 +203,13 @@ const Alunos = () => {
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className="hover:bg-border/50">
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex min-w-0 items-center gap-3"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></div>
+                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
                                 </td>
-                                <td data-label="E-mail" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.email || 'Não informado'}</td>
-                                <td data-label="Telefone" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.telefone}</td>
+                                <td data-label="E-mail" className="px-6 py-4 text-sm text-text-muted"><ContactLink type="email" value={aluno.email} /></td>
+                                <td data-label="Telefone" className="px-6 py-4 text-sm text-text-muted"><ContactLink type="phone" value={aluno.telefone} /></td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex justify-end space-x-2">
+                                        <button type="button" aria-label={`Ver detalhes de ${aluno.nome}`} onClick={() => setDetailsAluno(aluno)} className="icon-button"><Eye /></button>
                                         <button type="button" aria-label={`Editar ${aluno.nome}`} onClick={() => handleOpenFormModal(aluno)} className="icon-button text-primary hover:text-primary-dark hover:bg-primary/10">
                                             <PencilIcon />
                                         </button>
@@ -243,13 +252,7 @@ const Alunos = () => {
                 message={`O cadastro de ${selectedAluno?.nome || 'este aluno'} será removido das turmas e todos os dados pessoais serão apagados de forma irreversível. O histórico acadêmico permanecerá apenas de forma anônima para estatísticas.`}
                 confirmLabel="Anonimizar e excluir"
             />
-            <CatalogItemModal
-                isOpen={isChurchModalOpen}
-                onClose={() => setIsChurchModalOpen(false)}
-                onSave={handleSaveChurch}
-                item={null}
-                type="locais"
-            />
+            <StudentDetailsModal isOpen={Boolean(detailsAluno)} onClose={() => setDetailsAluno(null)} student={detailsAluno} />
         </div>
     );
 };

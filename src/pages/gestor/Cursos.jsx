@@ -1,7 +1,8 @@
 import PageSkeleton from '../../components/PageSkeleton';
 import { Pencil, Trash2 } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Plus, CirclePause } from 'lucide-react';
+import { CirclePause } from 'lucide-react';
+import SectionAddHeader from '../../components/SectionAddHeader';
 import SearchInput from '../../components/SearchInput';
 import CursoModal from '../../components/CursoModal';
 import CatalogItemModal from '../../components/CatalogItemModal';
@@ -139,10 +140,14 @@ const Cursos = () => {
             <div className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
                 {['cursos', 'locais'].map(type => (
                     <section key={type} className="panel overflow-hidden" aria-labelledby={`${type}-catalog-title`}>
-                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-                            <div><h2 id={`${type}-catalog-title`} className="font-semibold">{type === 'cursos' ? 'Catálogo de cursos' : 'Igrejas'}</h2><p className="text-sm text-text-muted">{type === 'cursos' ? 'Opções disponíveis para professores e turmas.' : 'Igrejas que podem receber professores e turmas.'}</p></div>
-                            <button type="button" onClick={() => setCatalogModal({ open: true, type, item: null })} className="btn btn-secondary"><Plus aria-hidden="true" />Adicionar</button>
-                        </div>
+                        <SectionAddHeader
+                            title={type === 'cursos' ? 'Catálogo de cursos' : 'Igrejas'}
+                            titleId={`${type}-catalog-title`}
+                            description={type === 'cursos' ? 'Opções disponíveis para professores e turmas.' : 'Igrejas que podem receber professores e turmas.'}
+                            addLabel={type === 'cursos' ? 'Adicionar curso' : 'Adicionar igreja'}
+                            onAdd={() => setCatalogModal({ open: true, type, item: null })}
+                            className="border-b border-border px-5 py-4 xl:min-h-[104px]"
+                        />
                         <div className="max-h-80 overflow-auto">
                             <table className="data-table w-full text-left text-sm">
                                 <thead className="bg-surface-muted text-xs uppercase text-text-muted"><tr><th className="px-5 py-3">Nome</th><th className="px-5 py-3 text-center">Vínculos</th><th className="px-5 py-3 text-center">Status</th><th className="px-5 py-3 text-right">Ações</th></tr></thead>
@@ -159,7 +164,13 @@ const Cursos = () => {
                 ))}
             </div>
 
-            <div className="mb-3 flex items-center justify-between gap-4"><div><h2 className="text-lg font-semibold">Turmas</h2><p className="text-sm text-text-muted">Combine um curso, uma igreja e um professor.</p></div><button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary"><Plus aria-hidden="true" />Adicionar</button></div>
+            <SectionAddHeader
+                title="Turmas"
+                description="Combine um curso, uma igreja e um professor."
+                addLabel="Adicionar turma"
+                onAdd={() => handleOpenCursoModal()}
+                className="mb-3"
+            />
 
             <section className="panel mb-6 p-4 md:p-6" aria-label="Filtros de cursos">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

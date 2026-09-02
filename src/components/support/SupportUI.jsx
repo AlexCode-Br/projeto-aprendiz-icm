@@ -1,5 +1,6 @@
 import { CircleCheck, MessagesSquare, ArrowLeft, Send } from 'lucide-react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import ContactLink from '../ContactLink';
 
 const statusClasses = {
   Aberto: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-200',
@@ -112,7 +113,7 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
         <div className="mt-2 grid gap-3 rounded-xl bg-surface-muted p-3 sm:grid-cols-2">
           <p><span className="font-semibold text-text-default">Aberto em</span><br />{formatSupportDate(ticket.data_abertura, true)}</p>
           <p><span className="font-semibold text-text-default">Mensagens</span><br />{detail?.messages?.length || 0}</p>
-          {currentRole === 'gestor' && <p className="break-all sm:col-span-2"><span className="font-semibold text-text-default">E-mail do professor</span><br />{ticket.contato}</p>}
+          {currentRole === 'gestor' && <p className="sm:col-span-2"><span className="font-semibold text-text-default">E-mail do professor</span><br /><ContactLink type="email" value={ticket.contato} /></p>}
         </div>
       </details>
       {actions && <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">{actions}</div>}

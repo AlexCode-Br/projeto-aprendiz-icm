@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Modal from './Modal';
+import ContactLink from './ContactLink';
 import api from '../services/api';
 import useLiveRefresh from '../hooks/useLiveRefresh';
 
@@ -57,7 +58,7 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo }) => {
                                 readers.map((reader, index) => (
                                     <tr key={index} className="hover:bg-border/50">
                                         <td className="px-4 py-3 font-medium text-text-default">{reader.name}</td>
-                                        <td className="px-4 py-3 text-text-muted">{reader.email}</td>
+                                        <td className="px-4 py-3 text-text-muted"><ContactLink type="email" value={reader.email} /></td>
                                         <td className="px-4 py-3 text-text-muted">
                                             {new Date(reader.read_at).toLocaleString('pt-BR')}
                                         </td>

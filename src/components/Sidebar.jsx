@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import Logo from '../assets/logo_projeto_aprendiz.png';
+import Logo from '../assets/projeto-aprendiz-logo.png';
 import { AuthContext } from '../contexts/AuthContext';
 import api from '../services/api';
 import { LayoutDashboard, BookOpen, Users, GraduationCap, ChartNoAxesCombined, Megaphone, MessagesSquare, CalendarCheck2, Settings, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
@@ -69,7 +69,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         { path: "/cursos", icon: <BookOpen aria-hidden="true" />, label: "Cursos", role: ['gestor'] },
         { path: "/alunos", icon: <Users aria-hidden="true" />, label: "Alunos", role: ['gestor', 'professor'] },
         { path: "/professores", icon: <GraduationCap aria-hidden="true" />, label: "Professores", role: ['gestor'] },
-        { path: "/relatorios", icon: <ChartNoAxesCombined aria-hidden="true" />, label: "Relatórios", role: ['gestor', 'professor'] },
+        { path: "/relatorios", icon: <ChartNoAxesCombined aria-hidden="true" />, label: "Relatórios", role: ['professor'] },
         { path: "/informativos", icon: <Megaphone aria-hidden="true" />, label: "Informativos", role: ['gestor', 'professor'], unread: userRole==='professor'?announcementUnread:0 },
         { path: "/suporte", icon: <MessagesSquare aria-hidden="true" />, label: "Suporte", role: ['gestor', 'professor'], unread: supportUnread },
     ];
@@ -99,8 +99,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         >
             <div className={`flex items-center h-[76px] border-b border-white/10 px-4 shrink-0 overflow-hidden ${isCollapsed ? 'lg:justify-center justify-between' : 'justify-between'}`}>
                 <div className={`flex flex-col items-start overflow-hidden transition-all duration-300 ${isCollapsed ? 'lg:w-0 lg:opacity-0 w-full opacity-100' : 'w-full opacity-100'}`}>
-                    <img src={Logo} alt="Igreja Cristã Maranata" className="h-10 w-36 object-cover" />
-                    <span className="pl-2 text-xs font-semibold tracking-wide text-white">Projeto Aprendiz</span>
+                    <img src={Logo} width="300" height="149" alt="Projeto Aprendiz" className="h-14 w-40 object-contain brightness-0 invert" />
                 </div>
                 <button
                     type="button"

@@ -91,11 +91,29 @@ export function createStudentRoutes(context) {
       if (request.method === 'GET' && url.pathname === '/alunos') {
         if (!await authorize(request, response, ['gestor'])) return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
-        const page = Math.max(1, Number(url.searchParams.get('page') || 1));
-        const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') || 10)));
+        const page = Math.max(1, Math.min(100000, Math.trunc(Number(url.searchParams.get('page')) || 1)));
+        const limit = Math.min(50, Math.max(1, Math.trunc(Number(url.searchParams.get('limit')) || 10)));
         const search = `%${String(url.searchParams.get('search') || '').trim()}%`;
-        const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 WHERE classes.school_year_id=? AND students.active=1 AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?)`).get(period.id,search,search)).total;
-        const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?) AND EXISTS (SELECT 1 FROM enrollments selected_enrollments JOIN classes selected_classes ON selected_classes.id=selected_enrollments.class_id WHERE selected_enrollments.student_id=students.id AND selected_enrollments.status='ativa' AND selected_classes.active=1 AND selected_classes.school_year_id=?) GROUP BY students.id ORDER BY students.name LIMIT ? OFFSET ?`).all(period.id,search,search,period.id,limit,(page-1)*limit);
+        for (const key of ['church_id', 'turma_id']) {
+          const value = url.searchParams.get(key);
+          if (value && (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value)) || Number(value) < 1)) return json(response,400,{message:'Selecione filtros válidos.'});
+        }
+        const conditions = ["students.active=1", "(students.name LIKE ? OR COALESCE(students.email,'') LIKE ? OR COALESCE(students.phone,'') LIKE ?)"];
+        const params = [search, search, search];
+        for (const [param, column] of [['church_id', 'students.church_id'], ['classe', 'students.age_group']]) {
+          const value = url.searchParams.get(param);
+          if (value) { conditions.push(`${column}=?`); params.push(value); }
+        }
+        const enrollmentConditions = ["se.student_id=students.id", "se.status='ativa'", 'sc.active=1', 'sc.school_year_id=?'];
+        params.push(period.id);
+        for (const [param, column] of [['curso', 'selected_course.name'], ['turma_id', 'sc.id']]) {
+          const value = url.searchParams.get(param);
+          if (value) { enrollmentConditions.push(`${column}=?`); params.push(value); }
+        }
+        conditions.push(`EXISTS (SELECT 1 FROM enrollments se JOIN classes sc ON sc.id=se.class_id JOIN courses selected_course ON selected_course.id=sc.course_id WHERE ${enrollmentConditions.join(' AND ')})`);
+        const where = conditions.join(' AND ');
+        const total = (await db.prepare(`SELECT COUNT(*) AS total FROM students WHERE ${where}`).get(...params)).total;
+        const rows = await db.prepare(`${studentSelect} WHERE ${where} GROUP BY students.id ORDER BY students.name,students.id LIMIT ? OFFSET ?`).all(period.id,...params,limit,(page-1)*limit);
         return json(response, 200, { alunos: rows.map(studentView), total });
       }
     
@@ -135,6 +153,13 @@ export function createStudentRoutes(context) {
       }
     
       const studentMatch = url.pathname.match(/^\/alunos\/(\d+)$/);
+      if (studentMatch && request.method === 'GET') {
+        if (!await authorize(request, response, ['gestor'])) return;
+        const period = await selectedSchoolYear(request,response); if (!period) return;
+        const row = await db.prepare(`${studentSelect} WHERE students.id=? AND students.active=1 GROUP BY students.id`).get(period.id,Number(studentMatch[1]));
+        if (!row) return json(response,404,{message:'Aluno não encontrado.'});
+        return json(response,200,studentView(row));
+      }
       if (studentMatch && request.method === 'PUT') {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
