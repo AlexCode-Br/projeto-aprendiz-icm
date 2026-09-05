@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
-import ClassScheduleList from './ClassScheduleList';
+import CourseIcon from './CourseIcon';
+import { Church, MonitorPlay } from 'lucide-react';
+import { catalogKey } from '../../shared/catalog-options.mjs';
+import { catalogNameError, cleanText } from '../../shared/validation.mjs';
 
 const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLocais = [], allCursos = [] }) => {
-    const [formData, setFormData] = useState({ nome: '', local: '', professor: '', label: '', capacity: '' });
+    const [formData, setFormData] = useState({ nome: '', local: '', professor: '' });
     const [errors, setErrors] = useState({});
 
     useEffect(() => {
@@ -13,19 +16,19 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                 nome: curso.nome || '',
                 local: curso.local || '',
                 professor: curso.professor || '',
-                label: curso.label || '',
-                capacity: curso.capacity ?? '',
             });
         } else {
-            setFormData({ nome: '', local: '', professor: '', label: '', capacity: '' });
+            setFormData({ nome: '', local: '', professor: '' });
         }
         setErrors({});
     }, [curso, isOpen]);
 
     const validate = () => {
         const newErrors = {};
-        if (!formData.nome.trim()) newErrors.nome = 'O nome do curso é obrigatório.';
-        if (!formData.local) newErrors.local = 'A igreja é obrigatória.';
+        const courseError = catalogNameError(formData.nome, 'curso');
+        const locationError = catalogNameError(formData.local, 'local ou modalidade');
+        if (courseError) newErrors.nome = courseError;
+        if (locationError) newErrors.local = locationError;
         if (!formData.professor) newErrors.professor = 'O professor é obrigatório.';
         return newErrors;
     };
@@ -37,7 +40,11 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
             setErrors(validationErrors);
             return;
         }
-        onSave(formData);
+        onSave({
+            nome: cleanText(formData.nome, 100),
+            local: cleanText(formData.local, 100),
+            professor: formData.professor,
+        });
     };
 
     const handleChange = (e) => {
@@ -57,29 +64,39 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="nome" className="form-label">Nome do curso</label>
+                            <label htmlFor="nome" className="form-label">Curso ofertado</label>
                             <FormSelect
                                 name="nome"
                                 id="nome"
+                                allowCreate
                                 value={formData.nome}
                                 onChange={handleChange}
                                 options={allCursos}
-                                placeholder="Selecione um curso"
+                                placeholder="Selecione ou digite um curso"
                                 invalid={Boolean(errors.nome)}
+                                formatCreateLabel={value => `Usar “${cleanText(value, 100)}”`}
+                                isValidNewOption={value => !catalogNameError(value, 'curso') && !allCursos.some(option => catalogKey(option) === catalogKey(value))}
+                                formatOptionLabel={option => <span className="flex items-center gap-2"><CourseIcon name={option.value} className="!h-5 !w-5 shrink-0" /><span>{option.label}</span></span>}
                             />
+                            <p className="mt-1 text-xs text-text-muted">Escolha uma opção ou digite um curso que ainda não aparece na lista.</p>
                             {errors.nome && <p className="text-danger text-xs mt-1">{errors.nome}</p>}
                         </div>
                         <div>
-                            <label htmlFor="local" className="form-label">Igreja</label>
+                            <label htmlFor="local" className="form-label">Igreja ou modalidade</label>
                             <FormSelect
                                 name="local"
                                 id="local"
+                                allowCreate
                                 value={formData.local}
                                 onChange={handleChange}
                                 options={allLocais}
-                                placeholder="Selecione uma igreja"
+                                placeholder="Selecione uma igreja ou EAD"
                                 invalid={Boolean(errors.local)}
+                                formatCreateLabel={value => `Usar “${cleanText(value, 100)}”`}
+                                isValidNewOption={value => !catalogNameError(value, 'local ou modalidade') && !allLocais.some(option => catalogKey(option) === catalogKey(value))}
+                                formatOptionLabel={option => <span className="flex items-center gap-2">{catalogKey(option.value) === 'ead' ? <MonitorPlay aria-hidden="true" className="!h-5 !w-5 shrink-0" /> : <Church aria-hidden="true" className="!h-5 !w-5 shrink-0" />}<span>{option.label}</span></span>}
                             />
+                            <p className="mt-1 text-xs text-text-muted">Para aulas remotas, selecione <strong>EAD</strong>.</p>
                             {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
                         </div>
                         <div>
@@ -94,11 +111,6 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                                 invalid={Boolean(errors.professor)}
                             />
                             {errors.professor && <p className="text-danger text-xs mt-1">{errors.professor}</p>}
-                        </div>
-                        <div className="rounded-xl border border-border bg-surface-muted/50 p-4">
-                            <h3 className="mb-2 text-sm font-semibold">Dias e horários</h3>
-                            <div className="text-sm leading-6"><ClassScheduleList course={curso} /></div>
-                            <p className="mt-2 text-xs leading-5 text-text-muted">O professor define os dias e horários na área “Minhas turmas”.</p>
                         </div>
                     </div>
                     <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">

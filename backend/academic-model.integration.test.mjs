@@ -60,6 +60,27 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     const classes = await call(manager, 'GET', '/cursos');
     const offering = classes.data.cursos[0];
     assert.ok(offering);
+    const customOffering = await call(manager, 'POST', '/cursos', {
+      nome: 'Clarinete',
+      local: 'EAD',
+      professor: offering.professor,
+    });
+    assert.equal(customOffering.status, 201, JSON.stringify(customOffering.data));
+    const createdOffering = (await call(manager, 'GET', '/cursos')).data.cursos.find(item => item.id === customOffering.data.id);
+    assert.equal(createdOffering.nome, 'Clarinete');
+    assert.equal(createdOffering.local, 'EAD');
+    const catalogsAfterCreate = (await call(manager, 'GET', '/api/catalogos')).data;
+    assert.equal(catalogsAfterCreate.cursos.some(item => item.nome === 'Clarinete' && item.ativo), true);
+    assert.equal(catalogsAfterCreate.locais.some(item => item.nome === 'EAD' && item.ativo), true);
+    const customUpdate = await call(manager, 'PUT', `/cursos/${customOffering.data.id}`, {
+      nome: 'Oboé',
+      local: 'Mirantes de Periperi',
+      professor: offering.professor,
+    });
+    assert.equal(customUpdate.status, 200, JSON.stringify(customUpdate.data));
+    const updatedOffering = (await call(manager, 'GET', '/cursos')).data.cursos.find(item => item.id === customOffering.data.id);
+    assert.equal(updatedOffering.nome, 'Oboé');
+    assert.equal(updatedOffering.local, 'Mirantes de Periperi');
     const church = await call(manager, 'POST', '/api/churches', { nome: 'Igreja Modelo Acadêmico' });
     assert.equal(church.status, 201, JSON.stringify(church.data));
 

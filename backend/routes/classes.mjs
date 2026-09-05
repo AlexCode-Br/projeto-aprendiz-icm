@@ -16,6 +16,18 @@ export function createClassRoutes(context) {
     notificationService,
   } = context;
 
+  const ensureActiveCatalogItem = async (table, name) => {
+    const existing = await db.prepare(`SELECT id,active FROM ${table} WHERE LOWER(name)=LOWER(?)`).get(name);
+    if (existing) {
+      if (Number(existing.active) !== 1) await db.prepare(`UPDATE ${table} SET name=?,active=1 WHERE id=?`).run(name, existing.id);
+      return Number(existing.id);
+    }
+    await db.prepare(`INSERT INTO ${table} (name,active) VALUES (?,1) ON CONFLICT(name) DO UPDATE SET active=1`).run(name);
+    const saved = await db.prepare(`SELECT id FROM ${table} WHERE LOWER(name)=LOWER(?)`).get(name);
+    if (!saved) throw new Error(`catalog_item_not_saved:${table}`);
+    return Number(saved.id);
+  };
+
   return async function classRoutes(request, response, url, ip) {
       const catalogMatch = url.pathname.match(/^\/api\/catalogos\/(cursos|locais)(?:\/(\d+))?$/);
       if (catalogMatch && ['POST', 'PUT', 'DELETE'].includes(request.method)) {
@@ -112,22 +124,24 @@ export function createClassRoutes(context) {
         const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
         const errors = {
           nome: catalogNameError(courseName, 'curso'),
-          local: locationName ? '' : 'Selecione uma igreja cadastrada.',
+          local: catalogNameError(locationName, 'local ou modalidade'),
           professor: professorName ? '' : 'Selecione um professor cadastrado.',
           ...validateClassDetails({ weekday, start_time: startTime,label:classLabel,capacity }),
         };
         if (hasValidationErrors(errors)) return invalid(response, errors);
         const professor = await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
         if (!professor) return json(response, 400, { message: 'Professor não encontrado.' });
-        const course = await db.prepare('SELECT id FROM courses WHERE name=? AND active=1').get(courseName);
-        const location = await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
-        if (!course || !location) return json(response, 400, { message: 'Selecione somente cursos e locais ativos cadastrados pelo gestor.' });
         try {
-          const result=await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,weekday,start_time,capacity) VALUES (?,?,?,?,?,?,?,?)').run(period.id,course.id,professor.id,location.id,classLabel||`${courseName} — ${locationName}`,weekday||null,startTime||null,capacity);
-          await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_created',ip);
-          await notificationService.notifyProfessor(professor.id,'courseUpdates','Nova turma atribuída',`A turma ${classLabel||courseName}, em ${locationName}, foi atribuída a você.`,`class-created/${Number(result.lastInsertRowid)}`);
-          await notificationService.notifyManagers('courseUpdates','Nova turma cadastrada',`${session.name} cadastrou a turma ${classLabel||courseName}, em ${locationName}.`,`class-created/${Number(result.lastInsertRowid)}`);
-          return json(response,201,{id:Number(result.lastInsertRowid)});
+          const classId = await db.transaction(async () => {
+            const courseId = await ensureActiveCatalogItem('courses', courseName);
+            const locationId = await ensureActiveCatalogItem('locations', locationName);
+            const result=await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,weekday,start_time,capacity) VALUES (?,?,?,?,?,?,?,?)').run(period.id,courseId,professor.id,locationId,classLabel||`${courseName} — ${locationName}`,weekday||null,startTime||null,capacity);
+            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_created',ip);
+            return Number(result.lastInsertRowid);
+          });
+          await notificationService.notifyProfessor(professor.id,'courseUpdates','Nova turma atribuída',`A turma ${classLabel||courseName}, em ${locationName}, foi atribuída a você.`,`class-created/${classId}`);
+          await notificationService.notifyManagers('courseUpdates','Nova turma cadastrada',`${session.name} cadastrou a turma ${classLabel||courseName}, em ${locationName}.`,`class-created/${classId}`);
+          return json(response,201,{id:classId});
         } catch (error) {
           if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response,409,{message:'Esta turma já existe.'});
           throw error;
@@ -141,20 +155,31 @@ export function createClassRoutes(context) {
         if (body.weekday || body.start_time || body.horarios !== undefined) return json(response,403,{message:'Os dias e horários são definidos pelo professor da turma.'});
         const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
         const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
-        const errors={nome:catalogNameError(courseName,'curso'),local:locationName?'':'Selecione uma igreja cadastrada.',professor:professorName?'':'Selecione um professor cadastrado.',...validateClassDetails({weekday,start_time:startTime,label:classLabel,capacity})};
+        const errors={nome:catalogNameError(courseName,'curso'),local:catalogNameError(locationName,'local ou modalidade'),professor:professorName?'':'Selecione um professor cadastrado.',...validateClassDetails({weekday,start_time:startTime,label:classLabel,capacity})};
         if(hasValidationErrors(errors))return invalid(response,errors);
         const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
         if(!professor)return json(response,400,{message:'Professor não encontrado.'});
-        const course=await db.prepare('SELECT id FROM courses WHERE name=? AND active=1').get(courseName),location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
-        if(!course||!location)return json(response,400,{message:'Selecione somente cursos e locais ativos cadastrados pelo gestor.'});
-        if(capacity!==null){const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(id);if(Number(occupied.total)>capacity)return invalid(response,{capacity:`A capacidade não pode ser menor que os ${occupied.total} aluno(s) já matriculados.`});}
+        const existingClass=await db.prepare(`SELECT classes.id,classes.label,classes.capacity,courses.name AS course_name,locations.name AS location_name
+          FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id
+          WHERE classes.id=? AND classes.school_year_id=?`).get(id,period.id);
+        if(!existingClass)return json(response,404,{message:'Turma não encontrada.'});
+        const generatedPreviousLabel=`${existingClass.course_name} — ${existingClass.location_name}`;
+        const nextLabel=body.label===undefined
+          ? (existingClass.label===generatedPreviousLabel?`${courseName} — ${locationName}`:existingClass.label)
+          : classLabel||`${courseName} — ${locationName}`;
+        const nextCapacity=body.capacity===undefined?existingClass.capacity:capacity;
+        if(nextCapacity!==null){const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(id);if(Number(occupied.total)>nextCapacity)return invalid(response,{capacity:`A capacidade não pode ser menor que os ${occupied.total} aluno(s) já matriculados.`});}
         try{
-          const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,capacity=? WHERE id=? AND school_year_id=?').run(course.id,professor.id,location.id,classLabel||`${courseName} — ${locationName}`,capacity,id,period.id);
-          if(!result.changes)return json(response,404,{message:'Turma não encontrada.'});
+          await db.transaction(async () => {
+            const courseId = await ensureActiveCatalogItem('courses', courseName);
+            const locationId = await ensureActiveCatalogItem('locations', locationName);
+            const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,capacity=? WHERE id=? AND school_year_id=?').run(courseId,professor.id,locationId,nextLabel,nextCapacity,id,period.id);
+            if(!result.changes)throw new Error('class_update_lost');
+            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
+          });
         }catch(error){if(duplicateError(error))return json(response,409,{message:'Esta turma já existe.'});throw error;}
-        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
-        await notificationService.notifyProfessor(professor.id,'courseUpdates','Turma atualizada',`A turma ${classLabel||courseName}, em ${locationName}, teve seus dados atualizados.`,`class-updated/${id}/${Date.now()}`);
-        await notificationService.notifyManagers('courseUpdates','Turma atualizada',`${session.name} atualizou a turma ${classLabel||courseName}, em ${locationName}.`,`class-updated/${id}/${Date.now()}`);
+        await notificationService.notifyProfessor(professor.id,'courseUpdates','Turma atualizada',`A turma ${nextLabel||courseName}, em ${locationName}, teve seus dados atualizados.`,`class-updated/${id}/${Date.now()}`);
+        await notificationService.notifyManagers('courseUpdates','Turma atualizada',`${session.name} atualizou a turma ${nextLabel||courseName}, em ${locationName}.`,`class-updated/${id}/${Date.now()}`);
         return json(response,200,{success:true});
       }
       if(courseMatch&&request.method==='DELETE'){

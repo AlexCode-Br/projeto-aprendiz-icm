@@ -4,7 +4,7 @@ export const COURSE_SUGGESTIONS = Object.freeze([
   'Teclado', 'Teoria Musical', 'Violino', 'Violão I', 'Violão II',
 ]);
 export const CHURCH_SUGGESTIONS = Object.freeze([
-  'Alto de Coutos', 'Boca do Rio', 'Brotas', 'Guarani', 'Lauro de Freitas', 'Pituba', 'Remoto',
+  'Alto de Coutos', 'Boca do Rio', 'Brotas', 'Guarani', 'Lauro de Freitas', 'Pituba', 'EAD', 'Remoto',
 ]);
 
 export const catalogKey = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');

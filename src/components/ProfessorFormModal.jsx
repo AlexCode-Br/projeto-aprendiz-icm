@@ -61,7 +61,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'} maxWidth="max-w-2xl">
             <form onSubmit={handleSubmit} noValidate>
-                {!catalogsReady && <div className="alert-warning mb-4" role="alert">Cadastre pelo menos um curso e uma igreja na área “Cursos e igrejas” antes de adicionar professores.</div>}
+                {!catalogsReady && <div className="alert-warning mb-4" role="alert">Não há cursos e igrejas disponíveis nas turmas atuais. Cadastre ou ajuste uma turma antes de adicionar professores.</div>}
                 <div className="space-y-4">
                     <ProfilePhotoPicker name={formData.nome} currentUrl={professor?.foto_url || ''} value={photoChange} onChange={setPhotoChange} disabled={isSubmitting} />
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
