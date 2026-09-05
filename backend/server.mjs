@@ -515,6 +515,21 @@ if (db.dialect === 'sqlite') {
     CREATE UNIQUE INDEX IF NOT EXISTS classes_distinct_offering_unique ON classes(school_year_id,course_id,professor_id,location_id,LOWER(COALESCE(label,'')),COALESCE(weekday,''),COALESCE(start_time,''));
     CREATE INDEX IF NOT EXISTS classes_course_id_idx ON classes(course_id);
   `);
+  const remoteLocation=await db.prepare("SELECT id FROM locations WHERE LOWER(TRIM(name))='remoto' ORDER BY id LIMIT 1").get();
+  if(remoteLocation){
+    const eadLocation=await db.prepare("SELECT id FROM locations WHERE LOWER(TRIM(name))='ead' AND id<>? ORDER BY id LIMIT 1").get(remoteLocation.id);
+    await db.transaction(async()=>{
+      if(eadLocation){
+        await db.prepare("UPDATE classes SET location_id=?,label=CASE WHEN label IS NULL THEN NULL ELSE REPLACE(label,'Remoto','EAD') END WHERE location_id=?").run(eadLocation.id,remoteLocation.id);
+        await db.prepare('UPDATE professor_profiles SET home_location_id=? WHERE home_location_id=?').run(eadLocation.id,remoteLocation.id);
+        await db.prepare('DELETE FROM locations WHERE id=?').run(remoteLocation.id);
+        await db.prepare("UPDATE locations SET name='EAD',active=1 WHERE id=?").run(eadLocation.id);
+      }else{
+        await db.prepare("UPDATE locations SET name='EAD',active=1 WHERE id=?").run(remoteLocation.id);
+        await db.prepare("UPDATE classes SET label=REPLACE(label,'Remoto','EAD') WHERE location_id=? AND label IS NOT NULL").run(remoteLocation.id);
+      }
+    });
+  }
 
   const enrollmentColumns=await db.prepare('PRAGMA table_info(enrollments)').all();
   if(!enrollmentColumns.some(column=>column.name==='completed_at'))await db.exec('ALTER TABLE enrollments ADD COLUMN completed_at TEXT;');
@@ -588,7 +603,7 @@ if (!seedDemoData && !(await db.prepare('SELECT id FROM users LIMIT 1').get())) 
 async function seedAcademicData() {
   const schoolYear = await db.prepare('SELECT id FROM school_years WHERE active=1 ORDER BY id DESC LIMIT 1').get();
   if (!schoolYear) throw new Error('Nenhum período letivo ativo foi configurado.');
-  const locationNames = ['Pituba', 'Brotas', 'Lauro de Freitas', 'Guarani', 'Boca do Rio', 'Alto de Coutos', 'Remoto'];
+  const locationNames = ['Pituba', 'Brotas', 'Lauro de Freitas', 'Guarani', 'Boca do Rio', 'Alto de Coutos', 'EAD'];
   const courseNames = ['Violão I', 'Teclado', 'Bateria', 'Canto Coral', 'Violino', 'Flauta Transversal', 'Saxofone', 'Contrabaixo', 'Violão II', 'Teoria Musical'];
   for (const name of locationNames) await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(name);
   for (const name of courseNames) await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(name);
@@ -611,7 +626,7 @@ async function seedAcademicData() {
     ['Bateria','Lauro de Freitas','Carlos Souza'], ['Canto Coral','Pituba','Ana Costa'],
     ['Violino','Brotas','Pedro Santos'], ['Flauta Transversal','Boca do Rio','Marina Oliveira'],
     ['Saxofone','Brotas','Pedro Santos'], ['Contrabaixo','Alto de Coutos','Carlos Souza'],
-    ['Violão II','Pituba','João Silva'], ['Teoria Musical','Remoto','Marina Oliveira'],
+    ['Violão II','Pituba','João Silva'], ['Teoria Musical','EAD','Marina Oliveira'],
   ];
   for (const [course,location,professor] of offerings) {
     const courseId = (await db.prepare('SELECT id FROM courses WHERE name = ?').get(course)).id;
@@ -629,7 +644,7 @@ async function seedAcademicData() {
     ['Lucas Guimarães','lucas.guimaraes@email.com','(71) 94465-5484','ICM Brotas','Adolescente',1,'Violino','Brotas'],
     ['Gabriela Santos','gabriela.santos@email.com','(71) 93376-6595','ICM Boca do Rio','Jovem',1,'Flauta Transversal','Boca do Rio'],
     ['Rafael Souza','rafael.souza@email.com','(71) 92287-7606','ICM Alto de Coutos','Varão',1,'Contrabaixo','Alto de Coutos'],
-    ['Juliana Costa','juliana.costa@email.com','(71) 91198-8717','ICM Remoto','Senhora',0,'Teoria Musical','Remoto'],
+    ['Juliana Costa','juliana.costa@email.com','(71) 91198-8717','ICM Pituba','Senhora',0,'Teoria Musical','EAD'],
     ['Ricardo Alves','ricardo.alves@email.com','(71) 90019-9828','ICM Pituba','Varão',1,'Violão II','Pituba'],
     ['Camila Rocha','camila.rocha@email.com','(71) 98920-0939','ICM Brotas','Jovem',1,'Saxofone','Brotas'],
     ['Bruno Lima','bruno.lima@email.com','(71) 97831-1050','ICM Pituba','Adolescente',0,'Violão I','Pituba'],

@@ -4,7 +4,7 @@ export const COURSE_SUGGESTIONS = Object.freeze([
   'Teclado', 'Teoria Musical', 'Violino', 'Violão I', 'Violão II',
 ]);
 export const CHURCH_SUGGESTIONS = Object.freeze([
-  'Alto de Coutos', 'Boca do Rio', 'Brotas', 'Guarani', 'Lauro de Freitas', 'Pituba', 'EAD', 'Remoto',
+  'Alto de Coutos', 'Boca do Rio', 'Brotas', 'Guarani', 'Lauro de Freitas', 'Pituba', 'EAD',
 ]);
 export const STUDENT_CHURCH_SUGGESTIONS = Object.freeze([
   'Alto de Coutos', 'Boca do Rio', 'Brotas', 'Guarani', 'Jardim Valéria',
