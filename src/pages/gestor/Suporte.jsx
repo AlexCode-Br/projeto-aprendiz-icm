@@ -1,7 +1,7 @@
 import FormSelect from '../../components/FormSelect';
 import SearchInput from '../../components/SearchInput';
 import { Trash2 } from 'lucide-react';
-import React, { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import Modal from '../../components/Modal';
@@ -10,6 +10,7 @@ import api from '../../services/api';
 import { SUPPORT_STATUSES } from '../../../shared/validation.mjs';
 
 const filters = ['Todos','Abertos','Em atendimento','Resolvidos','Não lidos'];
+const isSameTicket = (left,right) => left != null && right != null && String(left) === String(right);
 
 const Suporte = () => {
   const { user } = useContext(AuthContext);
@@ -26,7 +27,10 @@ const Suporte = () => {
   const [sending,setSending]=useState(false);
   const [updating,setUpdating]=useState(false);
   const [deleteOpen,setDeleteOpen]=useState(false);
+  const [deleteTargetId,setDeleteTargetId]=useState(null);
   const [deleting,setDeleting]=useState(false);
+  const selectedIdRef=useRef(null);
+  const detailRequestRef=useRef(0);
 
   const query=useMemo(()=>({
     search:search.trim()||undefined,
@@ -47,37 +51,64 @@ const Suporte = () => {
   },[query,showToast]);
 
   const fetchDetail=useCallback(async(ticketId,{silent=false}={})=>{
-    if(!ticketId)return;
+    if(!ticketId||!isSameTicket(selectedIdRef.current,ticketId))return;
+    const requestId=++detailRequestRef.current;
     if(!silent)setDetailLoading(true);
     try{
       const response=await api.get(`/api/suporte/${ticketId}`);
+      if(requestId!==detailRequestRef.current||!isSameTicket(selectedIdRef.current,ticketId))return;
       setDetail(response.data);
       setDetailError('');
       const lastMessageId=response.data.messages.at(-1)?.id;
       await api.post(`/api/suporte/${ticketId}/lido`,lastMessageId?{last_message_id:lastMessageId}:{});
+      if(requestId!==detailRequestRef.current||!isSameTicket(selectedIdRef.current,ticketId))return;
       setTickets(current=>current.map(ticket=>Number(ticket.id)===Number(ticketId)?{...ticket,nao_lidas:0}:ticket));
       window.dispatchEvent(new Event('support:updated'));
     }catch(requestError){
+      if(requestId!==detailRequestRef.current||!isSameTicket(selectedIdRef.current,ticketId))return;
       setDetailError(requestError.response?.status===404?'Este chamado não está mais disponível.':'Não foi possível atualizar esta conversa.');
       if(!silent)showToast(requestError.message||'Erro ao abrir chamado.','error');
-    }finally{if(!silent)setDetailLoading(false);}
+    }finally{
+      if(requestId===detailRequestRef.current&&isSameTicket(selectedIdRef.current,ticketId))setDetailLoading(false);
+    }
   },[showToast]);
 
   useEffect(()=>{const timer=setTimeout(()=>fetchTickets(),250);return()=>clearTimeout(timer);},[fetchTickets]);
+  useEffect(()=>()=>{selectedIdRef.current=null;detailRequestRef.current+=1;},[]);
   useEffect(()=>{
-    const refresh=()=>{fetchTickets({silent:true});if(selectedId)fetchDetail(selectedId,{silent:true});};
+    const refresh=()=>{const ticketId=selectedIdRef.current;fetchTickets({silent:true});if(ticketId)fetchDetail(ticketId,{silent:true});};
     const interval=setInterval(refresh,15000);
     window.addEventListener('focus',refresh);
     return()=>{clearInterval(interval);window.removeEventListener('focus',refresh);};
-  },[fetchTickets,fetchDetail,selectedId]);
+  },[fetchTickets,fetchDetail]);
 
-  const openTicket=async ticketId=>{setSelectedId(ticketId);setDetail(null);await fetchDetail(ticketId);};
+  const openTicket=async ticketId=>{
+    selectedIdRef.current=ticketId;
+    detailRequestRef.current+=1;
+    setSelectedId(ticketId);
+    setDetail(null);
+    setDetailError('');
+    await fetchDetail(ticketId);
+  };
 
-  const sendReply=async(message,clientMessageId)=>{
+  const closeTicket=()=>{
+    selectedIdRef.current=null;
+    detailRequestRef.current+=1;
+    setSelectedId(null);
+    setDetail(null);
+    setDetailError('');
+    setDetailLoading(false);
+  };
+
+  const sendReply=async(ticketId,message,clientMessageId)=>{
+    if(!ticketId)return;
     setSending(true);
     try{
-      await api.post(`/api/suporte/${selectedId}/responder`,{mensagem:message,client_message_id:clientMessageId});
-      await Promise.all([fetchDetail(selectedId,{silent:true}),fetchTickets({silent:true})]);
+      await api.post(`/api/suporte/${ticketId}/responder`,{mensagem:message,client_message_id:clientMessageId});
+      await Promise.all([
+        isSameTicket(selectedIdRef.current,ticketId)?fetchDetail(ticketId,{silent:true}):Promise.resolve(),
+        fetchTickets({silent:true}),
+      ]);
       window.dispatchEvent(new Event('support:updated'));
     }catch(requestError){
       showToast(requestError.message||'Não foi possível enviar a resposta. O texto foi preservado.','error');
@@ -85,23 +116,28 @@ const Suporte = () => {
     }finally{setSending(false);}
   };
 
-  const updateTicket=async(value)=>{
-    if(!selectedId||updating)return;
+  const updateTicket=async(ticketId,value)=>{
+    if(!ticketId||updating)return;
     setUpdating(true);
     try{
-      await api.put(`/api/suporte/${selectedId}/status`,{status:value});
-      await Promise.all([fetchDetail(selectedId,{silent:true}),fetchTickets({silent:true})]);
+      await api.put(`/api/suporte/${ticketId}/status`,{status:value});
+      await Promise.all([
+        isSameTicket(selectedIdRef.current,ticketId)?fetchDetail(ticketId,{silent:true}):Promise.resolve(),
+        fetchTickets({silent:true}),
+      ]);
       window.dispatchEvent(new Event('support:updated'));
     }catch(requestError){showToast(requestError.message||'Não foi possível atualizar o chamado.','error');}
     finally{setUpdating(false);}
   };
 
   const deleteTicket=async()=>{
-    if(!selectedId||deleting)return;
+    const ticketId=deleteTargetId;
+    if(!ticketId||deleting)return;
     setDeleting(true);
     try{
-      await api.delete(`/api/suporte/${selectedId}`);
-      setDeleteOpen(false);setSelectedId(null);setDetail(null);
+      await api.delete(`/api/suporte/${ticketId}`);
+      setDeleteOpen(false);setDeleteTargetId(null);
+      if(isSameTicket(selectedIdRef.current,ticketId))closeTicket();
       await fetchTickets({silent:true});
       window.dispatchEvent(new Event('support:updated'));
       showToast('Chamado apagado definitivamente.','success');
@@ -117,8 +153,8 @@ const Suporte = () => {
 
   const actions=detail?.ticket?<>
     <label className="sr-only" htmlFor="support-status">Status do chamado</label>
-    <FormSelect id="support-status" className="min-w-44" value={detail.ticket.status} isDisabled={updating} isClearable={false} isSearchable={false} onChange={event => updateTicket(event.target.value)} options={SUPPORT_STATUSES} />
-    <button type="button" onClick={()=>setDeleteOpen(true)} className="btn btn-secondary min-h-9 border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10" aria-label="Apagar chamado"><Trash2 aria-hidden="true" />Apagar chamado</button>
+    <FormSelect id="support-status" className="min-w-44" value={detail.ticket.status} isDisabled={updating} isClearable={false} isSearchable={false} onChange={event => updateTicket(detail.ticket.id,event.target.value)} options={SUPPORT_STATUSES} />
+    <button type="button" onClick={()=>{setDeleteTargetId(detail.ticket.id);setDeleteOpen(true);}} className="btn btn-secondary min-h-9 border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10" aria-label="Apagar chamado"><Trash2 aria-hidden="true" />Apagar chamado</button>
   </>:null;
 
   return <>
@@ -146,13 +182,13 @@ const Suporte = () => {
         <div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={tickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor"/></div>
       </aside>
       <div className={`${selectedId?'block':'hidden lg:block'}`}>
-        <SupportConversation detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedId)} onBack={()=>setSelectedId(null)} onSend={sendReply} sending={sending} actions={actions}/>
+        <SupportConversation detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedIdRef.current)} onBack={closeTicket} onSend={sendReply} sending={sending} actions={actions}/>
       </div>
     </div>
-    <Modal isOpen={deleteOpen} onClose={()=>{if(!deleting)setDeleteOpen(false);}} title="Apagar chamado?" maxWidth="max-w-md">
+    <Modal isOpen={deleteOpen} onClose={()=>{if(!deleting){setDeleteOpen(false);setDeleteTargetId(null);}}} title="Apagar chamado?" maxWidth="max-w-md">
       <div className="space-y-4">
         <p className="text-sm leading-6 text-text-muted">Esta ação apagará permanentemente o chamado, todas as mensagens e o histórico de status. Professores não têm acesso a esta ação.</p>
-        <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end"><button type="button" className="btn btn-secondary" disabled={deleting} onClick={()=>setDeleteOpen(false)}>Cancelar</button><button type="button" className="btn btn-danger" disabled={deleting} onClick={deleteTicket}>{deleting?'Apagando...':'Apagar definitivamente'}</button></div>
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end"><button type="button" className="btn btn-secondary" disabled={deleting} onClick={()=>{setDeleteOpen(false);setDeleteTargetId(null);}}>Cancelar</button><button type="button" className="btn btn-danger" disabled={deleting} onClick={deleteTicket}>{deleting?'Apagando...':'Apagar definitivamente'}</button></div>
       </div>
     </Modal>
   </>;

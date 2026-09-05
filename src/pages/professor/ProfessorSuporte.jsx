@@ -8,6 +8,8 @@ import { SupportConversation, SupportTicketList } from '../../components/support
 import api from '../../services/api';
 import { SUPPORT_CATEGORIES, validateSupportTicket } from '../../../shared/validation.mjs';
 
+const isSameTicket = (left,right) => left != null && right != null && String(left) === String(right);
+
 const NewTicketModal=({isOpen,onClose,onCreated})=>{
   const {showToast}=useToast();
   const [form,setForm]=useState({assunto:'',categoria:'',mensagem:''});
@@ -58,6 +60,8 @@ const ProfessorSuporte=()=>{
   const [detailError,setDetailError]=useState('');
   const [sending,setSending]=useState(false);
   const [newTicketOpen,setNewTicketOpen]=useState(false);
+  const selectedIdRef=useRef(null);
+  const detailRequestRef=useRef(0);
 
   const query=useMemo(()=>({status:filter==='Ativos'?undefined:filter==='Resolvidos'?'Resolvido':undefined,unread:filter==='Não lidos'?'1':undefined}),[filter]);
   const fetchTickets=useCallback(async({silent=false}={})=>{
@@ -71,30 +75,59 @@ const ProfessorSuporte=()=>{
   },[filter,query,showToast]);
 
   const fetchDetail=useCallback(async(ticketId,{silent=false}={})=>{
-    if(!ticketId)return;if(!silent)setDetailLoading(true);
+    if(!ticketId||!isSameTicket(selectedIdRef.current,ticketId))return;
+    const requestId=++detailRequestRef.current;
+    if(!silent)setDetailLoading(true);
     try{
-      const response=await api.get(`/api/suporte/${ticketId}`);setDetail(response.data);setDetailError('');
+      const response=await api.get(`/api/suporte/${ticketId}`);
+      if(requestId!==detailRequestRef.current||!isSameTicket(selectedIdRef.current,ticketId))return;
+      setDetail(response.data);setDetailError('');
       const lastMessageId=response.data.messages.at(-1)?.id;
       await api.post(`/api/suporte/${ticketId}/lido`,lastMessageId?{last_message_id:lastMessageId}:{});
+      if(requestId!==detailRequestRef.current||!isSameTicket(selectedIdRef.current,ticketId))return;
       setTickets(current=>current.map(ticket=>Number(ticket.id)===Number(ticketId)?{...ticket,nao_lidas:0}:ticket));
       window.dispatchEvent(new Event('support:updated'));
-    }catch(requestError){setDetailError(requestError.response?.status===404?'Este chamado não está disponível.':'Não foi possível atualizar esta conversa.');if(!silent)showToast(requestError.message||'Erro ao abrir chamado.','error');}
-    finally{if(!silent)setDetailLoading(false);}
+    }catch(requestError){
+      if(requestId!==detailRequestRef.current||!isSameTicket(selectedIdRef.current,ticketId))return;
+      setDetailError(requestError.response?.status===404?'Este chamado não está disponível.':'Não foi possível atualizar esta conversa.');if(!silent)showToast(requestError.message||'Erro ao abrir chamado.','error');
+    }finally{
+      if(requestId===detailRequestRef.current&&isSameTicket(selectedIdRef.current,ticketId))setDetailLoading(false);
+    }
   },[showToast]);
 
   useEffect(()=>{fetchTickets();},[fetchTickets]);
+  useEffect(()=>()=>{selectedIdRef.current=null;detailRequestRef.current+=1;},[]);
   useEffect(()=>{
-    const refresh=()=>{fetchTickets({silent:true});if(selectedId)fetchDetail(selectedId,{silent:true});};
+    const refresh=()=>{const ticketId=selectedIdRef.current;fetchTickets({silent:true});if(ticketId)fetchDetail(ticketId,{silent:true});};
     const interval=setInterval(refresh,15000);window.addEventListener('focus',refresh);
     return()=>{clearInterval(interval);window.removeEventListener('focus',refresh);};
-  },[fetchTickets,fetchDetail,selectedId]);
+  },[fetchTickets,fetchDetail]);
 
-  const openTicket=async ticketId=>{setSelectedId(ticketId);setDetail(null);await fetchDetail(ticketId);};
-  const sendReply=async(message,clientMessageId)=>{
+  const openTicket=async ticketId=>{
+    selectedIdRef.current=ticketId;
+    detailRequestRef.current+=1;
+    setSelectedId(ticketId);
+    setDetail(null);
+    setDetailError('');
+    await fetchDetail(ticketId);
+  };
+  const closeTicket=()=>{
+    selectedIdRef.current=null;
+    detailRequestRef.current+=1;
+    setSelectedId(null);
+    setDetail(null);
+    setDetailError('');
+    setDetailLoading(false);
+  };
+  const sendReply=async(ticketId,message,clientMessageId)=>{
+    if(!ticketId)return;
     setSending(true);
     try{
-      await api.post(`/api/suporte/${selectedId}/responder`,{mensagem:message,client_message_id:clientMessageId});
-      await Promise.all([fetchDetail(selectedId,{silent:true}),fetchTickets({silent:true})]);
+      await api.post(`/api/suporte/${ticketId}/responder`,{mensagem:message,client_message_id:clientMessageId});
+      await Promise.all([
+        isSameTicket(selectedIdRef.current,ticketId)?fetchDetail(ticketId,{silent:true}):Promise.resolve(),
+        fetchTickets({silent:true}),
+      ]);
       window.dispatchEvent(new Event('support:updated'));
     }catch(requestError){showToast(requestError.message||'Não foi possível enviar. O texto foi preservado.','error');throw requestError;}
     finally{setSending(false);}
@@ -107,7 +140,7 @@ const ProfessorSuporte=()=>{
     {error&&<div className="alert-error mb-4 flex items-center justify-between gap-3" role="alert"><span>{error}</span><button type="button" onClick={()=>fetchTickets()} className="font-semibold underline">Tentar novamente</button></div>}
     <div className="panel grid min-h-[38rem] overflow-hidden lg:grid-cols-[minmax(19rem,0.82fr)_minmax(0,1.7fr)]">
       <aside className={`${selectedId?'hidden lg:block':'block'} border-r-0 border-border lg:border-r`} aria-label="Meus chamados"><div className="border-b border-border px-5 py-4"><h2 className="font-bold text-text-default">Meus chamados</h2><p className="mt-1 text-xs text-text-muted">Respostas novas aparecem primeiro.</p></div><div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={tickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Você não possui respostas não lidas.':'Você ainda não possui chamados.'} role="professor"/></div>{!loading&&!tickets.length&&filter!=='Não lidos'&&<div className="border-t border-border p-4"><button type="button" onClick={()=>setNewTicketOpen(true)} className="btn btn-primary w-full">Criar primeiro chamado</button></div>}</aside>
-      <div className={`${selectedId?'block':'hidden lg:block'}`}><SupportConversation detail={detail} currentUserId={user?.id} currentRole="professor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedId)} onBack={()=>setSelectedId(null)} onSend={sendReply} sending={sending}/></div>
+      <div className={`${selectedId?'block':'hidden lg:block'}`}><SupportConversation detail={detail} currentUserId={user?.id} currentRole="professor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedIdRef.current)} onBack={closeTicket} onSend={sendReply} sending={sending}/></div>
     </div>
     <NewTicketModal isOpen={newTicketOpen} onClose={()=>setNewTicketOpen(false)} onCreated={created}/>
   </>;

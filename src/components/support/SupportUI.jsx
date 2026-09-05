@@ -84,7 +84,7 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
     setClientMessageId(requestId);
     sendingRef.current=true;
     try{
-      await onSend(message,requestId);
+      await onSend(ticket.id,message,requestId);
       setDraft('');
       setClientMessageId('');
     }catch{

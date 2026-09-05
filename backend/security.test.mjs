@@ -1,6 +1,27 @@
 import assert from 'node:assert/strict';
+import { Readable } from 'node:stream';
 import test from 'node:test';
-import { createSlidingWindowRateLimiter, opaqueRateLimitKey } from './security.mjs';
+import { createHttpSecurity, createSlidingWindowRateLimiter, opaqueRateLimitKey, readJson } from './security.mjs';
+
+test('JSON é limitado em bytes e precisa ser um objeto válido', async () => {
+  assert.deepEqual(await readJson(Readable.from(['{"ok":true}'])), { ok: true });
+  await assert.rejects(
+    readJson(Readable.from([Buffer.from('{"texto":"áá"}', 'utf8')]), 14),
+    error => error.code === 'PAYLOAD_TOO_LARGE',
+  );
+  for (const invalid of ['{"incompleto":', 'null', '"texto"', '42', '[]']) {
+    await assert.rejects(
+      readJson(Readable.from([invalid])),
+      error => error.code === 'INVALID_JSON',
+    );
+  }
+});
+
+test('cookie malformado é ignorado sem descartar os pares válidos', () => {
+  const { cookies } = createHttpSecurity({ isProduction: false, appOrigin: 'http://localhost' });
+  const request = { headers: { cookie: 'pa_session=sessao%20valida; quebrado=%; tema=claro' } };
+  assert.deepEqual(cookies(request), { pa_session: 'sessao valida', tema: 'claro' });
+});
 
 test('limitador usa janela deslizante e libera após o período', () => {
   let now = 1_000;
@@ -34,4 +55,3 @@ test('limites por IP e e-mail permanecem independentes', () => {
   assert.equal(limiter.consume({ key: emailKey, limit: 5, windowMs: 60_000 }).blocked, true);
   assert.equal(limiter.consume({ key: ipKey, limit: 20, windowMs: 60_000 }).blocked, false);
 });
-

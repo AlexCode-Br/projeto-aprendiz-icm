@@ -1,6 +1,6 @@
 import PageSkeleton from '../../components/PageSkeleton';
 import { Eye as DetailsIcon, Pencil as EditIcon, Trash2 as DeleteIcon, Mail as InviteIcon } from 'lucide-react';
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import ProfessorFormModal from '../../components/ProfessorFormModal';
 import ProfessorDetailsModal from '../../components/ProfessorDetailsModal';
 import ProfessorDeletionImpactModal from '../../components/ProfessorDeletionImpactModal';
@@ -34,10 +34,12 @@ const Professores = () => {
     const [isImpactModalOpen, setImpactModalOpen] = useState(false);
     const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
     const [currentProfessor, setCurrentProfessor] = useState(null);
-    const [deletionImpact, setDeletionImpact] = useState(null);
+    const [deletionContext, setDeletionContext] = useState(null);
     const [isLoadingImpact, setLoadingImpact] = useState(false);
     const [isDeleting, setDeleting] = useState(false);
     const [resendingProfessorId, setResendingProfessorId] = useState(null);
+    const impactRequestRef = useRef(0);
+    const deletionImpact = deletionContext?.impact || null;
 
     const fetchProfessores = useCallback(async () => {
         setLoadError('');
@@ -65,24 +67,46 @@ const Professores = () => {
     };
 
     const handleOpenDeleteImpact = async (prof) => {
-        setCurrentProfessor(prof);
-        setDeletionImpact(null);
+        const requestId = ++impactRequestRef.current;
+        setDeletionContext({ professor: prof, impact: null });
         setImpactModalOpen(true);
         setLoadingImpact(true);
         try {
             const response = await api.get(`/professores/${prof.id}/impacto-exclusao`);
-            setDeletionImpact(response.data);
+            if (requestId !== impactRequestRef.current) return;
+            if (Number(response.data?.professor?.id) !== Number(prof.id)) {
+                throw new Error('A consulta retornou dados de outro professor. Tente novamente.');
+            }
+            setDeletionContext(current => Number(current?.professor?.id) === Number(prof.id)
+                ? { ...current, impact: response.data }
+                : current);
         } catch (error) {
+            if (requestId !== impactRequestRef.current) return;
             setImpactModalOpen(false);
+            setDeletionContext(null);
             showToast(error.message || 'Erro ao consultar os vínculos do professor.', 'error');
         } finally {
-            setLoadingImpact(false);
+            if (requestId === impactRequestRef.current) setLoadingImpact(false);
         }
     };
 
+    const handleCloseDeleteImpact = () => {
+        impactRequestRef.current += 1;
+        setImpactModalOpen(false);
+        setLoadingImpact(false);
+        setDeletionContext(null);
+    };
+
     const handleContinueDelete = () => {
+        if (isLoadingImpact || !deletionContext?.impact || Number(deletionContext.professor?.id) !== Number(deletionContext.impact.professor?.id)) return;
+        impactRequestRef.current += 1;
         setImpactModalOpen(false);
         setConfirmModalOpen(true);
+    };
+
+    const handleCloseDeleteConfirm = () => {
+        setConfirmModalOpen(false);
+        setDeletionContext(null);
     };
 
     const handleSaveProfessor = async (profData, photoChange) => {
@@ -111,12 +135,14 @@ const Professores = () => {
 
     const handleDeleteProfessor = async () => {
         if (isDeleting) return;
+        const professorId = deletionContext?.professor?.id;
+        if (!professorId || Number(professorId) !== Number(deletionContext?.impact?.professor?.id)) return;
         setDeleting(true);
         try {
-            const response = await api.delete(`/professores/${currentProfessor.id}`);
+            const response = await api.delete(`/professores/${professorId}`);
             showToast(response.data.message || 'Professor excluído definitivamente!', 'success', 6000);
             setConfirmModalOpen(false);
-            setDeletionImpact(null);
+            setDeletionContext(null);
             await fetchProfessores();
         } catch (error) {
             showToast(error.message || 'Erro ao excluir o professor.', 'error');
@@ -243,10 +269,10 @@ const Professores = () => {
 
             <ProfessorFormModal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} onSave={handleSaveProfessor} professor={currentProfessor} courses={coursesList} locations={locaisList} />
             <ProfessorDetailsModal isOpen={isDetailsModalOpen} onClose={() => setDetailsModalOpen(false)} professor={currentProfessor} />
-            <ProfessorDeletionImpactModal isOpen={isImpactModalOpen} onClose={() => setImpactModalOpen(false)} onContinue={handleContinueDelete} impact={deletionImpact} loading={isLoadingImpact} />
+            <ProfessorDeletionImpactModal isOpen={isImpactModalOpen} onClose={handleCloseDeleteImpact} onContinue={handleContinueDelete} impact={deletionImpact} loading={isLoadingImpact} />
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}
-                onClose={() => setConfirmModalOpen(false)}
+                onClose={handleCloseDeleteConfirm}
                 onConfirm={handleDeleteProfessor}
                 title="Confirmar exclusão do professor?"
                 message={deletionImpact ? `Esta ação é irreversível. ${deletionImpact.professor.nome}, sua conta, ${deletionImpact.resumo.turmas} turma(s), matrículas, convites e demais dados vinculados serão apagados definitivamente. Os cadastros dos alunos permanecerão sem esse vínculo.` : 'Esta ação apagará definitivamente a conta e todos os dados vinculados ao professor.'}

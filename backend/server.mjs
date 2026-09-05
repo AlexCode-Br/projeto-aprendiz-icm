@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { initializeClassSchedules } from './class-schedules.mjs';
-import { mkdir, readFile, stat } from 'node:fs/promises';
-import { dirname, extname, join } from 'node:path';
+import { mkdir, readFile, realpath, stat } from 'node:fs/promises';
+import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
@@ -32,6 +32,7 @@ import {
   cleanText,
   emailError,
   hasValidationErrors,
+  isCalendarDate,
   normalizeEmail,
   personNameError,
   phoneError,
@@ -51,6 +52,7 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(here, '..');
 const distRoot = join(projectRoot, 'dist');
+const resolvedDistRoot = resolve(distRoot);
 const dataRoot = join(here, 'data');
 const sqlitePath = process.env.SQLITE_PATH || join(dataRoot, 'projeto-aprendiz.db');
 const port = Number(process.env.PORT || 4180);
@@ -343,7 +345,7 @@ if (db.dialect === 'sqlite') await db.exec(`
   CREATE TABLE IF NOT EXISTS student_contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
-    user_id INTEGER NOT NULL REFERENCES users(id),
+    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
     note TEXT NOT NULL,
     outcome TEXT NOT NULL CHECK(outcome IN ('contatado','sem_resposta','retorno_agendado','outro')),
     contacted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -511,6 +513,7 @@ if (db.dialect === 'sqlite') {
     DROP INDEX IF EXISTS classes_period_offering_unique;
     CREATE INDEX IF NOT EXISTS classes_school_year_id_idx ON classes(school_year_id);
     CREATE UNIQUE INDEX IF NOT EXISTS classes_distinct_offering_unique ON classes(school_year_id,course_id,professor_id,location_id,LOWER(COALESCE(label,'')),COALESCE(weekday,''),COALESCE(start_time,''));
+    CREATE INDEX IF NOT EXISTS classes_course_id_idx ON classes(course_id);
   `);
 
   const enrollmentColumns=await db.prepare('PRAGMA table_info(enrollments)').all();
@@ -803,7 +806,7 @@ async function selectedSchoolYear(request, response, { writable = false } = {}) 
   let period;
   if (supplied) {
     const id = Number(supplied);
-    if (!Number.isInteger(id) || id < 1) {
+    if (!Number.isSafeInteger(id) || id < 1) {
       json(response, 400, { message: 'Período letivo inválido.' });
       return null;
     }
@@ -946,6 +949,11 @@ async function activeClassesForStudent(classIds, legacyCourseNames = [], schoolY
   if (new Set(classes.map(item => item.course_id)).size !== classes.length) {
     return { classes: [], error: 'Escolha apenas uma turma para cada curso.' };
   }
+  if (db.dialect === 'postgres' && classes.length) {
+    const ids = classes.map(item => Number(item.id)).sort((a, b) => a - b);
+    const locked = await db.prepare(`SELECT id FROM classes WHERE id IN (${ids.map(() => '?').join(',')}) AND school_year_id=? AND active=1 ORDER BY id FOR UPDATE`).all(...ids,schoolYearId);
+    if (locked.length !== ids.length) return { classes: [], error: 'Uma das turmas selecionadas não está mais disponível.' };
+  }
   for(const classRow of classes){
     if(!classRow.capacity)continue;
     const enrollmentCount=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa' AND student_id<>?").get(classRow.id,studentId||0);
@@ -1066,7 +1074,7 @@ async function normalizeAnnouncementRecipients(value) {
 const appTimeZone = process.env.APP_TIMEZONE || 'America/Sao_Paulo';
 
 function zonedScheduleIso(date, time) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return '';
+  if (!isCalendarDate(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return '';
   const [year, month, day] = date.split('-').map(Number);
   const [hour, minute] = time.split(':').map(Number);
   const target = Date.UTC(year, month - 1, day, hour, minute);
@@ -1217,6 +1225,7 @@ const api = createApiHandler({
   invalid,
   phoneError,
   validateSchoolYear,
+  isCalendarDate,
   schoolYearView,
   duplicateError,
   selectedSchoolYear,
@@ -1279,13 +1288,33 @@ async function serve(request, response, url) {
     response.writeHead(200, securityHeaders('text/html; charset=utf-8'));
     return response.end(html);
   }
-  let file = join(distRoot, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname).replace(/^\/+/, ''));
-  try { if (!(await stat(file)).isFile()) throw new Error(); } catch { file = join(distRoot, 'index.html'); }
+  if (!['GET', 'HEAD'].includes(request.method)) {
+    return json(response, 405, { message: 'Método não permitido.' }, { Allow: 'GET, HEAD' });
+  }
+  let decodedPath;
+  try { decodedPath = decodeURIComponent(url.pathname); }
+  catch { return json(response, 400, { message: 'Caminho inválido.' }); }
+  if (decodedPath.includes('\0') || decodedPath.includes('\\') || decodedPath.split('/').includes('..')) {
+    return json(response, 400, { message: 'Caminho inválido.' });
+  }
+  const requested = decodedPath === '/' ? 'index.html' : decodedPath.replace(/^\/+/, '');
+  const candidate = resolve(resolvedDistRoot, requested);
+  const candidateRelative = relative(resolvedDistRoot, candidate);
+  if (candidateRelative.startsWith('..') || isAbsolute(candidateRelative)) {
+    return json(response, 400, { message: 'Caminho inválido.' });
+  }
+  let file = candidate;
+  try {
+    const actualFile = await realpath(candidate);
+    const actualRelative = relative(resolvedDistRoot, actualFile);
+    if (actualRelative.startsWith('..') || isAbsolute(actualRelative) || !(await stat(actualFile)).isFile()) throw new Error('UNSAFE_STATIC_PATH');
+    file = actualFile;
+  } catch { file = join(resolvedDistRoot, 'index.html'); }
   try {
     const content = await readFile(file);
     const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml', '.ttf':'font/ttf', '.txt':'text/plain; charset=utf-8' };
-    response.writeHead(200, { ...securityHeaders(types[extname(file)] || 'application/octet-stream'), 'Cache-Control': extname(file) === '.html' ? 'no-store' : 'public, max-age=31536000, immutable' });
-    response.end(content);
+    response.writeHead(200, { ...securityHeaders(types[extname(file)] || 'application/octet-stream'), 'Cache-Control': extname(file) === '.html' ? 'no-store' : 'public, max-age=31536000, immutable', 'Content-Length': String(content.length) });
+    response.end(request.method === 'HEAD' ? undefined : content);
   } catch { json(response, 503, { message: 'Frontend ainda não compilado.' }); }
 }
 
@@ -1301,7 +1330,11 @@ const server = http.createServer(async (request, response) => {
     let pathname='desconhecido';
     try{pathname=new URL(request.url,baseUrl).pathname}catch{}
     logger.error('http_request_failed',error,{requestId,method:request.method,path:pathname});
-    if(!response.headersSent)json(response, error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 500, { message: 'Erro interno do servidor.', requestId }, { 'X-Request-Id': requestId });
+    if(!response.headersSent){
+      if(error.code==='PAYLOAD_TOO_LARGE')json(response,413,{message:'A solicitação excede o tamanho permitido.',requestId},{'X-Request-Id':requestId});
+      else if(error.code==='INVALID_JSON')json(response,400,{message:'O corpo da solicitação contém JSON inválido.',requestId},{'X-Request-Id':requestId});
+      else json(response,500,{message:'Erro interno do servidor.',requestId},{'X-Request-Id':requestId});
+    }
     else response.destroy();
   }
 });

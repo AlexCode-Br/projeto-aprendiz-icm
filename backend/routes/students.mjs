@@ -70,7 +70,7 @@ export function createStudentRoutes(context) {
       if(studentContactMatch&&request.method==='GET'){
         if(!await authorize(request,response,['gestor']))return;
         const studentId=Number(studentContactMatch[1]);
-        const rows=await db.prepare(`SELECT student_contacts.id,student_contacts.note,student_contacts.outcome,student_contacts.contacted_at,users.name AS registered_by FROM student_contacts JOIN users ON users.id=student_contacts.user_id WHERE student_contacts.student_id=? ORDER BY student_contacts.contacted_at DESC,student_contacts.id DESC LIMIT 50`).all(studentId);
+        const rows=await db.prepare(`SELECT student_contacts.id,student_contacts.note,student_contacts.outcome,student_contacts.contacted_at,COALESCE(users.name,'Usuário removido') AS registered_by FROM student_contacts LEFT JOIN users ON users.id=student_contacts.user_id WHERE student_contacts.student_id=? ORDER BY student_contacts.contacted_at DESC,student_contacts.id DESC LIMIT 50`).all(studentId);
         return json(response,200,rows.map(row=>({id:Number(row.id),note:row.note,outcome:row.outcome,contactedAt:row.contacted_at,registeredBy:row.registered_by})));
       }
       if(studentContactMatch&&request.method==='POST'){
@@ -129,10 +129,16 @@ export function createStudentRoutes(context) {
         if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
-        const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id);
-        if (classError) return invalid(response, { curso: classError });
+        let classRows = [];
         try {
           const studentId=await db.transaction(async()=>{
+            const selection = await activeClassesForStudent(classIds, courseNames, period.id);
+            if (selection.error) {
+              const error = new Error(selection.error);
+              error.code = 'CLASS_SELECTION_INVALID';
+              throw error;
+            }
+            classRows = selection.classes;
             const result = await db.prepare('INSERT INTO students (name,email,phone,guardian_name,guardian_phone,guardian_consent_at,church_id,age_group,has_instrument) VALUES (?,?,?,?,?,?,?,?,?)').run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsent?new Date().toISOString():null,church.id,body.classe,body.instrumento === 'Sim' ? 1 : 0);
             for (const classRow of classRows) {
               await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
@@ -147,6 +153,7 @@ export function createStudentRoutes(context) {
           }
           return json(response, 201, { id: studentId });
         } catch (error) {
+          if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });
           if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response, 409, { message: 'Já existe um aluno com este e-mail.' });
           throw error;
         }
@@ -170,12 +177,16 @@ export function createStudentRoutes(context) {
         if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
-        const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id,id);
-        if (classError) return invalid(response, { curso: classError });
         const currentStudent=await db.prepare('SELECT id,guardian_consent_at FROM students WHERE id=? AND active=1').get(id);
         if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
         try {
           await db.transaction(async()=>{
+            const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id,id);
+            if (classError) {
+              const error = new Error(classError);
+              error.code = 'CLASS_SELECTION_INVALID';
+              throw error;
+            }
             const guardianConsentAt=guardianConsent?(currentStudent.guardian_consent_at||new Date().toISOString()):currentStudent.guardian_consent_at;
             await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,guardian_consent_at=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
               .run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsentAt,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
@@ -194,6 +205,7 @@ export function createStudentRoutes(context) {
           });
           return json(response, 200, { success: true });
         } catch (error) {
+          if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });
           if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response, 409, { message: 'Já existe um aluno com este e-mail.' });
           throw error;
         }
@@ -222,12 +234,23 @@ export function createStudentRoutes(context) {
         const session = await authorize(request, response, ['professor']); if (!session) return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
         const page = Math.max(1, Number(url.searchParams.get('page') || 1));
-        const limit = url.pathname.startsWith('/api/') ? 100 : Math.min(50, Math.max(1, Number(url.searchParams.get('limit') || 10)));
+        const apiRoute=url.pathname.startsWith('/api/');
+        const requestedLimit=Number(url.searchParams.get('limit') || (apiRoute?100:10));
+        const limit=Math.min(apiRoute?100:50,Math.max(1,Number.isSafeInteger(requestedLimit)?requestedLimit:(apiRoute?100:10)));
+        const orderBy=url.searchParams.get('order')==='recent'
+          ? 'MAX(enrollments.enrolled_at) DESC,students.id DESC'
+          : 'students.name,students.id';
         const search = `%${String(url.searchParams.get('search') || '').trim()}%`;
         const profile = await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
         if (!profile) return json(response, 403, { message: 'Perfil de professor não configurado.' });
         const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE students.active=1 AND enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=? AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?)`).get(period.id,profile.id,search,search)).total;
-        const rows = await db.prepare(`${studentSelect} WHERE students.active=1 AND students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=?) AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?) GROUP BY students.id ORDER BY students.name LIMIT ? OFFSET ?`).all(period.id,period.id,profile.id,search,search,limit,(page-1)*limit);
+        // Limit the aggregated class list to this professor as well. The previous
+        // query selected the right students but exposed their other active classes.
+        const professorStudentSelect=studentSelect.replace(
+          'LEFT JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=?',
+          'LEFT JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=?',
+        );
+        const rows = await db.prepare(`${professorStudentSelect} WHERE students.active=1 AND students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=?) AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?) GROUP BY students.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(period.id,profile.id,period.id,profile.id,search,search,limit,(page-1)*limit);
         return json(response, 200, { alunos: rows.map(studentView), total });
       }
     

@@ -8,13 +8,28 @@ export function createAttendanceRoutes(context) {
     authorize,
     selectedSchoolYear,
     zonedTodayDate,
+    isCalendarDate,
   } = context;
 
   return async function attendanceRoutes(request, response, url, ip) {
       if(request.method==='GET'&&url.pathname==='/professores/meus-cursos'){
         const session=await authorize(request,response,['professor']);if(!session)return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
-        const rows=await db.prepare(`SELECT classes.id,classes.label,classes.weekday,classes.start_time,courses.name AS nome,locations.name AS local FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=? ORDER BY courses.name,classes.label,locations.name`).all(session.user_id,period.id);
+        const rows=await db.prepare(`
+          SELECT classes.id,classes.label,classes.weekday,classes.start_time,
+            courses.name AS nome,locations.name AS local,
+            COUNT(DISTINCT CASE WHEN enrollments.status='ativa' AND students.active=1 THEN students.id END) AS alunos
+          FROM classes
+          JOIN courses ON courses.id=classes.course_id
+          JOIN locations ON locations.id=classes.location_id
+          JOIN professor_profiles ON professor_profiles.id=classes.professor_id
+          LEFT JOIN enrollments ON enrollments.class_id=classes.id
+          LEFT JOIN students ON students.id=enrollments.student_id
+          WHERE professor_profiles.user_id=? AND professor_profiles.active=1
+            AND classes.active=1 AND classes.school_year_id=?
+          GROUP BY classes.id,classes.label,classes.weekday,classes.start_time,courses.name,locations.name
+          ORDER BY courses.name,classes.label,locations.name
+        `).all(session.user_id,period.id);
         return json(response,200,await attachClassSchedules(db,rows));
       }
     
@@ -24,7 +39,7 @@ export function createAttendanceRoutes(context) {
         const classId=Number(url.searchParams.get('curso_id')),date=url.searchParams.get('data');
         const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=?`).get(classId,session.user_id,period.id);
         if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||''))||Number.isNaN(Date.parse(`${date}T00:00:00Z`)))return json(response,400,{message:'Informe uma data de aula válida.'});
+        if(!Number.isSafeInteger(classId)||classId<1||!isCalendarDate(date))return json(response,400,{message:'Informe uma turma e uma data de aula válidas.'});
         const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
         const rows=await db.prepare(`SELECT students.id,students.name AS nome,attendance_records.status AS status FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' LEFT JOIN attendance_sessions ON attendance_sessions.class_id=enrollments.class_id AND attendance_sessions.class_date=? LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE enrollments.class_id=? AND students.active=1 ORDER BY students.name`).all(date,classId);
         return json(response,200,{alunos:rows,registrada:Boolean(attendanceSession)});
@@ -34,7 +49,7 @@ export function createAttendanceRoutes(context) {
         const session=await authorize(request,response,['professor']);if(!session)return;
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const body=await readJson(request),classId=Number(body.curso_id),date=String(body.data_aula||'');
-        if(!Number.isInteger(classId)||classId<1||!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(`${date}T00:00:00Z`)))return json(response,400,{message:'Selecione uma turma e uma data válidas.'});
+        if(!Number.isSafeInteger(classId)||classId<1||!isCalendarDate(date))return json(response,400,{message:'Selecione uma turma e uma data válidas.'});
         if(date>zonedTodayDate())return json(response,400,{message:'Não é possível registrar uma chamada em uma data futura.'});
         if(!Array.isArray(body.frequencias))return json(response,400,{message:'A lista de frequência é inválida.'});
         const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=?`).get(classId,session.user_id,period.id);

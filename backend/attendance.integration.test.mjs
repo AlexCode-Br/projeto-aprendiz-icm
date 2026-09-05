@@ -61,8 +61,19 @@ test('chamada exige a turma completa e permanece exclusiva do professor', { time
     assert.equal((await call(manager,'GET','/api/professores/me/alunos')).status,403);
     const classId=Number(courses.data[0].id);
     assert.equal((await call(manager,'GET',`/frequencia?curso_id=${classId}&data=2026-08-29`)).status,403);
+    assert.equal((await call(professor,'GET',`/frequencia?curso_id=${classId}&data=2026-02-31`)).status,400);
+    assert.equal((await call(professor,'POST','/frequencia',{curso_id:classId,data_aula:'2026-02-31',frequencias:[]})).status,400);
     const today=new Date().toISOString().slice(0,10);
     const database=new DatabaseSync(databasePath);
+    const professorProfile=database.prepare("SELECT professor_profiles.id FROM professor_profiles JOIN users ON users.id=professor_profiles.user_id WHERE users.email=?").get('professor@projetoaprendiz.local');
+    const enrolledStudents=database.prepare("SELECT DISTINCT students.id FROM students JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE classes.professor_id=? AND classes.active=1 AND enrollments.status='ativa' AND students.active=1 ORDER BY students.id LIMIT 2").all(professorProfile.id);
+    assert.equal(enrolledStudents.length,2);
+    database.prepare("UPDATE enrollments SET enrolled_at='2000-01-01' WHERE class_id IN (SELECT id FROM classes WHERE professor_id=?)").run(professorProfile.id);
+    database.prepare("UPDATE enrollments SET enrolled_at='2026-08-01' WHERE student_id=? AND class_id IN (SELECT id FROM classes WHERE professor_id=?)").run(enrolledStudents[1].id,professorProfile.id);
+    const recentStudents=await call(professor,'GET','/api/professores/me/alunos?limit=1&order=recent');
+    assert.equal(recentStudents.status,200,JSON.stringify(recentStudents.data));
+    assert.equal(recentStudents.data.alunos.length,1);
+    assert.equal(recentStudents.data.alunos[0].id,enrolledStudents[1].id);
 
     const attendance=await call(professor,'GET',`/frequencia?curso_id=${classId}&data=${today}`);
     assert.equal(attendance.status,200,JSON.stringify(attendance.data));

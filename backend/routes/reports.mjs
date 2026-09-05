@@ -4,6 +4,7 @@ export function createReportRoutes(context) {
     json,
     authorize,
     selectedSchoolYear,
+    isCalendarDate,
   } = context;
 
   return async function reportRoutes(request, response, url) {
@@ -22,12 +23,14 @@ export function createReportRoutes(context) {
         const period=await selectedSchoolYear(request,response);if(!period)return;
         const conditions=["enrollments.status='ativa'","students.active=1","classes.active=1","classes.school_year_id=?"],whereParams=[period.id],joinParams=[];
         const filters={curso:url.searchParams.get('curso'),local:url.searchParams.get('local'),professor:url.searchParams.get('professor'),classId:url.searchParams.get('curso_id')};
+        if(filters.classId&&(!/^\d+$/.test(filters.classId)||!Number.isSafeInteger(Number(filters.classId))||Number(filters.classId)<1))return json(response,400,{message:'Selecione uma turma válida.'});
         if(filters.curso){conditions.push('courses.name=?');whereParams.push(filters.curso)}
         if(filters.local){conditions.push('locations.name=?');whereParams.push(filters.local)}
         if(filters.professor){conditions.push('professor_profiles.name=?');whereParams.push(filters.professor)}
         if(filters.classId){conditions.push('classes.id=?');whereParams.push(Number(filters.classId))}
         conditions.push('professor_profiles.user_id=?');whereParams.push(session.user_id);
         const start=url.searchParams.get('dataInicio'),end=url.searchParams.get('dataFim');
+        if((start&&!isCalendarDate(start))||(end&&!isCalendarDate(end))||(start&&end&&start>end))return json(response,400,{message:'Informe um intervalo de datas válido.'});
         let dateJoin='';
         if(start){dateJoin+=' AND attendance_sessions.class_date>=?';joinParams.push(start)}
         if(end){dateJoin+=' AND attendance_sessions.class_date<=?';joinParams.push(end)}
@@ -39,6 +42,7 @@ export function createReportRoutes(context) {
         if(!await authorize(request,response,['gestor']))return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
         const conditions=['classes.school_year_id=?'],params=[period.id],course=url.searchParams.get('curso'),reasonCategory=url.searchParams.get('motivo'),start=url.searchParams.get('dataInicio'),end=url.searchParams.get('dataFim');
+        if((start&&!isCalendarDate(start))||(end&&!isCalendarDate(end))||(start&&end&&start>end))return json(response,400,{message:'Informe um intervalo de datas válido.'});
         if(course){conditions.push('courses.name=?');params.push(course)}
         if(reasonCategory){conditions.push('dropout_events.reason_category=?');params.push(reasonCategory)}
         if(start){conditions.push('dropout_events.occurred_at>=?');params.push(start)}

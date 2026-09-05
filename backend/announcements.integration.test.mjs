@@ -150,6 +150,20 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
     assert.equal((await call(gestor,'DELETE',`/api/informativos/${announcementId}`)).status,200);
     assert.equal((await call(gestor,'GET','/api/informativos')).data.some(item=>item.id===announcementId),false);
     assert.equal((await call(gestor,'GET',managerItem.anexos[0].url,undefined,{binary:true})).status,404);
+
+    const historicalDatabase=new DatabaseSync(databasePath);
+    const professorCourse=historicalDatabase.prepare('SELECT classes.course_id FROM classes WHERE professor_id=? AND active=1 ORDER BY id LIMIT 1').get(professorAProfile);
+    historicalDatabase.close();
+    const courseTargeted=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Aviso do curso no período atual',destinatarios:{todos:false,professores:[],cursos:[Number(professorCourse.course_id)]},anexos:[]});
+    assert.equal(courseTargeted.status,201,JSON.stringify(courseTargeted.data));
+    const periodDatabase=new DatabaseSync(databasePath);
+    periodDatabase.prepare('UPDATE announcements SET scheduled_at=?,published_at=? WHERE id=?').run(publishedAt.toISOString(),publishedAt.toISOString(),courseTargeted.data.id);
+    assert.equal((await call(professorA,'GET','/api/informativos')).data.some(item=>item.id===courseTargeted.data.id),true);
+    periodDatabase.prepare('UPDATE school_years SET active=0,closed_at=CURRENT_TIMESTAMP WHERE active=1').run();
+    periodDatabase.prepare("INSERT INTO school_years (label,start_date,end_date,active,dates_confirmed) VALUES ('Novo período','2027-01-01','2027-12-31',1,1)").run();
+    periodDatabase.close();
+    assert.equal((await call(professorA,'GET','/api/informativos')).data.some(item=>item.id===courseTargeted.data.id),false,'curso de período encerrado não concede acesso ao informativo');
+    assert.equal((await call(professorA,'POST',`/api/informativos/${courseTargeted.data.id}/lida`,{})).status,404);
   }finally{
     if(server.exitCode===null)server.kill('SIGTERM');
     await new Promise(resolve=>server.once('exit',resolve));

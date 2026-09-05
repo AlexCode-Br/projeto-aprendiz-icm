@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDatabase } from './database.mjs';
 import { attachClassSchedules, initializeClassSchedules } from './class-schedules.mjs';
-import { classSchedules, nextClassSchedule, sortClassSchedules, validateClassSchedules } from '../shared/class-schedules.mjs';
+import { classScheduleConflicts, classSchedules, nextClassSchedule, nextClassSchedules, sortClassSchedules, validateClassSchedules } from '../shared/class-schedules.mjs';
 
 test('horários semanais validam dias, horas e duplicações e ordenam a semana', () => {
   assert.equal(validateClassSchedules([]),'');
@@ -27,6 +27,19 @@ test('próxima aula usa todos os horários, fuso local e virada da semana', () =
   assert.equal(nextClassSchedule(courses,new Date('2026-09-02T14:00:01Z')).id,2);
   assert.equal(nextClassSchedule(courses,new Date('2026-09-07T01:00:00Z')).weekday,'Segunda-feira');
   assert.equal(nextClassSchedule([{id:1,horarios:[]}]),null);
+  assert.deepEqual(nextClassSchedules(courses,new Date('2026-09-02T13:00:00Z'),'America/Sao_Paulo',2).map(item=>item.id),[1,2]);
+  assert.equal(nextClassSchedules(courses,new Date('2026-09-02T13:00:00Z'),'America/Sao_Paulo',1)[0].offsetSeconds>=0,true);
+});
+
+test('conflitos consideram turmas diferentes no mesmo dia e horário', () => {
+  const conflicts=classScheduleConflicts([
+    {id:1,nome:'Violão',local:'Pituba',horarios:[{weekday:'Segunda-feira',start_time:'09:00'}]},
+    {id:2,nome:'Flauta',local:'Brotas',horarios:[{weekday:'Segunda-feira',start_time:'09:00'}]},
+    {id:3,nome:'Canto',local:'Pituba',horarios:[{weekday:'Segunda-feira',start_time:'10:00'}]},
+  ]);
+  assert.equal(conflicts.length,1);
+  assert.equal(conflicts[0].descricao,'Segunda-feira às 09:00');
+  assert.deepEqual(conflicts[0].turmas.map(item=>item.id),[1,2]);
 });
 
 test('migração local conserva o horário anterior e índices/constraints protegem vínculos', async () => {

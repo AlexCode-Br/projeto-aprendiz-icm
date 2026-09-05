@@ -66,11 +66,15 @@ export default function AccountSettings() {
         setSaving('password');
         try {
             if (usesSupabaseAuth) {
-                const { error: signInError } = await supabase.auth.signInWithPassword({ email: user.email, password: password.currentPassword });
-                if (signInError) throw new Error(friendlyAuthError(signInError));
-                const { error: updateError } = await supabase.auth.updateUser({ password: password.newPassword });
+                const { error: updateError } = await supabase.auth.updateUser({ password: password.newPassword, current_password: password.currentPassword });
                 if (updateError) throw new Error(friendlyAuthError(updateError));
-                await api.post('/api/account/security-alert', {}).catch(() => {});
+                const { error: revokeError } = await supabase.auth.signOut({ scope: 'others' });
+                if (revokeError) throw new Error('A senha foi alterada, mas não foi possível encerrar as outras sessões. Entre novamente e tente de novo.');
+                const { data: sessionData } = await supabase.auth.getSession();
+                if (!sessionData.session?.access_token) throw new Error('A senha foi alterada, mas sua sessão precisa ser renovada. Entre novamente.');
+                api.setAccessToken(sessionData.session.access_token);
+                try { await api.post('/api/account/password-changed', {}); }
+                finally { api.setAccessToken(''); }
             } else {
                 await api.put('/api/account/password', { currentPassword: password.currentPassword, newPassword: password.newPassword });
             }

@@ -38,6 +38,7 @@ export function createAnnouncementRoutes(context) {
                 OR (ar.recipient_type='curso' AND ar.recipient_id IN (
                   SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id
                   WHERE pp.user_id=? AND pp.active=1 AND classes.active=1
+                    AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)
                 ))
               ))
             )`).get(session.user_id,session.user_id,session.user_id);
@@ -60,6 +61,7 @@ export function createAnnouncementRoutes(context) {
                     FROM classes
                     JOIN professor_profiles pp ON pp.id=classes.professor_id
                     WHERE pp.user_id=? AND pp.active=1 AND classes.active=1
+                      AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)
                   ))
                 )
             )
@@ -102,6 +104,7 @@ export function createAnnouncementRoutes(context) {
             JOIN professor_profiles ON professor_profiles.id=classes.professor_id AND professor_profiles.active=1
             JOIN courses ON courses.id=classes.course_id AND courses.active=1
             WHERE classes.active=1
+              AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)
           `).all(),
         ]);
         const coursesByProfessor=new Map();
@@ -124,7 +127,7 @@ export function createAnnouncementRoutes(context) {
           AND (NOT EXISTS (SELECT 1 FROM announcement_recipients ar_all WHERE ar_all.announcement_id=announcements.id)
             OR EXISTS (SELECT 1 FROM announcement_recipients ar WHERE ar.announcement_id=announcements.id AND (
               (ar.recipient_type='professor' AND ar.recipient_id=(SELECT pp.id FROM professor_profiles pp WHERE pp.user_id=? AND pp.active=1))
-              OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1))
+              OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1 AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)))
             )))` : '';
         const attachment=await db.prepare(`SELECT announcement_attachments.filename,announcement_attachments.mime_type,announcement_attachments.data_url,announcement_attachments.storage_path FROM announcement_attachments JOIN announcements ON announcements.id=announcement_attachments.announcement_id WHERE announcement_attachments.id=? AND announcement_attachments.announcement_id=? AND announcements.active=1${visibility}`).get(...([Number(attachmentMatch[2]),Number(attachmentMatch[1]),...(session.role==='professor' ? [session.user_id,session.user_id] : [])]));
         if(!attachment)return json(response,404,{message:'Anexo não encontrado.'});
@@ -224,7 +227,7 @@ export function createAnnouncementRoutes(context) {
           AND (NOT EXISTS (SELECT 1 FROM announcement_recipients ar_all WHERE ar_all.announcement_id=announcements.id)
             OR EXISTS (SELECT 1 FROM announcement_recipients ar WHERE ar.announcement_id=announcements.id AND (
               (ar.recipient_type='professor' AND ar.recipient_id=(SELECT pp.id FROM professor_profiles pp WHERE pp.user_id=? AND pp.active=1))
-              OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1))
+              OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1 AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)))
             )))`;
         const announcement=await db.prepare(`SELECT announcements.id FROM announcements WHERE announcements.id=? AND announcements.active=1 AND ${announcementScheduledCondition('announcements.scheduled_at')}${visibility}`).get(announcementId,session.user_id,session.user_id);
         if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});

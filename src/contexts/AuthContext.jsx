@@ -1,11 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import { friendlyAuthError, supabase, usesSupabaseAuth } from '../services/supabase';
+import {
+    clearSupabaseAuthStorage,
+    friendlyAuthError,
+    isSupabaseSessionPersistent,
+    setSupabaseSessionPersistence,
+    supabase,
+    usesSupabaseAuth,
+} from '../services/supabase';
 
 export const AuthContext = createContext(null);
 
-async function exchangeSession(session, remember = true) {
+async function exchangeSession(session, remember = false) {
     if (!session?.access_token) throw new Error('Sessão do Supabase não encontrada.');
     api.setAccessToken(session.access_token);
     try {
@@ -34,7 +41,7 @@ export const AuthProvider = ({ children }) => {
                 const { data } = await supabase.auth.getSession();
                 if (!data.session) setUser(null);
                 else {
-                    try { setUser(await exchangeSession(data.session)); }
+                    try { setUser(await exchangeSession(data.session, isSupabaseSessionPersistent())); }
                     catch { setUser(null); }
                 }
             }
@@ -47,11 +54,18 @@ export const AuthProvider = ({ children }) => {
 
     const login = useCallback(async (email, password, remember = false) => {
         if (usesSupabaseAuth) {
+            setSupabaseSessionPersistence(remember);
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             if (error) throw new Error(friendlyAuthError(error));
-            const authenticatedUser = await exchangeSession(data.session, remember);
-            setUser(authenticatedUser);
-            return authenticatedUser;
+            try {
+                const authenticatedUser = await exchangeSession(data.session, remember);
+                setUser(authenticatedUser);
+                return authenticatedUser;
+            } catch (error) {
+                await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+                clearSupabaseAuthStorage();
+                throw error;
+            }
         }
         const response = await api.post('/api/auth/login', { email, password, remember });
         api.setCsrfToken(response.data.csrfToken);
@@ -61,7 +75,10 @@ export const AuthProvider = ({ children }) => {
 
     const logout = useCallback(async () => {
         try { await api.post('/api/auth/logout', {}); } finally {
-            if (usesSupabaseAuth) await supabase.auth.signOut().catch(() => {});
+            if (usesSupabaseAuth) {
+                await supabase.auth.signOut().catch(() => {});
+                clearSupabaseAuthStorage();
+            }
             api.setCsrfToken('');
             api.setAccessToken('');
             setUser(null);

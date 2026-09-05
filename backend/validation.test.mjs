@@ -11,6 +11,7 @@ import {
   validateClassDetails,
   validateStudentContact,
   validateSchoolYear,
+  isCalendarDate,
   validateSupportTicket,
   supportClientMessageIdError,
   supportMessageError,
@@ -116,6 +117,8 @@ test('valida o registro de contato com aluno em risco', () => {
 });
 
 test('valida período letivo por intervalo de datas, inclusive entre anos civis', () => {
+  assert.equal(isCalendarDate('2026-02-28'), true);
+  assert.equal(isCalendarDate('2026-02-31'), false);
   assert.deepEqual(validateSchoolYear({ label: '2026/2027', start_date: '2026-08-10', end_date: '2027-06-30' }), {});
   assert.equal(validateSchoolYear({ label: '2026', start_date: '2027-06-30', end_date: '2026-08-10' }).end_date, 'A data final deve ser posterior à data inicial.');
   assert.equal(validateSchoolYear({ label: 'x', start_date: '2026-02-30', end_date: '2027-06-30' }).start_date, 'Informe uma data inicial válida.');

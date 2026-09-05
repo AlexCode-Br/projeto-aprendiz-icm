@@ -22,17 +22,46 @@ export async function verifyPassword(password, encoded) {
 }
 
 export async function readJson(request, maxBytes = 32768) {
-  let body = '';
+  const chunks = [];
+  let size = 0;
   for await (const chunk of request) {
-    body += chunk;
-    if (body.length > maxBytes) throw new Error('PAYLOAD_TOO_LARGE');
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > maxBytes) {
+      const error = new Error('PAYLOAD_TOO_LARGE');
+      error.code = 'PAYLOAD_TOO_LARGE';
+      throw error;
+    }
+    chunks.push(buffer);
   }
-  return body ? JSON.parse(body) : {};
+  if (!chunks.length) return {};
+  try {
+    const body = JSON.parse(Buffer.concat(chunks, size).toString('utf8'));
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new TypeError('INVALID_JSON_OBJECT');
+    return body;
+  }
+  catch {
+    const error = new Error('INVALID_JSON');
+    error.code = 'INVALID_JSON';
+    throw error;
+  }
 }
 
 export function createHttpSecurity({ isProduction, appOrigin }) {
   function cookies(request) {
-    return Object.fromEntries(String(request.headers.cookie || '').split(';').map(value => value.trim().split('=').map(decodeURIComponent)).filter(pair => pair.length === 2));
+    const parsed = {};
+    for (const rawCookie of String(request.headers.cookie || '').split(';')) {
+      const separator = rawCookie.indexOf('=');
+      if (separator < 1) continue;
+      try {
+        const name = decodeURIComponent(rawCookie.slice(0, separator).trim());
+        const value = decodeURIComponent(rawCookie.slice(separator + 1).trim());
+        if (name) parsed[name] = value;
+      } catch {
+        // Ignore only the malformed pair so one invalid cookie cannot break auth.
+      }
+    }
+    return parsed;
   }
 
   function cookie(name, value, maxAge = 0) {

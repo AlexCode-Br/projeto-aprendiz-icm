@@ -126,20 +126,21 @@ export function validateStudentContact(values) {
   return errors;
 }
 
+export function isCalendarDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return false;
+  const [year, month, day] = String(value).split('-').map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+
 export function validateSchoolYear(values) {
   const errors = {};
   const label = cleanText(values.label, 40);
   const startDate = cleanText(values.start_date ?? values.startDate, 10);
   const endDate = cleanText(values.end_date ?? values.endDate, 10);
-  const validDate = value => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-    const [year, month, day] = value.split('-').map(Number);
-    const parsed = new Date(Date.UTC(year, month - 1, day));
-    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
-  };
   if (label.length < 4 || label.length > 40) errors.label = 'Informe um nome de período entre 4 e 40 caracteres.';
-  if (!validDate(startDate)) errors.start_date = 'Informe uma data inicial válida.';
-  if (!validDate(endDate)) errors.end_date = 'Informe uma data final válida.';
+  if (!isCalendarDate(startDate)) errors.start_date = 'Informe uma data inicial válida.';
+  if (!isCalendarDate(endDate)) errors.end_date = 'Informe uma data final válida.';
   if (!errors.start_date && !errors.end_date && startDate >= endDate) errors.end_date = 'A data final deve ser posterior à data inicial.';
   return errors;
 }

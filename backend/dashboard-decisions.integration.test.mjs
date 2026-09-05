@@ -35,6 +35,9 @@ test('dashboard do gestor mostra somente totais administrativos e alunos por tur
     const login=await call(null,'POST','/api/auth/login',{email:'gestor@projetoaprendiz.local',password:'Gestor@2026!'});
     assert.equal(login.status,200,JSON.stringify(login.data));
     const manager={cookie:String(login.headers.get('set-cookie')).split(';')[0],csrf:login.data.csrfToken};
+    const professorLogin=await call(null,'POST','/api/auth/login',{email:'professor@projetoaprendiz.local',password:'Professor@2026!'});
+    assert.equal(professorLogin.status,200,JSON.stringify(professorLogin.data));
+    const professor={cookie:String(professorLogin.headers.get('set-cookie')).split(';')[0],csrf:professorLogin.data.csrfToken};
     const today=new Date().toISOString().slice(0,10),database=new DatabaseSync(databasePath);
     database.prepare("UPDATE school_years SET start_date=?,end_date=?,dates_confirmed=1 WHERE active=1").run(shiftDate(today,-180),shiftDate(today,180));
     database.exec("UPDATE enrollments SET enrolled_at='2000-01-01'; UPDATE dropout_events SET occurred_at='2000-01-01'; DELETE FROM attendance_records; DELETE FROM attendance_sessions;");
@@ -68,6 +71,15 @@ test('dashboard do gestor mostra somente totais administrativos e alunos por tur
     assert.equal(Object.hasOwn(classMetric,'frequencia'),false);
     assert.equal(Object.hasOwn(classMetric,'frequenciaAtual'),false);
     assert.ok(Array.isArray(response.data.ultimasInscricoes));
+
+    const professorDashboard=await call(professor,'GET','/api/dashboard/professor');
+    assert.equal(professorDashboard.status,200,JSON.stringify(professorDashboard.data));
+    assert.equal(professorDashboard.data.stats.turmasAtivas>0,true);
+    assert.ok(Array.isArray(professorDashboard.data.proximasAulas));
+    assert.ok(Array.isArray(professorDashboard.data.frequenciaPorTurma));
+    const classFrequency=professorDashboard.data.frequenciaPorTurma.find(item=>item.id===Number(classRow.id));
+    assert.deepEqual({aulas:classFrequency.aulas,registros:classFrequency.registros,frequencia:classFrequency.frequencia},{aulas:2,registros:4,frequencia:25});
+    assert.equal(professorDashboard.data.conflitosHorario.length>0,true,'horários legados sobrepostos devem ser sinalizados');
   }finally{
     if(server.exitCode===null)server.kill('SIGTERM');
     await new Promise(resolve=>server.once('exit',resolve));

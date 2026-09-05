@@ -129,8 +129,10 @@ export function createProfessorRoutes(context) {
         const courseNames=[...new Set((Array.isArray(body.cursos)?body.cursos:[]).map(value=>cleanText(value,100)).filter(Boolean))];
         const errors=validateProfessor({...body,nome:name,contato:email,telefone:phone,local:locationName,cursos:courseNames});
         if(hasValidationErrors(errors))return invalid(response,errors);
-        const current=await db.prepare('SELECT id FROM professor_profiles WHERE id=? AND active=1').get(id);
+        const current=await db.prepare('SELECT id,name,email,user_id FROM professor_profiles WHERE id=? AND active=1').get(id);
         if(!current)return json(response,404,{message:'Professor ativo não encontrado.'});
+        const emailChanged=String(current.email||'').toLowerCase()!==email.toLowerCase();
+        if(current.user_id&&emailChanged)return json(response,409,{message:'O e-mail de acesso de uma conta ativa não pode ser alterado por este formulário.'});
         const location=await db.prepare('SELECT id FROM locations WHERE name=? AND active=1').get(locationName);
         if(!location)return invalid(response,{local:'Selecione uma igreja ativa cadastrada em Cursos e igrejas.'});
         const catalogCourses=[];
@@ -155,7 +157,11 @@ export function createProfessorRoutes(context) {
             }
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_updated',ip);
           });
-          return json(response,200,{success:true});
+          let invitation=null;
+          if(emailChanged&&!current.user_id){
+            invitation=await issueProfessorInvite({professorId:id,name,email,createdBy:session.user_id,ip,auditAction:'professor_invite_reissued_after_email_change'});
+          }
+          return json(response,200,{success:true,inviteSent:invitation?.inviteSent??null,message:invitation&&!invitation.inviteSent?'Dados atualizados. O novo convite ficou pendente de reenvio.':undefined});
         }catch(error){
           if(duplicateError(error))return json(response,409,{message:'Já existe um professor com este e-mail.'});
           throw error;

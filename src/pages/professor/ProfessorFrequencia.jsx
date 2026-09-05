@@ -1,5 +1,5 @@
 import { Check, X, Clock3, Save, Download } from 'lucide-react';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 import FormSelect from '../../components/FormSelect';
@@ -17,6 +17,8 @@ const attendanceOptions = [
     { value: 'justificado', label: 'Justificada', icon: Clock3, selected: 'border-warning bg-warning/10 text-warning' },
 ];
 
+const makeRosterKey = (courseId,lessonDate) => courseId != null && lessonDate ? `${courseId}:${lessonDate}` : '';
+
 const ProfessorFrequencia = () => {
     // --- Estados ---
     const [cursos, setCursos] = useState([]);
@@ -27,6 +29,10 @@ const ProfessorFrequencia = () => {
     const [loading, setLoading] = useState(false);
     const [loadingAlunos, setLoadingAlunos] = useState(false);
     const [chamadaRegistrada, setChamadaRegistrada] = useState(false);
+    const [loadedRosterKey, setLoadedRosterKey] = useState('');
+    const selectionKeyRef = useRef('');
+    const loadedRosterKeyRef = useRef('');
+    const rosterRequestRef = useRef(0);
 
     const { showToast } = useToast();
 
@@ -50,14 +56,26 @@ const ProfessorFrequencia = () => {
 
     // Busca os alunos e suas frequências ao mudar o curso ou a data
     const fetchAlunosEFrequencia = useCallback(async () => {
-        if (!selectedCurso || !dataAula) {
-            setAlunos([]);
+        const courseId = selectedCurso?.value;
+        const lessonDate = dataAula;
+        const requestKey = makeRosterKey(courseId, lessonDate);
+        if (selectionKeyRef.current !== requestKey) return;
+        const requestId = ++rosterRequestRef.current;
+
+        loadedRosterKeyRef.current = '';
+        setLoadedRosterKey('');
+        setAlunos([]);
+        setFrequencias({});
+        setChamadaRegistrada(false);
+        if (!requestKey) {
+            setLoadingAlunos(false);
             return;
         }
         setLoadingAlunos(true);
         try {
-            const params = { curso_id: selectedCurso.value, data: dataAula };
+            const params = { curso_id: courseId, data: lessonDate };
             const response = await api.get('/frequencia', { params });
+            if (requestId !== rosterRequestRef.current || selectionKeyRef.current !== requestKey) return;
 
             const loadedStudents = response.data.alunos || [];
             setAlunos(loadedStudents);
@@ -69,33 +87,64 @@ const ProfessorFrequencia = () => {
                 return acc;
             }, {});
             setFrequencias(initialFrequencias);
+            loadedRosterKeyRef.current = requestKey;
+            setLoadedRosterKey(requestKey);
 
-        } catch (error) {
+        } catch {
+            if (requestId !== rosterRequestRef.current || selectionKeyRef.current !== requestKey) return;
             showToast('Erro ao carregar alunos e frequências.', 'error');
             setAlunos([]);
             setChamadaRegistrada(false);
         } finally {
-            setLoadingAlunos(false);
+            if (requestId === rosterRequestRef.current && selectionKeyRef.current === requestKey) setLoadingAlunos(false);
         }
     }, [selectedCurso, dataAula, showToast]);
 
     useEffect(() => {
         fetchAlunosEFrequencia();
+        return () => { rosterRequestRef.current += 1; };
     }, [fetchAlunosEFrequencia]);
 
     // --- Handlers ---
+    const prepareRosterSelection = (nextKey) => {
+        selectionKeyRef.current = nextKey;
+        rosterRequestRef.current += 1;
+        loadedRosterKeyRef.current = '';
+        setLoadedRosterKey('');
+        setAlunos([]);
+        setFrequencias({});
+        setChamadaRegistrada(false);
+        setLoadingAlunos(Boolean(nextKey));
+    };
+
+    const handleCursoChange = (value) => {
+        const nextCourse = cursos.find(course => String(course.value) === String(value)) || null;
+        prepareRosterSelection(makeRosterKey(nextCourse?.value, dataAula));
+        setSelectedCurso(nextCourse);
+    };
+
+    const handleDataChange = (lessonDate) => {
+        prepareRosterSelection(makeRosterKey(selectedCurso?.value, lessonDate));
+        setDataAula(lessonDate);
+    };
+
     const handleFrequenciaChange = (alunoId, status) => {
         setFrequencias(prev => ({ ...prev, [alunoId]: status }));
         setChamadaRegistrada(false);
     };
 
     const handleSalvarFrequencia = async () => {
+        const requestKey = makeRosterKey(selectedCurso?.value, dataAula);
+        if (loadingAlunos || !requestKey || loadedRosterKeyRef.current !== requestKey) {
+            showToast('Aguarde o carregamento da turma e da data selecionadas.', 'warning');
+            return;
+        }
         if (!selectedCurso || alunos.length === 0) {
             showToast('Selecione um curso e carregue os alunos primeiro.', 'warning');
             return;
         }
 
-        const unrecorded = Object.values(frequencias).some(status => !status);
+        const unrecorded = alunos.some(aluno => !frequencias[aluno.id]);
         if (unrecorded) {
             showToast('Por favor, preencha a frequência de todos os alunos.', 'warning');
             return;
@@ -107,18 +156,18 @@ const ProfessorFrequencia = () => {
         const payload = {
             curso_id: selectedCurso.value,
             data_aula: dataAula,
-            frequencias: Object.entries(frequencias).map(([aluno_id, status]) => ({
-                aluno_id: parseInt(aluno_id, 10),
-                status
+            frequencias: alunos.map(aluno => ({
+                aluno_id: Number(aluno.id),
+                status: frequencias[aluno.id]
             }))
         };
 
         try {
             await api.post('/frequencia', payload);
             showToast('Chamada salva com sucesso!', 'success');
-            setChamadaRegistrada(true);
+            if (selectionKeyRef.current === requestKey) setChamadaRegistrada(true);
             window.dispatchEvent(new Event('attendance:updated'));
-            await fetchAlunosEFrequencia();
+            if (selectionKeyRef.current === requestKey) await fetchAlunosEFrequencia();
         } catch (error) {
             showToast(error.response?.data?.message || 'Erro ao salvar a chamada.', 'error');
         } finally {
@@ -127,12 +176,20 @@ const ProfessorFrequencia = () => {
     };
 
     const handleExportAttendance = () => {
+        const requestKey = makeRosterKey(selectedCurso?.value, dataAula);
+        if (loadingAlunos || !requestKey || loadedRosterKeyRef.current !== requestKey) {
+            showToast('Aguarde o carregamento da turma e da data selecionadas.', 'warning');
+            return;
+        }
         const statusLabels = Object.fromEntries(attendanceOptions.map(option => [option.value, option.label]));
         downloadCsv(`chamada_${dataAula}.csv`,
             ['Data da aula', 'Turma', 'Aluno', 'Status', 'Chamada registrada'],
             alunos.map(aluno => [dataAula, selectedCurso?.label || '', aluno.nome, statusLabels[frequencias[aluno.id]] || 'Não informado', chamadaRegistrada ? 'Sim' : 'Não']));
         showToast(`${alunos.length} registro(s) de frequência exportado(s).`, 'success');
     };
+
+    const currentRosterKey = makeRosterKey(selectedCurso?.value, dataAula);
+    const rosterReady = Boolean(currentRosterKey && loadedRosterKey === currentRosterKey && !loadingAlunos);
 
     return (
         <div>
@@ -147,20 +204,20 @@ const ProfessorFrequencia = () => {
                             id="curso-select"
                             options={cursos}
                             value={selectedCurso?.value}
-                            onChange={(e) => setSelectedCurso(cursos.find(c => String(c.value) === String(e.target.value)) || null)}
+                            onChange={(e) => handleCursoChange(e.target.value)}
                             placeholder="Selecione uma turma..."
                         />
                     </div><label><span className="form-label">Data da aula</span><input
                         type="date"
                         value={dataAula}
                         max={localToday()}
-                        onChange={(e) => setDataAula(e.target.value)}
+                        onChange={(e) => handleDataChange(e.target.value)}
                         className="form-control"
                     /></label>
                 </div>
             </section>
 
-            {alunos.length > 0 && !loadingAlunos && (
+            {alunos.length > 0 && rosterReady && (
                 <div className="mb-4 flex flex-wrap items-center gap-2" aria-live="polite">
                     {attendanceOptions.map(option => <span key={option.value} className={`rounded-full border px-3 py-1 text-xs font-semibold ${option.selected}`}>{option.label}: {Object.values(frequencias).filter(value => value === option.value).length}</span>)}
                     {chamadaRegistrada && <span className="rounded-full bg-success/10 px-3 py-1 text-xs font-semibold text-success">Chamada registrada</span>}
@@ -209,13 +266,13 @@ const ProfessorFrequencia = () => {
             </div>
 
             {/* Botão de Salvar */}
-            {alunos.length > 0 && (
+            {alunos.length > 0 && rosterReady && (
                 <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button type="button" onClick={handleExportAttendance} className="btn btn-secondary px-6"><Download aria-hidden="true" />Exportar CSV</button>
                     <button
                         type="button"
                         onClick={handleSalvarFrequencia}
-                        disabled={loading}
+                        disabled={loading || loadingAlunos || !rosterReady}
                         className="btn btn-primary px-6"
                     >
                         <Save aria-hidden="true" />{loading ? 'Salvando...' : 'Salvar chamada'}

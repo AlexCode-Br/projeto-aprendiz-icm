@@ -31,8 +31,8 @@ test('professor gerencia somente seus horários; gestor consulta sem sobrescreve
     const professor=await login('professor@projetoaprendiz.local','Professor@2026!');
     const all=(await call(manager,'GET','/cursos')).data.cursos;
     const own=(await call(professor,'GET','/professores/meus-cursos')).data;
-    const course=own[0],foreign=all.find(item=>!own.some(row=>row.id===item.id));
-    assert.ok(course&&foreign);
+    const course=own[0],otherOwn=own.find(item=>item.id!==own[0]?.id),foreign=all.find(item=>!own.some(row=>row.id===item.id));
+    assert.ok(course&&otherOwn&&foreign);
     assert.equal(course.horarios.length,1);
     const path='/api/professores/me/turmas/'+course.id+'/horarios';
     const horarios=[{weekday:'Quarta-feira',start_time:'19:30'},{weekday:'Segunda-feira',start_time:'08:00'}];
@@ -43,6 +43,9 @@ test('professor gerencia somente seus horários; gestor consulta sem sobrescreve
     const saved=await call(professor,'PUT',path,{horarios});
     assert.equal(saved.status,200,JSON.stringify(saved.data));
     assert.deepEqual(saved.data.horarios,[horarios[1],horarios[0]]);
+    const conflict=await call(professor,'PUT','/api/professores/me/turmas/'+otherOwn.id+'/horarios',{horarios:[saved.data.horarios[0]]});
+    assert.equal(conflict.status,409,JSON.stringify(conflict.data));
+    assert.match(conflict.data.message,/já está ocupado pela turma/i);
     const current=(await call(manager,'GET','/cursos')).data.cursos.find(item=>item.id===course.id);
     assert.deepEqual(current.horarios,saved.data.horarios);
     const update={nome:current.nome,local:current.local,professor:current.professor,label:current.label,capacity:current.capacity};

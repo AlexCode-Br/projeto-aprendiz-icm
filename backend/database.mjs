@@ -7,10 +7,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 function normalizeValue(value) {
   if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value)) {
-    const number = Number(value);
-    if (Number.isSafeInteger(number) || value.includes('.')) return number;
-  }
   return value;
 }
 
@@ -47,7 +43,7 @@ function returningId(sql) {
   return `${sql} RETURNING id`;
 }
 
-export const databaseInternals = { postgresSql, returningId };
+export const databaseInternals = { postgresSql, returningId, normalizeRow };
 
 class PreparedStatement {
   constructor(database, sql) { this.database = database; this.sql = sql; }
@@ -131,7 +127,13 @@ class PostgresDatabase {
 
 export async function createDatabase({ sqlitePath, logger = console }) {
   if (process.env.DATABASE_URL) {
-    const { Pool } = await import('pg');
+    const { Pool, types } = await import('pg');
+    // Parse only PostgreSQL int8 values (COUNT/SUM), never text that merely
+    // resembles a number such as a phone or a catalog named "2026".
+    types.setTypeParser(20, value => {
+      const parsed = Number(value);
+      return Number.isSafeInteger(parsed) ? parsed : value;
+    });
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       max: Math.min(10, Math.max(1, Number(process.env.DB_POOL_SIZE || 5))),

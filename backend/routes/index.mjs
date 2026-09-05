@@ -36,6 +36,7 @@ export function createApiHandler(context) {
     normalizeProfilePhoto,
     securityHeaders,
     logger,
+    userFromSupabaseToken,
   } = context;
   const authRoutes = createAuthRoutes(context);
   const scheduleRoutes = createScheduleRoutes(context);
@@ -52,6 +53,9 @@ export function createApiHandler(context) {
     const ip = String(request.headers['x-forwarded-for'] || request.socket.remoteAddress || 'local').split(',')[0].trim();
     if (['POST','PUT','PATCH','DELETE'].includes(request.method) && !originAllowed(request)) {
       return json(response, 403, { message: 'Origem não autorizada.' });
+    }
+    if (url.pathname.split('/').some(segment => /^\d+$/.test(segment) && (!Number.isSafeInteger(Number(segment)) || Number(segment) < 1))) {
+      return json(response, 400, { message: 'Identificador inválido.' });
     }
   
     if (request.method === 'GET' && url.pathname === '/api/health') {
@@ -92,9 +96,12 @@ export function createApiHandler(context) {
       const body=await readJson(request),user=await db.prepare('SELECT * FROM users WHERE id=?').get(session.user_id);
       if(!(await verifyPassword(body.currentPassword,user.password_hash)))return json(response,400,{message:'A senha atual está incorreta.'});
       if(!strongPassword(body.newPassword))return json(response,400,{message:'A nova senha não atende aos requisitos de segurança.'});
-      await db.prepare('UPDATE users SET password_hash=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(await hashPassword(body.newPassword),session.user_id);
-      await db.prepare('DELETE FROM sessions WHERE user_id=? AND id<>?').run(session.user_id,session.id);
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'password_changed',ip);
+      const passwordHash=await hashPassword(body.newPassword);
+      await db.transaction(async()=>{
+        await db.prepare('UPDATE users SET password_hash=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(passwordHash,session.user_id);
+        await db.prepare('DELETE FROM sessions WHERE user_id=? AND id<>?').run(session.user_id,session.id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'password_changed',ip);
+      });
       await notificationService.notifyUser(session.user_id,'systemAlerts','Sua senha foi alterada','A senha de acesso da sua conta foi alterada. Se não reconhece esta ação, entre em contato com a administração imediatamente.',`password-change/${session.user_id}/${Date.now()}`);
       return json(response,200,{message:'Senha alterada com sucesso.'});
     }
@@ -111,9 +118,15 @@ export function createApiHandler(context) {
         return json(response,200,{message:'E-mail de teste enviado com sucesso.'});
       }catch(error){logger.error('notification_test_failed',error,{userId:session.user_id});return json(response,502,{message:'Não foi possível enviar o e-mail de teste. Revise a configuração do remetente.'});}
     }
-    if(request.method==='POST'&&url.pathname==='/api/account/security-alert'){
+    if(request.method==='POST'&&url.pathname==='/api/account/password-changed'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
-      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'password_changed',ip);
+      if(!usesSupabaseAuth)return json(response,404,{message:'Rota não disponível.'});
+      const authenticatedUser=await userFromSupabaseToken(request);
+      if(!authenticatedUser||Number(authenticatedUser.id)!==Number(session.user_id))return json(response,401,{message:'Confirme novamente sua identidade para concluir a alteração.'});
+      await db.transaction(async()=>{
+        await db.prepare('DELETE FROM sessions WHERE user_id=? AND id<>?').run(session.user_id,session.id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'password_changed',ip);
+      });
       await notificationService.notifyUser(session.user_id,'systemAlerts','Sua senha foi alterada','A senha de acesso da sua conta foi alterada. Se não reconhece esta ação, entre em contato com a administração imediatamente.',`supabase-password-change/${session.user_id}/${Date.now()}`);
       return json(response,200,{success:true});
     }
@@ -141,6 +154,7 @@ export function createApiHandler(context) {
           const allowed=await db.prepare(`SELECT students.id FROM students
             JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa'
             JOIN classes ON classes.id=enrollments.class_id AND classes.active=1
+            JOIN school_years ON school_years.id=classes.school_year_id AND school_years.active=1 AND school_years.closed_at IS NULL
             JOIN professor_profiles ON professor_profiles.id=classes.professor_id AND professor_profiles.active=1
             WHERE students.id=? AND students.active=1 AND professor_profiles.user_id=? LIMIT 1`).get(ownerId,session.user_id);
           if(!allowed)return json(response,403,{message:'Você não tem permissão para acessar esta foto.'});
