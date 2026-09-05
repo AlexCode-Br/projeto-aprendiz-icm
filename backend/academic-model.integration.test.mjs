@@ -97,6 +97,15 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     const second = await call(manager, 'POST', '/alunos', studentPayload('Aluno Sem Email Dois'));
     assert.equal(first.status, 201, JSON.stringify(first.data));
     assert.equal(second.status, 201, JSON.stringify(second.data));
+    const customChurchStudent = await call(manager, 'POST', '/alunos', {
+      ...studentPayload('Aluno de Igreja Digitada'),
+      church_id: 'ICM Mirantes de Periperi',
+    });
+    assert.equal(customChurchStudent.status, 201, JSON.stringify(customChurchStudent.data));
+    const churchesAfterCustomStudent = await call(manager, 'GET', '/api/churches');
+    assert.equal(churchesAfterCustomStudent.data.some(item => item.nome === 'ICM Mirantes de Periperi'), true);
+    const customChurchDirectory = await call(manager, 'GET', '/alunos?search=Aluno%20de%20Igreja%20Digitada');
+    assert.equal(customChurchDirectory.data.alunos[0].igreja, 'ICM Mirantes de Periperi');
 
     const invalidTeen = await call(manager, 'POST', '/alunos', { ...studentPayload('Adolescente Sem Responsável'), classe: 'Adolescente' });
     assert.equal(invalidTeen.status, 400);

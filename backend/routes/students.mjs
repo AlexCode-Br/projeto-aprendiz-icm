@@ -14,7 +14,6 @@ export function createStudentRoutes(context) {
     validateStudentContact,
     notificationService,
     profilePhotoStorage,
-    activeChurch,
     studentSelect,
     studentView,
     validateStudent,
@@ -22,6 +21,36 @@ export function createStudentRoutes(context) {
     studentCourseNames,
     activeClassesForStudent,
   } = context;
+
+  const prepareChurch = async value => {
+    const raw=String(value??'').trim(),numericId=/^\d+$/.test(raw)?Number(raw):null;
+    if(Number.isSafeInteger(numericId)&&numericId>0){
+      const existing=await db.prepare('SELECT id,name,active FROM churches WHERE id=?').get(numericId);
+      return existing?.active===1
+        ? {id:Number(existing.id),name:existing.name,needsSave:false,error:''}
+        : {id:null,name:'',needsSave:false,error:'Selecione uma igreja disponível.'};
+    }
+    const name=cleanText(value,100),error=catalogNameError(name,'igreja');
+    if(error)return {id:null,name,needsSave:false,error};
+    const existing=await db.prepare('SELECT id,name,active FROM churches WHERE LOWER(name)=LOWER(?)').get(name);
+    return existing?.active===1
+      ? {id:Number(existing.id),name:existing.name,needsSave:false,error:''}
+      : {id:existing?Number(existing.id):null,name,needsSave:true,error:''};
+  };
+
+  const savePreparedChurch = async (choice,session,ip) => {
+    if(!choice.needsSave)return choice;
+    if(choice.id){
+      await db.prepare('UPDATE churches SET name=?,active=1 WHERE id=?').run(choice.name,choice.id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_reactivated',ip);
+      return {...choice,needsSave:false};
+    }
+    await db.prepare('INSERT INTO churches (name,active) VALUES (?,1) ON CONFLICT DO NOTHING').run(choice.name);
+    const saved=await db.prepare('SELECT id,name FROM churches WHERE LOWER(name)=LOWER(?) AND active=1').get(choice.name);
+    if(!saved)throw new Error('student_church_not_saved');
+    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_created',ip);
+    return {id:Number(saved.id),name:saved.name,needsSave:false,error:''};
+  };
 
   return async function studentRoutes(request, response, url, ip) {
       if(request.method==='GET'&&url.pathname==='/api/churches'){
@@ -104,13 +133,15 @@ export function createStudentRoutes(context) {
           const value = url.searchParams.get(param);
           if (value) { conditions.push(`${column}=?`); params.push(value); }
         }
-        const enrollmentConditions = ["se.student_id=students.id", "se.status='ativa'", 'sc.active=1', 'sc.school_year_id=?'];
-        params.push(period.id);
-        for (const [param, column] of [['curso', 'selected_course.name'], ['turma_id', 'sc.id']]) {
-          const value = url.searchParams.get(param);
-          if (value) { enrollmentConditions.push(`${column}=?`); params.push(value); }
+        const courseFilter=url.searchParams.get('curso'),classFilter=url.searchParams.get('turma_id');
+        if(courseFilter||classFilter){
+          const enrollmentConditions = ["se.student_id=students.id", "se.status='ativa'", 'sc.active=1', 'sc.school_year_id=?'];
+          params.push(period.id);
+          for (const [value, column] of [[courseFilter, 'selected_course.name'], [classFilter, 'sc.id']]) {
+            if (value) { enrollmentConditions.push(`${column}=?`); params.push(value); }
+          }
+          conditions.push(`EXISTS (SELECT 1 FROM enrollments se JOIN classes sc ON sc.id=se.class_id JOIN courses selected_course ON selected_course.id=sc.course_id WHERE ${enrollmentConditions.join(' AND ')})`);
         }
-        conditions.push(`EXISTS (SELECT 1 FROM enrollments se JOIN classes sc ON sc.id=se.class_id JOIN courses selected_course ON selected_course.id=sc.course_id WHERE ${enrollmentConditions.join(' AND ')})`);
         const where = conditions.join(' AND ');
         const total = (await db.prepare(`SELECT COUNT(*) AS total FROM students WHERE ${where}`).get(...params)).total;
         const rows = await db.prepare(`${studentSelect} WHERE ${where} GROUP BY students.id ORDER BY students.name,students.id LIMIT ? OFFSET ?`).all(period.id,...params,limit,(page-1)*limit);
@@ -122,11 +153,11 @@ export function createStudentRoutes(context) {
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const body = await readJson(request);
         const name = cleanText(body.nome,100), email = cleanEmail(body.contato || body.email), phone=cleanText(body.telefone,30);
-        const guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',guardianConsent=body.classe==='Adolescente'&&body.guardian_consent===true,church=await activeChurch(body.church_id||body.local);
+        const guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',guardianConsent=body.classe==='Adolescente'&&body.guardian_consent===true,churchChoice=await prepareChurch(body.church_id||body.local);
         const rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
         const selections=rawClassIds.length?rawClassIds:courseNames;
-        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,guardian_consent:guardianConsent,turmas:selections,local:church?.id||''});
-        if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
+        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,guardian_consent:guardianConsent,turmas:selections,local:churchChoice.name||churchChoice.id||''});
+        if(churchChoice.error)errors.local=churchChoice.error;
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
         let classRows = [];
@@ -139,6 +170,7 @@ export function createStudentRoutes(context) {
               throw error;
             }
             classRows = selection.classes;
+            const church=await savePreparedChurch(churchChoice,session,ip);
             const result = await db.prepare('INSERT INTO students (name,email,phone,guardian_name,guardian_phone,guardian_consent_at,church_id,age_group,has_instrument) VALUES (?,?,?,?,?,?,?,?,?)').run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsent?new Date().toISOString():null,church.id,body.classe,body.instrumento === 'Sim' ? 1 : 0);
             for (const classRow of classRows) {
               await db.prepare('INSERT INTO enrollments (student_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classRow.id);
@@ -171,10 +203,10 @@ export function createStudentRoutes(context) {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const id = Number(studentMatch[1]), body = await readJson(request);
-        const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',guardianConsent=body.classe==='Adolescente'&&body.guardian_consent===true,church=await activeChurch(body.church_id||body.local),rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
+        const name=cleanText(body.nome,100),email=cleanEmail(body.contato||body.email),phone=cleanText(body.telefone,30),guardianName=body.classe==='Adolescente'?cleanText(body.guardian_name,100):'',guardianPhone=body.classe==='Adolescente'?cleanText(body.guardian_phone,30):'',guardianConsent=body.classe==='Adolescente'&&body.guardian_consent===true,churchChoice=await prepareChurch(body.church_id||body.local),rawClassIds=Array.isArray(body.turmas)?body.turmas:[],classIds=studentClassIds(rawClassIds),courseNames=studentCourseNames(body.curso);
         const selections=rawClassIds.length?rawClassIds:courseNames;
-        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,guardian_consent:guardianConsent,turmas:selections,local:church?.id||''});
-        if(!church)errors.local='Selecione uma igreja de origem cadastrada.';
+        const errors=validateStudent({...body,nome:name,contato:email,telefone:phone,guardian_name:guardianName,guardian_phone:guardianPhone,guardian_consent:guardianConsent,turmas:selections,local:churchChoice.name||churchChoice.id||''});
+        if(churchChoice.error)errors.local=churchChoice.error;
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
         const currentStudent=await db.prepare('SELECT id,guardian_consent_at FROM students WHERE id=? AND active=1').get(id);
@@ -188,6 +220,7 @@ export function createStudentRoutes(context) {
               throw error;
             }
             const guardianConsentAt=guardianConsent?(currentStudent.guardian_consent_at||new Date().toISOString()):currentStudent.guardian_consent_at;
+            const church=await savePreparedChurch(churchChoice,session,ip);
             await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,guardian_consent_at=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
               .run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsentAt,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
             const currentEnrollments=await db.prepare("SELECT enrollments.id,enrollments.class_id,classes.course_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?").all(id,period.id);

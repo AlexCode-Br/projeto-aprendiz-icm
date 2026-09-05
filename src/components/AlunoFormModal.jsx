@@ -147,8 +147,13 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                                     value={formData.local}
                                     onChange={handleChange}
                                     options={churches}
+                                    allowCreate
+                                    placeholder="Selecione ou digite uma igreja"
+                                    formatCreateLabel={inputValue => `Usar “${inputValue}” como igreja`}
+                                    noOptionsMessage={() => 'Digite o nome completo da igreja'}
                                     invalid={Boolean(errors.local)}
                                 />
+                                <p className="mt-1 text-xs text-text-muted">Escolha uma opção ou digite o nome de outra igreja.</p>
                                 {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
                             </div>
                             {formData.classe === 'Adolescente' && <>

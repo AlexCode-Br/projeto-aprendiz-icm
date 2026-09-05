@@ -14,6 +14,7 @@ import ContactLink from '../../components/ContactLink';
 import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
 import ProfileAvatar from '../../components/ProfileAvatar';
 import MobileStudentList from '../../components/MobileStudentList';
+import { STUDENT_CHURCH_SUGGESTIONS, catalogKey } from '../../../shared/catalog-options.mjs';
 
 const Alunos = () => {
     // --- Estados ---
@@ -40,6 +41,20 @@ const Alunos = () => {
     const requestSequence = useRef(0);
     const courseOptions = useMemo(() => [...new Set(offerings.map(item => item.nome))].sort((a,b) => a.localeCompare(b)), [offerings]);
     const classOptions = useMemo(() => offerings.filter(item => !filters.curso || item.nome === filters.curso).map(item => ({ value: item.id, label: `${item.nome} — ${item.local}${item.professor ? ` · ${item.professor}` : ''}` })), [offerings, filters.curso]);
+    const churchOptions = useMemo(() => {
+        const registered = new Set(churches.map(item => catalogKey(item.label)));
+        const suggestedNames = [...new Map(
+            [...STUDENT_CHURCH_SUGGESTIONS, ...offerings.map(item => item.local)]
+                .filter(name => name && !['ead', 'remoto'].includes(catalogKey(name)))
+                .map(name => [catalogKey(name), name]),
+        ).values()];
+        return [
+            ...churches,
+            ...suggestedNames
+                .filter(name => !registered.has(catalogKey(name)))
+                .map(name => ({ value: name, label: name })),
+        ].sort((left, right) => left.label.localeCompare(right.label, 'pt-BR'));
+    }, [churches, offerings]);
     const hasFilters = Boolean(searchTerm || Object.values(filters).some(Boolean));
 
     const { showToast } = useToast();
@@ -128,7 +143,7 @@ const Alunos = () => {
             }
             showToast(photoFailed ? 'Aluno salvo, mas não foi possível atualizar a foto.' : alunoId ? 'Aluno atualizado com sucesso!' : 'Aluno adicionado com sucesso!', photoFailed ? 'warning' : 'success', photoFailed ? 6000 : undefined);
             handleCloseModals();
-            await fetchAlunos();
+            await Promise.all([fetchAlunos(), fetchAcademicOptions()]);
         } catch (error) {
             const errorMessage = error.response?.data?.message || 'Erro ao salvar aluno.';
             showToast(errorMessage, 'error');
@@ -244,7 +259,7 @@ const Alunos = () => {
                 onSave={handleSaveAluno}
                 aluno={selectedAluno}
                 offerings={offerings}
-                churches={churches}
+                churches={churchOptions}
             />
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}

@@ -31,8 +31,12 @@ test('professor gerencia somente seus horários; gestor consulta sem sobrescreve
     const professor=await login('professor@projetoaprendiz.local','Professor@2026!');
     const all=(await call(manager,'GET','/cursos')).data.cursos;
     const own=(await call(professor,'GET','/professores/meus-cursos')).data;
-    const course=own[0],otherOwn=own.find(item=>item.id!==own[0]?.id),foreign=all.find(item=>!own.some(row=>row.id===item.id));
+    const initialStudents=(await call(manager,'GET','/alunos?limit=50')).data.alunos;
+    const enrolledClassIds=new Set(initialStudents.flatMap(student=>student.turmas.map(item=>item.id)));
+    const course=own.find(item=>enrolledClassIds.has(item.id))||own[0],otherOwn=own.find(item=>item.id!==course?.id),foreign=all.find(item=>!own.some(row=>row.id===item.id));
+    const linkedStudent=initialStudents.find(student=>student.turmas.some(item=>item.id===course?.id));
     assert.ok(course&&otherOwn&&foreign);
+    assert.ok(linkedStudent);
     assert.equal(course.horarios.length,1);
     const path='/api/professores/me/turmas/'+course.id+'/horarios';
     const horarios=[{weekday:'Quarta-feira',start_time:'19:30'},{weekday:'Segunda-feira',start_time:'08:00'}];
@@ -73,6 +77,10 @@ test('professor gerencia somente seus horários; gestor consulta sem sobrescreve
     assert.equal(database.prepare('SELECT id FROM classes WHERE id=?').get(course.id),undefined);
     assert.equal(database.prepare('SELECT id FROM professor_profiles WHERE id=?').get(professorId).id,professorId);
     assert.ok(database.prepare("SELECT id FROM audit_log WHERE action='class_deleted'").get());
+    const studentsAfterDeletion=(await call(manager,'GET','/alunos?limit=50&search='+encodeURIComponent(linkedStudent.nome))).data.alunos;
+    const preservedStudent=studentsAfterDeletion.find(student=>student.id===linkedStudent.id);
+    assert.ok(preservedStudent);
+    assert.equal(preservedStudent.turmas.some(item=>item.id===course.id),false);
     assert.equal((await call(manager,'DELETE','/cursos/'+course.id)).status,404);
   } finally {database?.close();await stop();await rm(directory,{recursive:true,force:true});}
 });
