@@ -11,16 +11,29 @@ test('serviço de e-mail mantém a caixa local e não chama o provedor em desenv
 });
 
 test('serviço de e-mail envia chave idempotente ao provedor',async()=>{
-  const previousKey=process.env.RESEND_API_KEY,previousFrom=process.env.EMAIL_FROM;
-  process.env.RESEND_API_KEY='re_test';process.env.EMAIL_FROM='Projeto <teste@example.com>';
+  const previousKey=process.env.RESEND_API_KEY,previousFrom=process.env.EMAIL_FROM,previousReply=process.env.EMAIL_REPLY_TO,previousLogo=process.env.EMAIL_LOGO_URL;
+  process.env.RESEND_API_KEY='re_test';
+  process.env.EMAIL_FROM='teste@example.com';
+  process.env.EMAIL_REPLY_TO='contato@example.com';
+  process.env.EMAIL_LOGO_URL='https://example.com/logo.png';
   let request;
   try{
     const {sendEmail}=createEmailService({db:{},isProduction:true,fetchImpl:async(url,options)=>{request={url,options};return{ok:true,json:async()=>({id:'email-1'})};}});
-    assert.deepEqual(await sendEmail('professor@example.com','Convite','Conteúdo','convite-1'),{id:'email-1'});
+    assert.deepEqual(await sendEmail('professor@example.com','Convite <especial>','Acesse https://example.com/convite\n\n<script>não executar</script>','convite-1'),{id:'email-1'});
     assert.equal(request.options.headers['Idempotency-Key'],'convite-1');
-    assert.deepEqual(JSON.parse(request.options.body).to,['professor@example.com']);
+    const payload=JSON.parse(request.options.body);
+    assert.deepEqual(payload.to,['professor@example.com']);
+    assert.equal(payload.from,'Projeto Aprendiz <teste@example.com>');
+    assert.equal(payload.reply_to,'contato@example.com');
+    assert.match(payload.html,/https:\/\/example\.com\/logo\.png/);
+    assert.match(payload.html,/Convite &lt;especial&gt;/);
+    assert.match(payload.html,/<a href="https:\/\/example\.com\/convite"/);
+    assert.doesNotMatch(payload.html,/<script>/);
+    assert.equal(payload.text,'Acesse https://example.com/convite\n\n<script>não executar</script>');
   }finally{
     if(previousKey===undefined)delete process.env.RESEND_API_KEY;else process.env.RESEND_API_KEY=previousKey;
     if(previousFrom===undefined)delete process.env.EMAIL_FROM;else process.env.EMAIL_FROM=previousFrom;
+    if(previousReply===undefined)delete process.env.EMAIL_REPLY_TO;else process.env.EMAIL_REPLY_TO=previousReply;
+    if(previousLogo===undefined)delete process.env.EMAIL_LOGO_URL;else process.env.EMAIL_LOGO_URL=previousLogo;
   }
 });

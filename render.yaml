@@ -47,3 +47,7 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      - key: EMAIL_REPLY_TO
+        sync: false
+      - key: EMAIL_LOGO_URL
+        value: https://aprendizicm.com.br/projeto-aprendiz-logo.png
