@@ -28,7 +28,7 @@ test('valida dados pessoais e rejeita conteúdo arbitrário', () => {
   assert.equal(phoneError('(71) 99999-1234'), '');
 });
 
-test('valida catálogos e o cadastro completo do professor', () => {
+test('valida catálogos e o perfil do professor sem criar turmas', () => {
   assert.notEqual(catalogNameError('a', 'curso'), '');
   assert.notEqual(catalogNameError('<script>', 'curso'), '');
   assert.equal(catalogNameError('Violão I', 'curso'), '');
@@ -37,9 +37,10 @@ test('valida catálogos e o cadastro completo do professor', () => {
     contato: 'alexandre@example.com',
     telefone: '(71) 99999-1234',
     local: 'Guarani',
-    cursos: ['Violão I'],
   }), {});
-  assert.ok(Object.keys(validateProfessor({ nome: 'Teste', contato: 'x', telefone: 'abc', local: '', cursos: [] })).length >= 5);
+  const errors = validateProfessor({ nome: 'Teste', contato: 'x', telefone: 'abc', local: '' });
+  assert.ok(Object.keys(errors).length >= 4);
+  assert.equal(Object.hasOwn(errors, 'cursos'), false);
 });
 
 test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () => {

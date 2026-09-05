@@ -65,7 +65,6 @@ export function validateProfessor(values) {
   if (emailMessage) errors.contato = emailMessage;
   if (phoneMessage) errors.telefone = phoneMessage;
   if (!cleanText(values.local, 100)) errors.local = 'Selecione um local cadastrado.';
-  if (!Array.isArray(values.cursos) || values.cursos.length === 0) errors.cursos = 'Selecione pelo menos um curso cadastrado.';
   return errors;
 }
 

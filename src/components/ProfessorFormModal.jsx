@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
-import FormCheckbox from './FormCheckbox';
 import ProfilePhotoPicker from './ProfilePhotoPicker';
-import { cleanText, hasValidationErrors, normalizeEmail, phoneDigits, validateProfessor } from '../../shared/validation.mjs';
+import { cleanText, catalogNameError, hasValidationErrors, normalizeEmail, phoneDigits, validateProfessor } from '../../shared/validation.mjs';
+import { catalogKey } from '../../shared/catalog-options.mjs';
 
-const initialFormState = { nome: '', contato: '', telefone: '', local: '', cursos: [] };
+const initialFormState = { nome: '', contato: '', telefone: '', local: '' };
+const professorFormId = 'professor-form';
 
 const formatPhone = value => {
     const digits = phoneDigits(value).slice(0, 11);
@@ -15,7 +16,7 @@ const formatPhone = value => {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
-const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], locations = [] }) => {
+const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, locations = [] }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,41 +28,41 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
             contato: professor.contato || '',
             telefone: professor.telefone || '',
             local: professor.local || '',
-            cursos: (professor.cursos || []).filter(course => courses.includes(course)),
         } : initialFormState);
         setErrors({});
         setPhotoChange(undefined);
         setIsSubmitting(false);
-    }, [professor, isOpen, courses]);
+    }, [professor, isOpen]);
 
     const update = (name, value) => {
         setFormData(previous => ({ ...previous, [name]: value }));
         if (errors[name]) setErrors(previous => ({ ...previous, [name]: '' }));
     };
 
-    const toggleCourse = course => update('cursos', formData.cursos.includes(course)
-        ? formData.cursos.filter(item => item !== course)
-        : [...formData.cursos, course]);
-
     const handleSubmit = async event => {
         event.preventDefault();
         if (isSubmitting) return;
         const normalized = { ...formData, nome: cleanText(formData.nome, 100), contato: normalizeEmail(formData.contato), telefone: formatPhone(formData.telefone) };
         const validationErrors = validateProfessor(normalized);
-        if (!locations.includes(normalized.local)) validationErrors.local = 'Selecione uma igreja cadastrada.';
-        if (normalized.cursos.some(course => !courses.includes(course))) validationErrors.cursos = 'Selecione somente cursos cadastrados.';
+        const locationError = catalogNameError(normalized.local, 'igreja');
+        if (locationError) validationErrors.local = locationError;
+        if (['ead', 'remoto'].includes(catalogKey(normalized.local))) validationErrors.local = 'Selecione uma igreja física.';
         if (hasValidationErrors(validationErrors)) return setErrors(validationErrors);
         setIsSubmitting(true);
         try { await onSave(normalized, photoChange); } finally { setIsSubmitting(false); }
     };
 
     if (!isOpen) return null;
-    const catalogsReady = courses.length > 0 && locations.length > 0;
+    const footer = (
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
+            <button type="submit" form={professorFormId} disabled={isSubmitting} className="btn btn-primary">{isSubmitting ? 'Salvando...' : professor ? 'Salvar alterações' : 'Salvar e enviar convite'}</button>
+        </div>
+    );
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'} maxWidth="max-w-2xl">
-            <form onSubmit={handleSubmit} noValidate>
-                {!catalogsReady && <div className="alert-warning mb-4" role="alert">Não há cursos e igrejas disponíveis nas turmas atuais. Cadastre ou ajuste uma turma antes de adicionar professores.</div>}
+        <Modal isOpen={isOpen} onClose={onClose} title={professor ? 'Editar professor' : 'Adicionar professor'} footer={footer} maxWidth="max-w-2xl">
+            <form id={professorFormId} onSubmit={handleSubmit} noValidate>
                 <div className="space-y-4">
                     <ProfilePhotoPicker name={formData.nome} currentUrl={professor?.foto_url || ''} value={photoChange} onChange={setPhotoChange} disabled={isSubmitting} />
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -88,33 +89,17 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, courses = [], 
                                 value={formData.local}
                                 onChange={event => update('local', event.target.value)}
                                 options={locations}
-                                placeholder="Selecione uma igreja"
+                                allowCreate
+                                placeholder="Selecione ou digite uma igreja"
+                                formatCreateLabel={inputValue => `Usar “${inputValue}” como igreja`}
+                                noOptionsMessage={() => 'Digite o nome completo da igreja'}
                                 invalid={Boolean(errors.local)}
                             />
+                            <p className="mt-1 text-xs text-text-muted">Escolha uma opção ou digite o nome de outra igreja.</p>
                             {errors.local && <p className="mt-1 text-xs text-danger">{errors.local}</p>}
                         </div>
                     </div>
-                    <fieldset>
-                        <legend className="form-label">Cursos que o professor ministrará</legend>
-                        <div className={`grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border p-3 sm:grid-cols-2 ${errors.cursos ? 'border-danger' : 'border-border'}`}>
-                            {courses.map(course => (
-                                <div key={course} className="rounded-lg hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                                    <FormCheckbox
-                                        checked={formData.cursos.includes(course)}
-                                        onChange={() => toggleCourse(course)}
-                                        label={course}
-                                        className="py-2 px-3 min-h-11 items-center"
-                                    />
-                                </div>
-                            ))}
-                            {!courses.length && <p className="col-span-full py-4 text-center text-sm text-text-muted">Nenhum curso ativo cadastrado.</p>}
-                        </div>
-                        {errors.cursos && <p className="mt-1 text-xs text-danger">{errors.cursos}</p>}
-                    </fieldset>
-                </div>
-                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                    <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
-                    <button type="submit" disabled={isSubmitting || !catalogsReady} className="btn btn-primary">{isSubmitting ? 'Salvando...' : professor ? 'Salvar alterações' : 'Salvar e enviar convite'}</button>
+                    <p className="rounded-xl border border-border bg-surface-muted/50 px-4 py-3 text-sm text-text-muted">Os cursos e as turmas deste professor são definidos exclusivamente na página <strong className="text-text-default">Turmas</strong>.</p>
                 </div>
             </form>
         </Modal>

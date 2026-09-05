@@ -12,6 +12,7 @@ import api from '../../services/api';
 import { Plus } from 'lucide-react';
 import SearchInput from '../../components/SearchInput';
 import ProfileAvatar from '../../components/ProfileAvatar';
+import { STUDENT_CHURCH_SUGGESTIONS, catalogKey } from '../../../shared/catalog-options.mjs';
 
 // Ícones de Ação
 
@@ -40,6 +41,11 @@ const Professores = () => {
     const [resendingProfessorId, setResendingProfessorId] = useState(null);
     const impactRequestRef = useRef(0);
     const deletionImpact = deletionContext?.impact || null;
+    const profileLocations = useMemo(() => [...new Map(
+        [...STUDENT_CHURCH_SUGGESTIONS, ...locaisList]
+            .filter(local => local && !['ead', 'remoto'].includes(catalogKey(local)))
+            .map(local => [catalogKey(local), local]),
+    ).values()].sort((left, right) => left.localeCompare(right, 'pt-BR')), [locaisList]);
 
     const fetchProfessores = useCallback(async () => {
         setLoadError('');
@@ -267,7 +273,7 @@ const Professores = () => {
                 </div>
             </div>
 
-            <ProfessorFormModal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} onSave={handleSaveProfessor} professor={currentProfessor} courses={coursesList} locations={locaisList} />
+            <ProfessorFormModal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} onSave={handleSaveProfessor} professor={currentProfessor} locations={profileLocations} />
             <ProfessorDetailsModal isOpen={isDetailsModalOpen} onClose={() => setDetailsModalOpen(false)} professor={currentProfessor} />
             <ProfessorDeletionImpactModal isOpen={isImpactModalOpen} onClose={handleCloseDeleteImpact} onContinue={handleContinueDelete} impact={deletionImpact} loading={isLoadingImpact} />
             <ConfirmationModal

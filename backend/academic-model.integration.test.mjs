@@ -60,6 +60,41 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     const classes = await call(manager, 'GET', '/cursos');
     const offering = classes.data.cursos[0];
     assert.ok(offering);
+    const professorsBeforeProfileEdit = await call(manager, 'GET', '/professores');
+    const existingProfessor = professorsBeforeProfileEdit.data.professores.find(item => item.nome === offering.professor);
+    assert.ok(existingProfessor);
+    const existingClassesBeforeEdit = classes.data.cursos
+      .filter(item => item.professor === existingProfessor.nome)
+      .map(item => ({ id: item.id, local: item.local, status: item.status }));
+    const profileUpdate = await call(manager, 'PUT', `/professores/${existingProfessor.id}`, {
+      nome: existingProfessor.nome,
+      contato: existingProfessor.contato,
+      telefone: existingProfessor.telefone,
+      local: 'ICM Federação',
+    });
+    assert.equal(profileUpdate.status, 200, JSON.stringify(profileUpdate.data));
+    const professorsAfterProfileEdit = await call(manager, 'GET', '/professores');
+    assert.equal(professorsAfterProfileEdit.data.professores.find(item => item.id === existingProfessor.id).local, 'ICM Federação');
+    const existingClassesAfterEdit = (await call(manager, 'GET', '/cursos')).data.cursos
+      .filter(item => item.professor === existingProfessor.nome)
+      .map(item => ({ id: item.id, local: item.local, status: item.status }));
+    assert.deepEqual(existingClassesAfterEdit, existingClassesBeforeEdit);
+    const newProfessor = await call(manager, 'POST', '/professores', {
+      nome: 'Professor Sem Turma',
+      contato: 'professor.sem.turma@example.com',
+      telefone: '(71) 99999-7654',
+      local: 'ICM Mirantes de Periperi',
+    });
+    assert.equal(newProfessor.status, 201, JSON.stringify(newProfessor.data));
+    assert.equal((await call(manager, 'GET', '/cursos')).data.cursos.some(item => item.professor === 'Professor Sem Turma'), false);
+    const virtualChurch = await call(manager, 'POST', '/professores', {
+      nome: 'Professor Local Virtual',
+      contato: 'professor.local.virtual@example.com',
+      telefone: '(71) 99999-8765',
+      local: 'EAD',
+    });
+    assert.equal(virtualChurch.status, 400);
+    assert.match(virtualChurch.data.errors.local, /igreja física/i);
     const customOffering = await call(manager, 'POST', '/cursos', {
       nome: 'Clarinete',
       local: 'EAD',

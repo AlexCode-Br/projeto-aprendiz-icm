@@ -11,7 +11,7 @@ const syncDialogs = () => {
     if (app) app.inert = openDialogs.length > 0;
 };
 
-const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) => {
+const Modal = ({ isOpen, onClose, title, children, footer = null, maxWidth = 'max-w-lg' }) => {
     const titleId = useId();
     const backdropRef = useRef(null);
     const dialogRef = useRef(null);
@@ -73,6 +73,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = 'max-w-lg' }) => {
                     </button>
                 </div>
                 <div className="modal-body min-h-0 overflow-y-auto p-5 sm:p-6">{children}</div>
+                {footer && <div className="shrink-0 border-t border-border bg-surface px-5 py-4 sm:px-6">{footer}</div>}
             </div>
         </div>, document.body
     );
