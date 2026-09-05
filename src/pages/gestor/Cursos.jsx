@@ -1,5 +1,5 @@
 import PageSkeleton from '../../components/PageSkeleton';
-import { CirclePause, Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import TurmaCard from '../../components/TurmaCard';
 import ClassScheduleList from '../../components/ClassScheduleList';
@@ -81,11 +81,11 @@ const Cursos = () => {
     const handleDeleteCurso = async () => {
         try {
             await api.delete(`/cursos/${currentCurso.id}`);
-            showToast('Turma desativada com sucesso!', 'success');
+            showToast('Turma excluída com sucesso!', 'success');
             handleCloseConfirmModal();
             await fetchCursos();
         } catch (error) {
-            showToast(error.message || 'Erro ao desativar a turma.', 'error');
+            showToast(error.message || 'Erro ao excluir a turma.', 'error');
         }
     };
 
@@ -155,7 +155,7 @@ const Cursos = () => {
                     {(searchTerm || selectedLocal) && <button type="button" onClick={() => { setSearchTerm(''); setSelectedLocal(''); }} className="btn btn-ghost px-2 text-xs">Limpar filtros</button>}
                 </div>
                 <div className="space-y-4">
-                    {filteredCursos.map(curso => <TurmaCard key={curso.id} curso={curso} onEdit={handleOpenCursoModal} onDeactivate={handleOpenConfirmModal} />)}
+                    {filteredCursos.map(curso => <TurmaCard key={curso.id} curso={curso} onEdit={handleOpenCursoModal} onDelete={handleOpenConfirmModal} />)}
                     {!filteredCursos.length && <div className="panel empty-state"><strong className="text-text-default">Nenhuma turma encontrada</strong><span>{searchTerm || selectedLocal ? 'Tente outra busca ou limpe os filtros.' : 'Use “Adicionar” para montar a primeira turma.'}</span></div>}
                 </div>
             </section>
@@ -194,8 +194,8 @@ const Cursos = () => {
                                             <button type="button" aria-label={`Editar ${curso.nome}`} onClick={() => handleOpenCursoModal(curso)} className="icon-button text-primary hover:bg-primary/10" title="Editar">
                                                 <Pencil aria-hidden="true" className="w-5 h-5" />
                                             </button>
-                                            <button type="button" aria-label={`Desativar turma ${curso.nome}`} onClick={() => handleOpenConfirmModal(curso)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Desativar turma">
-                                                <CirclePause aria-hidden="true" className="w-5 h-5" />
+                                            <button type="button" aria-label={`Excluir turma ${curso.nome}`} onClick={() => handleOpenConfirmModal(curso)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Excluir turma">
+                                                <Trash2 aria-hidden="true" className="w-5 h-5" />
                                             </button>
                                         </div>
                                     </td>
@@ -221,9 +221,9 @@ const Cursos = () => {
                 isOpen={isConfirmModalOpen}
                 onClose={handleCloseConfirmModal}
                 onConfirm={handleDeleteCurso}
-                title="Desativar turma?"
-                message="A turma deixará de aparecer como ativa. Você poderá manter o histórico já registrado."
-                confirmLabel="Desativar"
+                title="Excluir turma definitivamente?"
+                message="Esta ação excluirá a turma, suas matrículas, chamadas e registros de frequência. Os cadastros dos alunos e do professor serão preservados. Esta ação não pode ser desfeita."
+                confirmLabel="Excluir turma"
             />
         </>
     );

@@ -66,5 +66,13 @@ test('professor gerencia somente seus horários; gestor consulta sem sobrescreve
     database.prepare('UPDATE classes SET active=0 WHERE id=?').run(course.id);
     assert.equal((await call(professor,'PUT',path,{horarios})).status,403);
     assert.ok(database.prepare("SELECT id FROM audit_log WHERE action=?").get('class_schedule_updated:'+course.id));
+    const professorId=database.prepare('SELECT professor_id FROM classes WHERE id=?').get(course.id).professor_id;
+    const deletion=await call(manager,'DELETE','/cursos/'+course.id);
+    assert.equal(deletion.status,200,JSON.stringify(deletion.data));
+    assert.equal(deletion.data.permanentlyDeleted,true);
+    assert.equal(database.prepare('SELECT id FROM classes WHERE id=?').get(course.id),undefined);
+    assert.equal(database.prepare('SELECT id FROM professor_profiles WHERE id=?').get(professorId).id,professorId);
+    assert.ok(database.prepare("SELECT id FROM audit_log WHERE action='class_deleted'").get());
+    assert.equal((await call(manager,'DELETE','/cursos/'+course.id)).status,404);
   } finally {database?.close();await stop();await rm(directory,{recursive:true,force:true});}
 });

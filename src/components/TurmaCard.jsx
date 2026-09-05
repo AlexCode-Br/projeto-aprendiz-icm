@@ -1,9 +1,9 @@
 import React from 'react';
 import ClassScheduleList from './ClassScheduleList';
 import CourseIcon from './CourseIcon';
-import { CalendarClock, CirclePause, MapPin, Pencil, UserRound, Users } from 'lucide-react';
+import { CalendarClock, MapPin, Pencil, Trash2, UserRound, Users } from 'lucide-react';
 
-export default function TurmaCard({ curso, onEdit, onDeactivate }) {
+export default function TurmaCard({ curso, onEdit, onDelete }) {
     const alunos = Number(curso.alunos) || 0;
     const active = curso.status === 'Ativo';
     const titleId = `turma-card-${curso.id}`;
@@ -46,8 +46,8 @@ export default function TurmaCard({ curso, onEdit, onDeactivate }) {
                     <button type="button" onClick={() => onEdit(curso)} className="btn btn-secondary gap-2 px-3 text-primary" aria-label={`Editar turma de ${curso.nome} em ${curso.local}`}>
                         <Pencil aria-hidden="true" className="!h-4 !w-4" />Editar
                     </button>
-                    <button type="button" onClick={() => onDeactivate(curso)} className="icon-button border border-border bg-surface text-danger" aria-label={`Desativar turma de ${curso.nome} em ${curso.local}`} title="Desativar turma">
-                        <CirclePause aria-hidden="true" className="!h-5 !w-5" />
+                    <button type="button" onClick={() => onDelete(curso)} className="icon-button border border-border bg-surface text-danger" aria-label={`Excluir turma de ${curso.nome} em ${curso.local}`} title="Excluir turma">
+                        <Trash2 aria-hidden="true" className="!h-5 !w-5" />
                     </button>
                 </div>
             </footer>

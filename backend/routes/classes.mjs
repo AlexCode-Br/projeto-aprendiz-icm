@@ -187,11 +187,34 @@ export function createClassRoutes(context) {
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const classId=Number(courseMatch[1]);
         const existingClass=await db.prepare('SELECT professor_id,label FROM classes WHERE id=? AND school_year_id=?').get(classId,period.id);
-        await db.prepare('UPDATE classes SET active=0 WHERE id=? AND school_year_id=?').run(classId,period.id);
-        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_deactivated',ip);
-        if(existingClass)await notificationService.notifyProfessor(existingClass.professor_id,'courseUpdates','Turma encerrada',`A turma ${existingClass.label||`#${classId}`} foi encerrada.`,`class-deactivated/${classId}`);
-        if(existingClass)await notificationService.notifyManagers('courseUpdates','Turma encerrada',`${session.name} encerrou a turma ${existingClass.label||`#${classId}`}.`,`class-deactivated/${classId}`);
-        return json(response,200,{success:true});
+        if(!existingClass)return json(response,404,{message:'Turma não encontrada.'});
+        const summary=await db.prepare(`SELECT
+          COUNT(DISTINCT enrollments.id) AS matriculas,
+          COUNT(DISTINCT attendance_sessions.id) AS chamadas
+          FROM classes
+          LEFT JOIN enrollments ON enrollments.class_id=classes.id
+          LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id
+          WHERE classes.id=? AND classes.school_year_id=?`).get(classId,period.id);
+        await db.transaction(async()=>{
+          await db.prepare('DELETE FROM attendance_records WHERE session_id IN (SELECT id FROM attendance_sessions WHERE class_id=?)').run(classId);
+          await db.prepare('DELETE FROM attendance_sessions WHERE class_id=?').run(classId);
+          await db.prepare('DELETE FROM dropout_events WHERE class_id=?').run(classId);
+          await db.prepare('UPDATE enrollments SET transferred_to_class_id=NULL WHERE transferred_to_class_id=?').run(classId);
+          await db.prepare('DELETE FROM enrollments WHERE class_id=?').run(classId);
+          await db.prepare('DELETE FROM class_schedules WHERE class_id=?').run(classId);
+          const result=await db.prepare('DELETE FROM classes WHERE id=? AND school_year_id=?').run(classId,period.id);
+          if(!result.changes)throw new Error('class_delete_lost');
+          await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_deleted',ip);
+        });
+        const className=existingClass.label||`#${classId}`;
+        await notificationService.notifyProfessor(existingClass.professor_id,'courseUpdates','Turma excluída',`A turma ${className} foi excluída.`,`class-deleted/${classId}`);
+        await notificationService.notifyManagers('courseUpdates','Turma excluída',`${session.name} excluiu a turma ${className}.`,`class-deleted/${classId}`);
+        return json(response,200,{
+          success:true,
+          permanentlyDeleted:true,
+          resumo:{matriculas:Number(summary?.matriculas||0),chamadas:Number(summary?.chamadas||0)},
+          message:'Turma e todos os vínculos foram excluídos definitivamente.',
+        });
       }
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
