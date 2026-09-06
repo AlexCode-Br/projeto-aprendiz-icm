@@ -59,7 +59,6 @@ const InformativoReadersModal = ({ isOpen, onClose, informativo, professores = [
                 <div className="py-8 text-center text-danger">{error}</div>
             ) : (
                 <div>
-                    <p className="mb-3 inline-flex items-center gap-2 rounded-full bg-success/10 px-3 py-1.5 text-xs font-semibold text-success"><span className="h-2 w-2 rounded-full bg-success"/>{readers.length} {readers.length === 1 ? 'visualização sincronizada' : 'visualizações sincronizadas'}</p>
                     {readers.length > 0 ? (
                         <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border" aria-label="Professores que visualizaram">
                             {readers.map((reader, index) => {
