@@ -1,6 +1,7 @@
 function protectedCell(value) {
   if (value == null) return '';
   const text = String(value);
+  if (text.trim() === '-') return text;
   if (typeof value === 'string' && /^[\s]*[=+\-@]/.test(text)) return `'${text}`;
   return text;
 }
@@ -19,14 +20,20 @@ export function buildCsv(headers, rows) {
   return `\uFEFF${lines.join('\r\n')}`;
 }
 
-export function downloadCsv(filename, headers, rows) {
+export function createCsvFile(filename, headers, rows) {
   const safeFilename = String(filename || 'exportacao.csv').replace(/[\\/:*?"<>|]/g, '_');
   const finalFilename = safeFilename.toLowerCase().endsWith('.csv') ? safeFilename : `${safeFilename}.csv`;
-  const blob = new Blob([buildCsv(headers, rows)], { type: 'text/csv;charset=utf-8' });
+  const text = buildCsv(headers, rows);
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  return { blob, fileName: finalFilename, text };
+}
+
+export function downloadCsv(filename, headers, rows) {
+  const { blob, fileName } = createCsvFile(filename, headers, rows);
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = finalFilename;
+  anchor.download = fileName;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();

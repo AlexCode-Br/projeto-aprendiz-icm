@@ -53,6 +53,16 @@ test('dados de frequência e risco permanecem indisponíveis ao gestor',{timeout
     const professorReport=await call(professor,'GET','/api/relatorios/frequencia');
     assert.equal(professorReport.status,200,JSON.stringify(professorReport.data));
     assert.ok(Array.isArray(professorReport.data));
+    const detailedReport=await call(professor,'GET',`/api/relatorios/frequencia?detalhado=1&curso_id=${classId}`);
+    assert.equal(detailedReport.status,200,JSON.stringify(detailedReport.data));
+    assert.equal(detailedReport.data.resumo.turmas,1);
+    assert.equal(detailedReport.data.resumo.chamadas,2);
+    assert.equal(detailedReport.data.turmas[0].chamadas.length,2);
+    const detailedStudent=detailedReport.data.turmas[0].alunos.find(student=>student.id===studentId);
+    assert.equal(detailedStudent.ausentes,2);
+    assert.equal(detailedStudent.frequencia,0);
+    assert.equal(detailedStudent.frequencias.length,2);
+    assert.deepEqual(detailedStudent.frequencias.map(item=>item.status),['ausente','ausente']);
     const database=new DatabaseSync(databasePath);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM attendance_records WHERE student_id=?').get(studentId).total,2);
     database.close();

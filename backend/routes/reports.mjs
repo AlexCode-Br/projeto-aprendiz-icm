@@ -1,3 +1,7 @@
+import { attachClassSchedules } from '../class-schedules.mjs';
+
+const normalizeLocationName = value => ['remoto'].includes(String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()) ? 'EAD' : value;
+
 export function createReportRoutes(context) {
   const {
     db,
@@ -34,6 +38,117 @@ export function createReportRoutes(context) {
         let dateJoin='';
         if(start){dateJoin+=' AND attendance_sessions.class_date>=?';joinParams.push(start)}
         if(end){dateJoin+=' AND attendance_sessions.class_date<=?';joinParams.push(end)}
+        if(url.searchParams.get('detalhado')==='1'){
+          const classConditions=['classes.active=1','classes.school_year_id=?','professor_profiles.user_id=?'];
+          const classParams=[period.id,session.user_id];
+          if(filters.curso){classConditions.push('courses.name=?');classParams.push(filters.curso)}
+          if(filters.local){classConditions.push('locations.name=?');classParams.push(filters.local)}
+          if(filters.professor){classConditions.push('professor_profiles.name=?');classParams.push(filters.professor)}
+          if(filters.classId){classConditions.push('classes.id=?');classParams.push(Number(filters.classId))}
+
+          const professor=await db.prepare('SELECT name,email FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
+          const rawClasses=await db.prepare(`
+            SELECT classes.id,classes.label,classes.weekday,classes.start_time,
+              courses.name AS curso,locations.name AS local
+            FROM classes
+            JOIN courses ON courses.id=classes.course_id
+            JOIN locations ON locations.id=classes.location_id
+            JOIN professor_profiles ON professor_profiles.id=classes.professor_id
+            WHERE ${classConditions.join(' AND ')}
+            ORDER BY courses.name,classes.label,locations.name
+          `).all(...classParams);
+          const classRows=await attachClassSchedules(db,rawClasses);
+          const classIds=classRows.map(row=>Number(row.id));
+          let studentRows=[],callRows=[],recordRows=[];
+          if(classIds.length){
+            const placeholders=classIds.map(()=>'?').join(',');
+            studentRows=await db.prepare(`
+              SELECT classes.id AS class_id,students.id AS student_id,students.name AS aluno,
+                COUNT(DISTINCT attendance_sessions.id) AS chamadas,
+                COUNT(attendance_records.id) AS registros,
+                COALESCE(SUM(CASE WHEN attendance_records.status='presente' THEN 1 ELSE 0 END),0) AS presentes,
+                COALESCE(SUM(CASE WHEN attendance_records.status='ausente' THEN 1 ELSE 0 END),0) AS ausentes,
+                COALESCE(SUM(CASE WHEN attendance_records.status='justificado' THEN 1 ELSE 0 END),0) AS justificados
+              FROM enrollments
+              JOIN students ON students.id=enrollments.student_id
+              JOIN classes ON classes.id=enrollments.class_id
+              LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id${dateJoin}
+              LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
+                AND attendance_records.student_id=students.id
+              WHERE enrollments.status='ativa' AND students.active=1 AND classes.id IN (${placeholders})
+              GROUP BY classes.id,students.id,students.name
+              ORDER BY classes.id,students.name
+            `).all(...joinParams,...classIds);
+            const callDateConditions=[];
+            const callDateParams=[];
+            if(start){callDateConditions.push('attendance_sessions.class_date>=?');callDateParams.push(start)}
+            if(end){callDateConditions.push('attendance_sessions.class_date<=?');callDateParams.push(end)}
+            callRows=await db.prepare(`
+              SELECT attendance_sessions.id,attendance_sessions.class_id,attendance_sessions.class_date AS data,
+                COUNT(attendance_records.id) AS registros,
+                COALESCE(SUM(CASE WHEN attendance_records.status='presente' THEN 1 ELSE 0 END),0) AS presentes,
+                COALESCE(SUM(CASE WHEN attendance_records.status='ausente' THEN 1 ELSE 0 END),0) AS ausentes,
+                COALESCE(SUM(CASE WHEN attendance_records.status='justificado' THEN 1 ELSE 0 END),0) AS justificados
+              FROM attendance_sessions
+              LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
+              WHERE attendance_sessions.class_id IN (${placeholders})${callDateConditions.length?` AND ${callDateConditions.join(' AND ')}`:''}
+              GROUP BY attendance_sessions.id,attendance_sessions.class_id,attendance_sessions.class_date
+              ORDER BY attendance_sessions.class_date DESC,attendance_sessions.id DESC
+            `).all(...classIds,...callDateParams);
+            recordRows=await db.prepare(`
+              SELECT attendance_sessions.id AS session_id,attendance_sessions.class_id,
+                attendance_sessions.class_date AS data,attendance_records.student_id,attendance_records.status
+              FROM attendance_sessions
+              JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
+              WHERE attendance_sessions.class_id IN (${placeholders})${callDateConditions.length?` AND ${callDateConditions.join(' AND ')}`:''}
+              ORDER BY attendance_sessions.class_date,attendance_sessions.id,attendance_records.student_id
+            `).all(...classIds,...callDateParams);
+          }
+
+          const studentsByClass=new Map(),callsByClass=new Map(),recordsBySessionAndStudent=new Map();
+          for(const row of studentRows){
+            const registros=Number(row.registros)||0,chamadas=Number(row.chamadas)||0,presentes=Number(row.presentes)||0,justificados=Number(row.justificados)||0;
+            const item={
+              id:Number(row.student_id),nome:row.aluno,chamadas,registros,presentes,
+              ausentes:Number(row.ausentes)||0,justificados,
+              naoRegistrados:Math.max(0,chamadas-registros),
+              frequencia:registros?Math.round(100*(presentes+justificados)/registros):null,
+            };
+            const list=studentsByClass.get(Number(row.class_id))||[];list.push(item);studentsByClass.set(Number(row.class_id),list);
+          }
+          for(const row of callRows){
+            const item={id:Number(row.id),data:row.data,registros:Number(row.registros)||0,presentes:Number(row.presentes)||0,ausentes:Number(row.ausentes)||0,justificados:Number(row.justificados)||0};
+            const list=callsByClass.get(Number(row.class_id))||[];list.push(item);callsByClass.set(Number(row.class_id),list);
+          }
+          for(const row of recordRows)recordsBySessionAndStudent.set(`${Number(row.session_id)}:${Number(row.student_id)}`,row.status);
+          const reportClasses=classRows.map(row=>{
+            const chamadas=callsByClass.get(Number(row.id))||[];
+            const alunos=(studentsByClass.get(Number(row.id))||[]).map(student=>({
+              ...student,
+              frequencias:chamadas.map(call=>({chamadaId:call.id,data:call.data,status:recordsBySessionAndStudent.get(`${call.id}:${student.id}`)||'nao_registrado'})),
+            }));
+            const registros=alunos.reduce((total,item)=>total+item.registros,0),presentes=alunos.reduce((total,item)=>total+item.presentes,0),justificados=alunos.reduce((total,item)=>total+item.justificados,0);
+            return {
+              id:Number(row.id),curso:row.curso,turma:row.label||'',local:normalizeLocationName(row.local),horarios:row.horarios||[],
+              resumo:{alunos:alunos.length,chamadas:chamadas.length,registros,presentes,ausentes:alunos.reduce((total,item)=>total+item.ausentes,0),justificados,frequencia:registros?Math.round(100*(presentes+justificados)/registros):null},
+              alunos,chamadas,
+            };
+          });
+          const allStudents=new Set(studentRows.map(row=>Number(row.student_id)));
+          const reportRecords=reportClasses.reduce((total,item)=>total+item.resumo.registros,0);
+          const reportPresent=reportClasses.reduce((total,item)=>total+item.resumo.presentes,0);
+          const reportJustified=reportClasses.reduce((total,item)=>total+item.resumo.justificados,0);
+          return json(response,200,{
+            metadata:{
+              professor:{nome:professor?.name||'Professor',email:professor?.email||''},
+              periodoLetivo:{nome:period.label,inicio:String(period.start_date||'').slice(0,10),fim:String(period.end_date||'').slice(0,10)},
+              filtros:{dataInicio:start||'',dataFim:end||'',turmaId:filters.classId?Number(filters.classId):null},
+              geradoEm:new Date().toISOString(),
+            },
+            resumo:{turmas:reportClasses.length,alunos:allStudents.size,chamadas:callRows.length,registros:reportRecords,presentes:reportPresent,ausentes:reportClasses.reduce((total,item)=>total+item.resumo.ausentes,0),justificados:reportJustified,frequencia:reportRecords?Math.round(100*(reportPresent+reportJustified)/reportRecords):null},
+            turmas:reportClasses,
+          });
+        }
         const sql="SELECT courses.name AS curso,students.name AS aluno,professor_profiles.name AS professor,locations.name AS local,COUNT(DISTINCT attendance_sessions.id) AS aulas,COALESCE(SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS presencas FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id"+dateJoin+" LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE "+conditions.join(' AND ')+" GROUP BY enrollments.id,courses.name,students.name,professor_profiles.name,locations.name ORDER BY courses.name,students.name";
         const rows=await db.prepare(sql).all(...joinParams,...whereParams);
         return json(response,200,rows.map(row=>({curso:row.curso,aluno:row.aluno,professor:row.professor,local:row.local,frequencia:row.aulas?(Math.round(100*row.presencas/row.aulas)+'%'):'Sem aulas'})));
