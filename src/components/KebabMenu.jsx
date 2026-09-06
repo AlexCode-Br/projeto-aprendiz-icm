@@ -2,7 +2,20 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useId } from 'reac
 import { createPortal } from 'react-dom';
 import { EllipsisVertical } from 'lucide-react';
 
-export default function KebabMenu({ children, label = 'Abrir menu de ações' }) {
+export function KebabMenuItem({ icon: Icon, children, tone = 'default', ...props }) {
+    const tones = {
+        default: 'text-text-default hover:bg-surface-hover',
+        primary: 'text-primary hover:bg-primary/10',
+        warning: 'text-amber-800 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/30',
+        danger: 'text-danger hover:bg-red-50 dark:hover:bg-red-950/30',
+    };
+    return <button type="button" role="menuitem" className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${tones[tone] || tones.default}`} {...props}>
+        {Icon && <Icon aria-hidden="true" className="!h-4 !w-4 shrink-0" />}
+        <span className="min-w-0 flex-1">{children}</span>
+    </button>;
+}
+
+export default function KebabMenu({ children, label = 'Abrir menu de ações', buttonClassName = '' }) {
     const [open, setOpen] = useState(false);
     const [position, setPosition] = useState({ left: 0, top: 0 });
     const buttonRef = useRef(null);
@@ -36,7 +49,7 @@ export default function KebabMenu({ children, label = 'Abrir menu de ações' })
         items[next]?.focus();
     };
     return <>
-        <button ref={buttonRef} type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(value => !value)} className="icon-button"><EllipsisVertical aria-hidden="true" /></button>
+        <button ref={buttonRef} type="button" aria-label={label} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(value => !value)} className={`icon-button shrink-0 text-text-muted hover:text-text-default ${buttonClassName}`}><EllipsisVertical aria-hidden="true" /></button>
         {open && createPortal(<div ref={menuRef} id={id} role="menu" aria-label="Ações do registro" onKeyDown={keyDown} onClick={event => { if (event.target.closest('button:not([disabled]),a')) setOpen(false); }} className="fixed z-[60] w-52 rounded-xl border border-border bg-surface p-1.5 shadow-lg" style={position}>{children}</div>, document.body)}
     </>;
 }

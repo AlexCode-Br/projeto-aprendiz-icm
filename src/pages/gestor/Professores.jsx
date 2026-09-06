@@ -6,7 +6,7 @@ import ProfessorDetailsModal from '../../components/ProfessorDetailsModal';
 import ProfessorDeletionImpactModal from '../../components/ProfessorDeletionImpactModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import FormSelect from '../../components/FormSelect';
-import KebabMenu from '../../components/KebabMenu'; // Importando o novo componente
+import KebabMenu, { KebabMenuItem } from '../../components/KebabMenu';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 import { Plus } from 'lucide-react';
@@ -220,9 +220,38 @@ const Professores = () => {
                 </div>
             </section>
 
-            <div className="panel overflow-hidden">
+            <section className="space-y-3 md:hidden" aria-label="Professores encontrados">
+                {filteredProfessores.map(prof => <article key={prof.id} className="panel min-w-0 p-3.5" aria-label={prof.nome}>
+                    <header className="flex items-center gap-2.5">
+                        <button type="button" onClick={() => handleOpenDetailsModal(prof)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left hover:text-primary" aria-label={`Ver detalhes de ${prof.nome}`}>
+                            <ProfileAvatar name={prof.nome} src={prof.foto_url} className="h-9 w-9" textClassName="text-xs" />
+                            <span className="min-w-0 break-words text-sm font-semibold leading-5">{prof.nome}</span>
+                        </button>
+                        <KebabMenu label={`Ações de ${prof.nome}`}>
+                            <KebabMenuItem icon={DetailsIcon} onClick={() => handleOpenDetailsModal(prof)}>Ver detalhes</KebabMenuItem>
+                            <KebabMenuItem icon={EditIcon} tone="primary" onClick={() => handleOpenFormModal(prof)}>Editar cadastro</KebabMenuItem>
+                            <KebabMenuItem icon={InviteIcon} tone="warning" disabled={Boolean(resendingProfessorId) || prof.acesso === 'Ativo' || prof.status !== 'Ativo'} onClick={() => handleResendInvite(prof)}>{prof.acesso === 'Ativo' ? 'Acesso já ativo' : 'Reenviar convite'}</KebabMenuItem>
+                            <KebabMenuItem icon={DeleteIcon} tone="danger" onClick={() => handleOpenDeleteImpact(prof)}>Excluir professor</KebabMenuItem>
+                        </KebabMenu>
+                    </header>
+                    <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-t border-border/70 pt-2.5">
+                        <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Igreja</p>
+                            <p className="mt-0.5 break-words text-sm">{prof.local || 'Não informada'}</p>
+                        </div>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${prof.acesso === 'Ativo' ? 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300' : prof.acesso === 'Desativado' ? 'bg-gray-100 text-text-default dark:bg-white/10 dark:text-gray-300' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'}`}>{prof.acesso}</span>
+                    </div>
+                    <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-wide text-text-muted">Cursos</span>
+                        {prof.cursos.length ? prof.cursos.map(course => <span key={course} className="badge">{course}</span>) : <span className="text-xs text-text-muted">Nenhum curso</span>}
+                    </div>
+                </article>)}
+                {!filteredProfessores.length && <div className="panel p-6 text-center text-sm text-text-muted">Nenhum professor encontrado com estes filtros.</div>}
+            </section>
+
+            <div className="panel hidden overflow-hidden md:block">
                 <div className="table-scroll" tabIndex={0} role="region" aria-label="Resultados">
-                    <table className="data-table mobile-cards record-cards w-full text-sm text-left">
+                    <table className="data-table w-full text-sm text-left">
                         <thead className="bg-surface-muted text-xs uppercase text-text-muted">
                             <tr>
                                 <th className="px-6 py-3">Professor</th>
@@ -242,27 +271,11 @@ const Professores = () => {
                                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${prof.acesso === 'Ativo' ? 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300' : prof.acesso === 'Desativado' ? 'bg-gray-100 text-text-default dark:bg-white/10 dark:text-gray-300' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'}`}>{prof.acesso}</span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
-                                        <div className="hidden md:flex items-center justify-center space-x-2">
+                                        <div className="flex items-center justify-center space-x-2">
                                             <button type="button" aria-label={`Ver detalhes de ${prof.nome}`} onClick={() => handleOpenDetailsModal(prof)} className="icon-button text-text-muted" title="Detalhes"><DetailsIcon/></button>
                                             <button type="button" aria-label={`Editar ${prof.nome}`} onClick={() => handleOpenFormModal(prof)} className="icon-button text-primary" title="Editar"><EditIcon/></button>
                                             <button type="button" aria-label={prof.acesso === 'Ativo' ? `Convite indisponível: ${prof.nome} já tem acesso ativo` : `Reenviar convite para ${prof.nome}`} disabled={Boolean(resendingProfessorId) || prof.acesso === 'Ativo' || prof.status !== 'Ativo'} onClick={() => handleResendInvite(prof)} className="icon-button text-amber-700 dark:text-amber-300" title={prof.acesso === 'Ativo' ? 'O professor já tem acesso ativo' : 'Reenviar convite'}><InviteIcon/></button>
                                             <button type="button" aria-label={`Excluir ${prof.nome}`} onClick={() => handleOpenDeleteImpact(prof)} className="icon-button text-danger" title="Excluir definitivamente"><DeleteIcon/></button>
-                                        </div>
-                                        <div className="md:hidden">
-                                            <KebabMenu label={`Ações de ${prof.nome}`}>
-                                                <button type="button" role="menuitem" onClick={() => handleOpenDetailsModal(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-text-default hover:bg-surface-hover transition-colors">
-                                                    <DetailsIcon /> Detalhes
-                                                </button>
-                                                <button type="button" role="menuitem" onClick={() => handleOpenFormModal(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-text-default hover:bg-surface-hover transition-colors">
-                                                    <EditIcon /> Editar
-                                                </button>
-                                                <button type="button" role="menuitem" disabled={Boolean(resendingProfessorId) || prof.acesso === 'Ativo' || prof.status !== 'Ativo'} onClick={() => handleResendInvite(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-amber-800 hover:bg-amber-50 disabled:opacity-40 dark:text-amber-200 dark:hover:bg-amber-950/30">
-                                                    <InviteIcon /> {prof.acesso === 'Ativo' ? 'Acesso já ativo' : 'Reenviar convite'}
-                                                </button>
-                                                <button type="button" role="menuitem" onClick={() => handleOpenDeleteImpact(prof)} className="flex min-h-11 w-full items-center gap-2 px-4 py-2 text-left text-sm text-danger hover:bg-red-50 dark:hover:bg-red-950/30">
-                                                    <DeleteIcon /> Excluir
-                                                </button>
-                                            </KebabMenu>
                                         </div>
                                     </td>
                                 </tr>

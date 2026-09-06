@@ -2,6 +2,7 @@ import React from 'react';
 import ClassScheduleList from './ClassScheduleList';
 import CourseIcon from './CourseIcon';
 import { CalendarClock, MapPin, Pencil, Trash2, UserRound, Users } from 'lucide-react';
+import KebabMenu, { KebabMenuItem } from './KebabMenu';
 
 export default function TurmaCard({ curso, onEdit, onDelete }) {
     const alunos = Number(curso.alunos) || 0;
@@ -21,9 +22,13 @@ export default function TurmaCard({ curso, onEdit, onDelete }) {
                         <span className="min-w-0 break-words"><span className="sr-only">Igreja: </span>{curso.local}</span>
                     </p>
                 </div>
-                <span className={`mt-0.5 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${active ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
-                    {active ? 'Ativa' : 'Inativa'}
-                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                    <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${active ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>{active ? 'Ativa' : 'Inativa'}</span>
+                    <KebabMenu label={`Ações da turma ${curso.nome}`}>
+                        <KebabMenuItem icon={Pencil} tone="primary" onClick={() => onEdit(curso)}>Editar turma</KebabMenuItem>
+                        <KebabMenuItem icon={Trash2} tone="danger" onClick={() => onDelete(curso)}>Excluir turma</KebabMenuItem>
+                    </KebabMenu>
+                </div>
             </header>
 
             <dl className="grid grid-cols-2 gap-4 p-4">
@@ -37,19 +42,11 @@ export default function TurmaCard({ curso, onEdit, onDelete }) {
                 </div>
             </dl>
 
-            <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-surface-muted/50 px-4 py-2.5">
+            <footer className="flex items-center border-t border-border bg-surface-muted/50 px-4 py-2.5">
                 <p className="flex items-center gap-2 text-sm text-text-muted">
                     <Users aria-hidden="true" className="!h-4 !w-4 shrink-0" />
                     <span><strong className="font-semibold tabular-nums text-text-default">{alunos}</strong> {alunos === 1 ? 'aluno' : 'alunos'}</span>
                 </p>
-                <div className="ml-auto flex items-center gap-2">
-                    <button type="button" onClick={() => onEdit(curso)} className="btn btn-secondary gap-2 px-3 text-primary" aria-label={`Editar turma de ${curso.nome} em ${curso.local}`}>
-                        <Pencil aria-hidden="true" className="!h-4 !w-4" />Editar
-                    </button>
-                    <button type="button" onClick={() => onDelete(curso)} className="icon-button border border-border bg-surface text-danger" aria-label={`Excluir turma de ${curso.nome} em ${curso.local}`} title="Excluir turma">
-                        <Trash2 aria-hidden="true" className="!h-5 !w-5" />
-                    </button>
-                </div>
             </footer>
         </article>
     );

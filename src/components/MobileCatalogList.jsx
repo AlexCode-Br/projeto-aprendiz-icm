@@ -1,6 +1,7 @@
 import React from 'react';
 import { Church, Pencil, Trash2 } from 'lucide-react';
 import CourseIcon from './CourseIcon';
+import KebabMenu, { KebabMenuItem } from './KebabMenu';
 
 export default function MobileCatalogList({ type, items, onEdit, onDelete }) {
     return <ul className="divide-y divide-border sm:hidden" aria-label={type === 'cursos' ? 'Catálogo de cursos' : 'Catálogo de igrejas'}>
@@ -15,10 +16,10 @@ export default function MobileCatalogList({ type, items, onEdit, onDelete }) {
                     <span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${item.ativo ? 'bg-success/10 text-success' : 'bg-surface-muted text-text-muted'}`}>{item.ativo ? 'Ativo' : 'Inativo'}</span>
                 </div>
             </div>
-            <div className="flex items-center">
-                <button type="button" onClick={() => onEdit(item)} className="icon-button text-primary" aria-label={`Editar ${item.nome}`} title="Editar"><Pencil aria-hidden="true" className="!h-5 !w-5" /></button>
-                <button type="button" onClick={() => onDelete(item)} className="icon-button text-danger" aria-label={`Excluir definitivamente ${item.nome}`} title="Excluir"><Trash2 aria-hidden="true" className="!h-5 !w-5" /></button>
-            </div>
+            <KebabMenu label={`Ações de ${item.nome}`}>
+                <KebabMenuItem icon={Pencil} tone="primary" onClick={() => onEdit(item)}>Editar</KebabMenuItem>
+                <KebabMenuItem icon={Trash2} tone="danger" onClick={() => onDelete(item)}>Excluir definitivamente</KebabMenuItem>
+            </KebabMenu>
         </li>)}
     </ul>;
 }

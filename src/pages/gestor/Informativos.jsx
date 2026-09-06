@@ -1,7 +1,6 @@
 import FormSelect from '../../components/FormSelect';
 import SearchInput from '../../components/SearchInput';
-import { Plus } from 'lucide-react';
-import { Pin, Eye } from 'lucide-react';
+import { Eye, Pencil, Pin, Plus, Trash2 } from 'lucide-react';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import InformativoModal from '../../components/InformativoModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
@@ -12,6 +11,7 @@ import InformativoReadersModal from '../../components/InformativoReadersModal';
 import AnnouncementAttachments from '../../components/AnnouncementAttachments';
 import AnnouncementAudienceModal from '../../components/AnnouncementAudienceModal';
 import useLiveRefresh from '../../hooks/useLiveRefresh';
+import KebabMenu, { KebabMenuItem } from '../../components/KebabMenu';
 
 const Informativos = () => {
     const { showToast } = useToast();
@@ -173,7 +173,12 @@ const Informativos = () => {
                         <div className="p-5 flex-grow">
                             <div className="flex justify-between items-start mb-2">
                                 <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${getCategoryClass(info.categoria)}`}>{info.categoria}</span>
-                                <span className="flex items-center gap-2"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${info.status === 'Agendado' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200' : 'bg-success/10 text-success'}`}>{info.status}</span>{info.fixado && <span title="Fixado no topo"><Pin aria-hidden="true" className="text-primary !h-4 !w-4" /></span>}</span>
+                                <div className="flex items-center gap-1"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${info.status === 'Agendado' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200' : 'bg-success/10 text-success'}`}>{info.status}</span>{info.fixado && <span title="Fixado no topo"><Pin aria-hidden="true" className="text-primary !h-4 !w-4" /></span>}
+                                    <div className="md:hidden"><KebabMenu label={`Ações do informativo ${info.titulo}`}>
+                                        <KebabMenuItem icon={Pencil} tone="primary" onClick={() => handleOpenFormModal(info)}>Editar informativo</KebabMenuItem>
+                                        <KebabMenuItem icon={Trash2} tone="danger" onClick={() => handleOpenDeleteConfirm(info)}>Excluir informativo</KebabMenuItem>
+                                    </KebabMenu></div>
+                                </div>
                             </div>
                             <h3 className="break-words font-bold text-lg text-text-default">{info.titulo}</h3>
                             <p className="text-sm text-text-muted mt-1">{info.data} às {info.hora}</p>
@@ -184,7 +189,7 @@ const Informativos = () => {
                             <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem visualizou">
                                 <span className="inline-flex items-center gap-1.5"><Eye aria-hidden="true" className="!h-4 !w-4" />{info.lido} visualizações</span>
                             </button>
-                            <div className="flex items-center space-x-2">
+                            <div className="hidden items-center space-x-2 md:flex">
                                 <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-primary hover:bg-primary/10">Editar</button>
                                 <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-10 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
                             </div>
