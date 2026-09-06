@@ -7,8 +7,23 @@ import { Menu, X, ChevronDown, UserRound, Sun, Moon, LogOut } from 'lucide-react
 
 const Header = ({ sidebarOpen, setSidebarOpen }) => {
     const location = useLocation();
-    const sectionNames = { dashboard: 'Visão geral', cursos: 'Turmas', turmas: 'Minhas turmas', alunos: 'Alunos', professores: 'Professores', relatorios: 'Relatórios', informativos: 'Informativos', suporte: 'Suporte', frequencia: 'Chamada', configuracoes: 'Configurações' };
-    const section = sectionNames[location.pathname.split('/').pop()] || 'Projeto Aprendiz';
+    const pageNames = {
+        '/gestor/dashboard': 'Visão geral',
+        '/gestor/cursos': 'Turmas',
+        '/gestor/alunos': 'Alunos',
+        '/gestor/professores': 'Professores',
+        '/gestor/informativos': 'Informativos',
+        '/gestor/suporte': 'Central de Suporte',
+        '/professor/dashboard': 'Visão geral',
+        '/professor/turmas': 'Minhas turmas',
+        '/professor/alunos': 'Meus alunos',
+        '/professor/frequencia': 'Chamada',
+        '/professor/relatorios': 'Meus relatórios',
+        '/professor/informativos': 'Informativos e avisos',
+        '/professor/suporte': 'Suporte',
+        '/configuracoes': 'Configurações da conta',
+    };
+    const pageName = pageNames[location.pathname] || 'Projeto Aprendiz';
     const triggerRef = useRef(null);
     const { user, logout } = useContext(AuthContext);
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -52,7 +67,7 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
                 {sidebarOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
             </button>
             <div className="flex min-w-0 flex-1 justify-start">
-                <p className="truncate text-sm font-semibold text-text-default"><span className="hidden font-normal text-text-muted sm:inline">{user?.role === 'gestor' ? 'Gestão' : 'Professor'}<span className="mx-3 text-text-muted/60">/</span></span>{section}</p>
+                <p className="truncate text-sm font-semibold text-text-default">{pageName}</p>
             </div>
             <div className="relative flex items-center" ref={dropdownRef} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropdownOpen(false); }}>
                 <button ref={triggerRef} type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen(!dropdownOpen)} className="group flex min-h-11 min-w-11 items-center justify-center gap-3 rounded-xl p-1.5 transition hover:bg-surface-hover">
