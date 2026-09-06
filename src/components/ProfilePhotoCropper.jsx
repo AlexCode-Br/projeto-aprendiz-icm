@@ -52,7 +52,7 @@ export default function ProfilePhotoCropper({ source, onApply, onClose }) {
             // PNG preserves transparency and matches the preview in both themes.
             const result = canvas.toDataURL('image/png');
             if (!result.startsWith('data:image/png;base64,')) throw new Error('Não foi possível preparar a foto.');
-            onApply(result);
+            await onApply(result);
         } catch (cause) { setError(cause.message || 'Não foi possível recortar a foto. Tente novamente.'); }
         finally { setBusy(false); }
     };

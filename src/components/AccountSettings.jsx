@@ -40,6 +40,33 @@ export default function AccountSettings() {
 
     const passwordValid = useMemo(() => password.newPassword.length >= 10 && /[A-Z]/.test(password.newPassword) && /[a-z]/.test(password.newPassword) && /\d/.test(password.newPassword) && /[^A-Za-z0-9]/.test(password.newPassword), [password.newPassword]);
 
+    const savePhoto = async nextPhoto => {
+        if (saving || loading || loadError) return false;
+        const previousPhotoUrl = photoUrl;
+        setPhotoChange(nextPhoto);
+        setSaving('photo');
+        try {
+            if (typeof nextPhoto === 'string') {
+                const { data } = await api.put('/api/profile-photo', { dataUrl: nextPhoto });
+                setPhotoUrl(data.url || '/api/profile-photo');
+            } else {
+                await api.delete('/api/profile-photo');
+                setPhotoUrl('');
+            }
+            setPhotoChange(undefined);
+            setPhotoVersion(Date.now());
+            window.dispatchEvent(new CustomEvent('profile-photo:updated'));
+            await refreshUser();
+            showToast(nextPhoto === null ? 'Foto de perfil removida.' : 'Foto de perfil salva automaticamente.', 'success');
+            return true;
+        } catch (error) {
+            setPhotoUrl(previousPhotoUrl);
+            setPhotoChange(undefined);
+            showToast(error.message || 'Não foi possível salvar a foto.', 'error');
+            throw error;
+        } finally { setSaving(''); }
+    };
+
     const saveProfile = async event => {
         event.preventDefault();
         if (saving || loading || loadError) return;
@@ -48,13 +75,8 @@ export default function AccountSettings() {
         setSaving('profile');
         try {
             await api.put('/api/account/profile', profile);
-            if (typeof photoChange === 'string') { await api.put('/api/profile-photo', { dataUrl: photoChange }); setPhotoUrl('/api/profile-photo'); }
-            else if (photoChange === null) { await api.delete('/api/profile-photo'); setPhotoUrl(''); }
-            setPhotoChange(undefined);
-            setPhotoVersion(Date.now());
-            window.dispatchEvent(new CustomEvent('profile-photo:updated'));
             await refreshUser();
-            showToast('Dados pessoais atualizados.', 'success');
+            showToast('Nome atualizado com sucesso.', 'success');
         }
         catch (error) { showToast(error.message, 'error'); } finally { setSaving(''); }
     };
@@ -109,11 +131,11 @@ export default function AccountSettings() {
         <form onSubmit={saveProfile} className="panel p-5 md:p-7">
             <div className="settings-section-header">
                 <h2 className="form-section-title"><UserRound aria-hidden="true" />Seu perfil</h2>
-                <button disabled={Boolean(saving)} className="submit-btn justify-self-end disabled:opacity-60"><Save aria-hidden="true" />{saving === 'profile' ? 'Salvando...' : 'Salvar perfil'}</button>
+                <button disabled={Boolean(saving)} className="submit-btn justify-self-end disabled:opacity-60"><Save aria-hidden="true" />{saving === 'profile' ? 'Salvando...' : 'Salvar nome'}</button>
                 <p className="col-span-2 text-sm text-text-muted">Escolha como seu nome e sua foto aparecem no projeto.</p>
             </div>
             <div className="mt-5 grid grid-cols-1 gap-5">
-                <ProfilePhotoPicker name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={setPhotoChange} disabled={saving === 'profile'} />
+                <ProfilePhotoPicker name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={savePhoto} disabled={Boolean(saving)} saving={saving === 'photo'} />
                 <label className="text-sm font-medium text-text-default">Nome completo<input required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ ...profile, nome: event.target.value })} className={fieldClass} /></label>
             </div>
         </form>
