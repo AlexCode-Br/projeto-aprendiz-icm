@@ -22,7 +22,6 @@ const ProfessorDetailsModal = ({ isOpen, onClose, professor }) => {
                     </dd>
                 </div>
             </dl>
-            <div className="mt-6 flex justify-end border-t border-border pt-5"><button type="button" onClick={onClose} className="btn btn-secondary">Fechar</button></div>
         </Modal>
     );
 };

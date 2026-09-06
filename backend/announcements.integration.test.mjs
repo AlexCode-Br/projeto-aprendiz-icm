@@ -118,7 +118,9 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
     assert.equal((await call(professorA,'GET','/api/informativos/nao-lidos')).data.total,initialUnread);
     assert.equal((await call(professorB,'GET','/api/informativos')).data.find(item=>item.id===announcementId).hasRead,false,'leitura deve ser individual');
     const readers=await call(gestor,'GET',`/api/informativos/${announcementId}/leituras`);
-    assert.deepEqual(readers.data.map(reader=>reader.email),['professor@projetoaprendiz.local']);
+    assert.deepEqual(readers.data.map(reader=>reader.professor_id),[professorAProfile]);
+    assert.deepEqual(readers.data.map(reader=>reader.name),['Marina Oliveira']);
+    assert.equal('email' in readers.data[0],false,'a lista compacta não deve expor o e-mail');
 
     const pdfAttachments=itemA.anexos.filter(item=>item.tipo==='application/pdf');
     const pdfAttachment=pdfAttachments[0];

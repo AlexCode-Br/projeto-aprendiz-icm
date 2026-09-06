@@ -16,6 +16,7 @@ import KebabMenu, { KebabMenuItem } from '../../components/KebabMenu';
 const Informativos = () => {
     const { showToast } = useToast();
     const [informativos, setInformativos] = useState([]);
+    const [professores, setProfessores] = useState([]);
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [isDeleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
     const [isSendConfirmModalOpen, setSendConfirmModalOpen] = useState(false);
@@ -40,7 +41,10 @@ const Informativos = () => {
             const professores = Array.isArray(profResponse?.data?.professores)
                 ? profResponse.data.professores
                 : [];
-            if (profResponse) setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
+            if (profResponse) {
+                setProfessores(professores);
+                setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
+            }
         } catch (error) {
             if (silent) throw error;
             showToast(error.message || 'Erro ao carregar dados.', 'error');
@@ -221,6 +225,7 @@ const Informativos = () => {
                 isOpen={isReadersModalOpen}
                 onClose={() => setReadersModalOpen(false)}
                 informativo={currentInformativo}
+                professores={professores}
             />
 
             <ConfirmationModal

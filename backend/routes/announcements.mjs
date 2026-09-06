@@ -239,7 +239,7 @@ export function createAnnouncementRoutes(context) {
       if (readersMatch && request.method === 'GET') {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
         const rows = await db.prepare(`
-          SELECT users.name, users.email, professor_profiles.phone, announcement_reads.read_at
+          SELECT professor_profiles.id AS professor_id,COALESCE(professor_profiles.name,users.name) AS name,announcement_reads.read_at
           FROM announcement_reads
           JOIN users ON users.id = announcement_reads.user_id
           LEFT JOIN professor_profiles ON professor_profiles.user_id = users.id
