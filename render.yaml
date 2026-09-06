@@ -46,8 +46,10 @@ services:
       - key: RESEND_API_KEY
         sync: false
       - key: EMAIL_FROM
-        sync: false
+        value: naoresponda@aprendizicm.com.br
       - key: EMAIL_REPLY_TO
         sync: false
       - key: EMAIL_LOGO_URL
         value: https://aprendizicm.com.br/projeto-aprendiz-logo.png
+      - key: EMAIL_ICM_LOGO_URL
+        value: https://www.igrejacristamaranata.org.br/wp-content/uploads/2024/11/cropped-icm-marca-192x192.jpeg
