@@ -111,6 +111,9 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                 <div className={`flex flex-col items-start overflow-hidden transition-all duration-300 ${isCollapsed ? 'lg:w-0 lg:opacity-0 w-full opacity-100' : 'w-full opacity-100'}`}>
                     <img src="/departamento-louvor-logo.png" width="205" height="58" alt="Departamento de Louvor" className="h-auto w-[11.75rem] max-w-full object-contain brightness-0 invert" />
                 </div>
+                <div aria-hidden="true" className={`hidden h-8 items-center justify-center overflow-hidden transition-all duration-300 lg:flex ${isCollapsed ? 'w-14 opacity-100' : 'w-0 opacity-0'}`}>
+                    <img src="/departamento-louvor-logo.png" width="205" height="58" alt="" className="w-14 max-w-none shrink-0 -translate-y-[2px] object-contain brightness-0 invert [clip-path:inset(0_0_31%_0)]" />
+                </div>
                 <button type="button" data-mobile-close onClick={() => setSidebarOpen(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-white/10 lg:hidden" aria-label="Fechar menu"><X aria-hidden="true" /></button>
             </div>
 
