@@ -1,4 +1,3 @@
-import { ArrowLeft } from 'lucide-react';
 import React from 'react';
 import Modal from './Modal';
 import AnnouncementAttachments from './AnnouncementAttachments';
@@ -17,9 +16,6 @@ const AnnouncementDetailModal = ({ isOpen, onClose, announcement }) => {
                 <div className="announcement-content my-5 max-w-none leading-relaxed text-text-default" dangerouslySetInnerHTML={{ __html: announcement.conteudo }} />
                 <AnnouncementAttachments attachments={announcement.anexos} />
             </article>
-            <div className="mt-6 flex justify-start border-t border-border pt-5">
-                <button type="button" onClick={onClose} className="btn btn-secondary"><ArrowLeft aria-hidden="true" />Voltar</button>
-            </div>
         </Modal>
     );
 };
