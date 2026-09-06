@@ -3,7 +3,7 @@ const BRAND_COLOR = '#c51f26';
 const BRAND_COLOR_DARK = '#991b1f';
 const DEFAULT_FROM = 'naoresponda@aprendizicm.com.br';
 const DEFAULT_LOGO_URL = 'https://aprendizicm.com.br/projeto-aprendiz-logo.png';
-const DEFAULT_ICM_LOGO_URL = 'https://www.igrejacristamaranata.org.br/wp-content/uploads/2024/11/cropped-icm-marca-192x192.jpeg';
+const DEFAULT_DEPARTMENT_LOGO_URL = 'https://aprendizicm.com.br/departamento-louvor-logo.png';
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -56,7 +56,7 @@ function preheaderText(body) {
 
 export function renderEmailHtml(subject, body) {
   const logoUrl = escapeHtml(process.env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL);
-  const icmLogoUrl = escapeHtml(process.env.EMAIL_ICM_LOGO_URL || DEFAULT_ICM_LOGO_URL);
+  const departmentLogoUrl = escapeHtml(process.env.EMAIL_DEPARTMENT_LOGO_URL || DEFAULT_DEPARTMENT_LOGO_URL);
   const year = new Date().getFullYear();
   return `<!doctype html>
 <html lang="pt-BR">
@@ -71,8 +71,8 @@ export function renderEmailHtml(subject, body) {
       .email-shell{padding:12px 8px!important}
       .email-card{border-radius:12px!important}
       .email-header,.email-content,.email-footer{padding-left:22px!important;padding-right:22px!important}
-      .project-logo{width:148px!important}
-      .icm-logo{width:48px!important;height:48px!important}
+      .department-logo{width:140px!important}
+      .project-logo{width:118px!important}
       .email-title{font-size:23px!important}
     }
   </style>
@@ -87,11 +87,11 @@ export function renderEmailHtml(subject, body) {
           <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto;">
             <tr>
               <td align="center" valign="middle" style="padding-right:18px;">
-                <img class="icm-logo" src="${icmLogoUrl}" width="56" height="56" alt="Igreja Cristã Maranata" style="display:block;width:56px;height:56px;object-fit:contain;border:0;border-radius:50%;">
+                <img class="department-logo" src="${departmentLogoUrl}" width="180" alt="Departamento de Louvor" style="display:block;width:180px;max-width:100%;height:auto;border:0;">
               </td>
               <td width="1" style="width:1px;background:#e1e3e7;font-size:0;line-height:0;">&nbsp;</td>
               <td align="center" valign="middle" style="padding-left:18px;">
-                <img class="project-logo" src="${logoUrl}" width="170" alt="Projeto Aprendiz" style="display:block;width:170px;max-width:100%;height:auto;border:0;">
+                <img class="project-logo" src="${logoUrl}" width="132" alt="Projeto Aprendiz" style="display:block;width:132px;max-width:100%;height:auto;border:0;">
               </td>
             </tr>
           </table>

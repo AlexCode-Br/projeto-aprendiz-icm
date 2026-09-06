@@ -1,6 +1,5 @@
 import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import Logo from '../assets/projeto-aprendiz-logo.png';
 import { AuthContext } from '../contexts/AuthContext';
 import api from '../services/api';
 import { LayoutDashboard, BookOpen, Users, GraduationCap, ChartNoAxesCombined, Megaphone, MessagesSquare, CalendarCheck2, Settings, PanelLeftClose, PanelLeftOpen, X } from 'lucide-react';
@@ -98,19 +97,20 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             aria-label="Menu principal"
             className={`${sidebarOpen ? 'visible' : 'invisible lg:visible'} fixed inset-y-0 left-0 z-40 flex shrink-0 transform flex-col text-text-inverse shadow-lg transition-all duration-300 ease-in-out lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} w-64 ${isCollapsed ? 'lg:w-20' : ''}`}
         >
-            <div className={`flex items-center h-[76px] border-b border-white/10 px-4 shrink-0 overflow-hidden ${isCollapsed ? 'lg:justify-center justify-between' : 'justify-between'}`}>
+            <button
+                type="button"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="absolute right-0 top-[18px] z-50 hidden h-10 w-10 translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-primary shadow-md transition-colors hover:bg-surface-hover lg:flex"
+                aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
+                title={isCollapsed ? "Expandir" : "Recolher"}
+            >
+                {isCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+            </button>
+
+            <div className={`flex h-[76px] shrink-0 items-center border-b border-white/10 px-4 ${isCollapsed ? 'lg:justify-center justify-between' : 'justify-between'}`}>
                 <div className={`flex flex-col items-start overflow-hidden transition-all duration-300 ${isCollapsed ? 'lg:w-0 lg:opacity-0 w-full opacity-100' : 'w-full opacity-100'}`}>
-                    <img src={Logo} width="300" height="149" alt="Projeto Aprendiz" className="h-14 w-40 object-contain brightness-0 invert" />
+                    <img src="/departamento-louvor-logo.png" width="205" height="58" alt="Departamento de Louvor" className="h-auto w-[13.5rem] max-w-full object-contain brightness-0 invert" />
                 </div>
-                <button
-                    type="button"
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="hidden lg:flex items-center justify-center min-w-10 min-h-10 rounded-lg hover:bg-white/10 transition-colors"
-                    aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
-                    title={isCollapsed ? "Expandir" : "Recolher"}
-                >
-                    {isCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
-                </button>
                 <button type="button" data-mobile-close onClick={() => setSidebarOpen(false)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl hover:bg-white/10 lg:hidden" aria-label="Fechar menu"><X aria-hidden="true" /></button>
             </div>
 

@@ -11,12 +11,12 @@ test('serviço de e-mail mantém a caixa local e não chama o provedor em desenv
 });
 
 test('serviço de e-mail envia chave idempotente ao provedor',async()=>{
-  const previousKey=process.env.RESEND_API_KEY,previousFrom=process.env.EMAIL_FROM,previousReply=process.env.EMAIL_REPLY_TO,previousLogo=process.env.EMAIL_LOGO_URL,previousIcmLogo=process.env.EMAIL_ICM_LOGO_URL;
+  const previousKey=process.env.RESEND_API_KEY,previousFrom=process.env.EMAIL_FROM,previousReply=process.env.EMAIL_REPLY_TO,previousLogo=process.env.EMAIL_LOGO_URL,previousDepartmentLogo=process.env.EMAIL_DEPARTMENT_LOGO_URL;
   process.env.RESEND_API_KEY='re_test';
   process.env.EMAIL_FROM='teste@example.com';
   process.env.EMAIL_REPLY_TO='contato@example.com';
   process.env.EMAIL_LOGO_URL='https://example.com/logo.png';
-  process.env.EMAIL_ICM_LOGO_URL='https://example.com/icm-logo.png';
+  process.env.EMAIL_DEPARTMENT_LOGO_URL='https://example.com/departamento-logo.png';
   let request;
   try{
     const {sendEmail}=createEmailService({db:{},isProduction:true,fetchImpl:async(url,options)=>{request={url,options};return{ok:true,json:async()=>({id:'email-1'})};}});
@@ -27,8 +27,8 @@ test('serviço de e-mail envia chave idempotente ao provedor',async()=>{
     assert.equal(payload.from,'Projeto Aprendiz <teste@example.com>');
     assert.equal(payload.reply_to,'contato@example.com');
     assert.match(payload.html,/https:\/\/example\.com\/logo\.png/);
-    assert.match(payload.html,/https:\/\/example\.com\/icm-logo\.png/);
-    assert.match(payload.html,/Igreja Cristã Maranata/);
+    assert.match(payload.html,/https:\/\/example\.com\/departamento-logo\.png/);
+    assert.match(payload.html,/Departamento de Louvor/);
     assert.match(payload.html,/Acessar o Projeto Aprendiz/);
     assert.match(payload.html,/Convite &lt;especial&gt;/);
     assert.match(payload.html,/<a href="https:\/\/example\.com\/convite"/);
@@ -39,7 +39,7 @@ test('serviço de e-mail envia chave idempotente ao provedor',async()=>{
     if(previousFrom===undefined)delete process.env.EMAIL_FROM;else process.env.EMAIL_FROM=previousFrom;
     if(previousReply===undefined)delete process.env.EMAIL_REPLY_TO;else process.env.EMAIL_REPLY_TO=previousReply;
     if(previousLogo===undefined)delete process.env.EMAIL_LOGO_URL;else process.env.EMAIL_LOGO_URL=previousLogo;
-    if(previousIcmLogo===undefined)delete process.env.EMAIL_ICM_LOGO_URL;else process.env.EMAIL_ICM_LOGO_URL=previousIcmLogo;
+    if(previousDepartmentLogo===undefined)delete process.env.EMAIL_DEPARTMENT_LOGO_URL;else process.env.EMAIL_DEPARTMENT_LOGO_URL=previousDepartmentLogo;
   }
 });
 
