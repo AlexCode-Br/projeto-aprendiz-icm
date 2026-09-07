@@ -15,6 +15,7 @@
 - Proteção de tentativas de autenticação usa Durable Object SQLite `AuthRateLimiter`.
 - Nenhum plano pago contratado, nenhum recurso Render desligado e nenhum registro DNS alterado.
 - A zona `aprendizicm.com.br` foi cadastrada no plano Free, mas ainda está **pendente/inativa** porque a delegação continua na HostGator. Nameservers atribuídos: `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`.
+- Consulta pública ao registro DS não retornou chave DNSSEC; o pré-requisito de DNSSEC desligado está atendido no estado atual.
 - Os oito registros importados/reconstituídos foram revisados. `ftp`, `mail`, MX, DMARC, DKIM e o return-path do Resend (`send` → `send.forge.rmta.net`) estão como DNS-only; raiz e `www` permanecem preparados como proxy. Nada disso afeta o tráfego enquanto os nameservers não forem trocados.
 - O portal HostGator não mostra caixa de e-mail profissional criada. Ainda assim, os registros de e-mail existentes foram preservados para não ampliar o escopo da migração.
 
