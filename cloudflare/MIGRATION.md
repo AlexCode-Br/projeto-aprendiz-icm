@@ -14,6 +14,9 @@
 - Remetente e logos dos e-mails preservados. Nenhum e-mail real foi enviado nestes testes.
 - Proteção de tentativas de autenticação usa Durable Object SQLite `AuthRateLimiter`.
 - Nenhum plano pago contratado, nenhum recurso Render desligado e nenhum registro DNS alterado.
+- A zona `aprendizicm.com.br` foi cadastrada no plano Free, mas ainda está **pendente/inativa** porque a delegação continua na HostGator. Nameservers atribuídos: `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`.
+- Os oito registros importados/reconstituídos foram revisados. `ftp`, `mail`, MX, DMARC, DKIM e o return-path do Resend (`send` → `send.forge.rmta.net`) estão como DNS-only; raiz e `www` permanecem preparados como proxy. Nada disso afeta o tráfego enquanto os nameservers não forem trocados.
+- O portal HostGator não mostra caixa de e-mail profissional criada. Ainda assim, os registros de e-mail existentes foram preservados para não ampliar o escopo da migração.
 
 ## Testes realizados
 
@@ -26,6 +29,7 @@
 - `/api/auth/me` com cookie fictício: 401 esperado após consulta real ao Supabase via Hyperdrive; sem escrita no banco.
 - `/api/auth/exchange` sem credencial: 403 esperado.
 - `/api/auth/reset-password` com token inexistente: 400 esperado; exercita Durable Object e banco, sem alterar senha nem enviar e-mail.
+- Medição com `wrangler tail`: página estática consumiu 1 ms de CPU; a primeira consulta autenticada observada chegou a 20 ms durante inicialização; repetição com isolate aquecido consumiu 4 ms de CPU e 5 ms de wall time. O caminho aquecido cabe no limite Free de 10 ms, mas telas autenticadas reais ainda precisam ser medidas.
 - Revisão estática final das consultas contra o adaptador Worker: sem incompatibilidades críticas encontradas.
 - Em Windows, `wrangler dev --local` falhou com access violation do workerd. Não reinstalar componentes do sistema automaticamente; a publicação remota foi usada para testes de runtime.
 
@@ -46,9 +50,9 @@ pnpm cloudflare:deploy
 
 1. Usuário entrar na prévia com a conta habitual (senha não deve ser enviada no chat). Conferir dashboard, turmas, alunos, professores, informativos, suporte e configurações, observando erros e tempos. Conferir também área do professor e relatórios. Não afirmar que estas telas foram testadas antes de fazê-lo.
 2. Validar fluxos autenticados/CSRF e operações reversíveis autorizadas. Para integração CRUD completa, usar banco isolado; não rodar as suites destrutivas no banco de produção.
-3. Medir CPU das rotas reais no Workers Free. Os testes iniciais de página estática não provam que rotas pesadas cabem no limite do plano. Qualquer upgrade exige autorização do usuário.
-4. Obter a zona DNS completa na Hostgator, preservar registros de e-mail/validação (MX, SPF, DKIM, DMARC, CAA etc.). Apenas consultas públicas parciais não substituem exportação da zona.
-5. Cadastrar/configurar zona Cloudflare, conferir DNSSEC e nameservers; obter confirmação específica antes da troca de delegação. Anexar domínio ao Worker, preparar TLS, mudar `APP_URL` para `https://aprendizicm.com.br` e validar fluxos de convite/recuperação. Preservar redirecionamento www.
+3. Medir CPU das rotas autenticadas reais no Workers Free, especialmente relatórios/PDF, dashboard e listagens. O teste aquecido de autenticação coube em 4 ms, mas não representa as rotas mais pesadas. Qualquer upgrade exige autorização do usuário.
+4. Conferir no painel HostGator se existem registros privados/ocultos além dos oito reconstituídos na Cloudflare. Preservar e-mail/validação (MX, SPF, DKIM, DMARC, CAA etc.).
+5. Conferir DNSSEC; obter confirmação específica antes da troca de delegação na HostGator para `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`. Anexar domínio ao Worker, preparar TLS, mudar `APP_URL` para `https://aprendizicm.com.br` e validar fluxos de convite/recuperação. Preservar redirecionamento www.
 6. Depois do corte e testes no domínio, configurar CI/deploy e registrar rollback. Manter Render disponível até confirmar estabilidade.
 
 ## Referência para rollback / DNS anterior
