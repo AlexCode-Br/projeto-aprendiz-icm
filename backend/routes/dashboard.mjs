@@ -9,6 +9,7 @@ export function createDashboardRoutes(context) {
     schoolYearView,
     selectedSchoolYear,
     announcementScheduledCondition,
+    appTimeZone = 'America/Sao_Paulo',
   } = context;
 
   return async function dashboardRoutes(request, response, url) {
@@ -59,7 +60,7 @@ export function createDashboardRoutes(context) {
           ORDER BY courses.name,locations.name,classes.id
         `).all(session.user_id,period.id);
         const classes=await attachClassSchedules(db,classRows);
-        const timeZone=process.env.APP_TIMEZONE || 'America/Sao_Paulo';
+        const timeZone=appTimeZone;
         const conflitosHorario=classScheduleConflicts(classes);
         const conflictingClassIds=new Set(conflitosHorario.flatMap(conflict=>conflict.turmas.map(item=>Number(item.id))));
         const proximasAulas=nextClassSchedules(classes,new Date(),timeZone,6).map(item=>({...item,conflito:conflictingClassIds.has(Number(item.id))}));

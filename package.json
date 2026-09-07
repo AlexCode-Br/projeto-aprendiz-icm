@@ -15,6 +15,9 @@
     "start": "node backend/server.mjs",
     "dev:backend": "node --watch backend/server.mjs",
     "db:migrate": "node backend/migrate.mjs",
+    "cloudflare:build": "node cloudflare/build.mjs && wrangler deploy --dry-run --outdir cloudflare/build",
+    "cloudflare:dev": "wrangler dev",
+    "cloudflare:deploy": "node cloudflare/build.mjs && wrangler deploy",
     "check": "node --check backend/server.mjs && node --check backend/database.mjs && node --test backend/*.test.mjs && vite build"
   },
   "dependencies": {
@@ -43,6 +46,7 @@
     "globals": "15.15.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
-    "vite": "^7.1.3"
+    "vite": "^7.1.3",
+    "wrangler": "4.129.0"
   }
 }

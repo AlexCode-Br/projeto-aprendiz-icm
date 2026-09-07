@@ -1,0 +1,33 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "aprendiz-staging",
+  "account_id": "7c5176210f75766e5e0ed62cbf732572",
+  "main": "cloudflare/worker.mjs",
+  "compatibility_date": "2026-09-06",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
+  },
+  "durable_objects": { "bindings": [{ "name": "AUTH_RATE_LIMITER", "class_name": "AuthRateLimiter" }] },
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "66babbf9d50c470fa5cd5bd1e6a2523f" }],
+  "migrations": [{ "tag": "auth-limiter-v1", "new_sqlite_classes": ["AuthRateLimiter"] }],
+  "vars": {
+    "NODE_ENV": "production",
+    "AUTH_PROVIDER": "supabase",
+    "APP_URL": "https://aprendiz-staging.alexandre-magnos-br.workers.dev",
+    "APP_TIMEZONE": "America/Sao_Paulo",
+    "READ_ONLY_PREVIEW": "false",
+    "SUPABASE_URL": "https://ggghsddanuuekztxngxj.supabase.co",
+    "SUPABASE_ANNOUNCEMENT_BUCKET": "announcement-attachments",
+    "EMAIL_FROM": "naoresponda@aprendizicm.com.br",
+    "EMAIL_LOGO_URL": "https://aprendizicm.com.br/projeto-aprendiz-logo.png",
+    "EMAIL_DEPARTMENT_LOGO_URL": "https://aprendizicm.com.br/departamento-louvor-logo.png",
+    "EMAIL_ICM_LOGO_URL": "https://www.igrejacristamaranata.org.br/wp-content/uploads/2024/11/cropped-icm-marca-192x192.jpeg"
+  },
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 }
+}

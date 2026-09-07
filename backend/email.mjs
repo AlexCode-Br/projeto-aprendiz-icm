@@ -54,9 +54,9 @@ function preheaderText(body) {
   return normalizedBody(body).replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').slice(0, 140);
 }
 
-export function renderEmailHtml(subject, body) {
-  const logoUrl = escapeHtml(process.env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL);
-  const departmentLogoUrl = escapeHtml(process.env.EMAIL_DEPARTMENT_LOGO_URL || DEFAULT_DEPARTMENT_LOGO_URL);
+export function renderEmailHtml(subject, body, env = process.env) {
+  const logoUrl = escapeHtml(env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL);
+  const departmentLogoUrl = escapeHtml(env.EMAIL_DEPARTMENT_LOGO_URL || DEFAULT_DEPARTMENT_LOGO_URL);
   const year = new Date().getFullYear();
   return `<!doctype html>
 <html lang="pt-BR">
@@ -117,29 +117,29 @@ export function renderEmailHtml(subject, body) {
 </html>`;
 }
 
-export function createEmailService({ db, isProduction, fetchImpl = fetch }) {
+export function createEmailService({ db, isProduction, fetchImpl = fetch, env = process.env }) {
   async function sendEmail(recipient, subject, body, idempotencyKey) {
     if (!isProduction) {
       await db.prepare('INSERT INTO dev_emails (recipient,subject,body) VALUES (?,?,?)').run(recipient, subject, body);
       return { local: true };
     }
-    if (!process.env.RESEND_API_KEY) {
+    if (!env.RESEND_API_KEY) {
       throw new Error('RESEND_API_KEY é obrigatória para enviar e-mails em produção.');
     }
     const response = await fetchImpl('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
       },
       body: JSON.stringify({
-        from: brandedSender(process.env.EMAIL_FROM),
+        from: brandedSender(env.EMAIL_FROM),
         to: [recipient],
         subject,
         text: body,
-        html: renderEmailHtml(subject, body),
-        ...(process.env.EMAIL_REPLY_TO ? { reply_to: process.env.EMAIL_REPLY_TO } : {}),
+        html: renderEmailHtml(subject, body, env),
+        ...(env.EMAIL_REPLY_TO ? { reply_to: env.EMAIL_REPLY_TO } : {}),
       }),
     });
     if (!response.ok) {

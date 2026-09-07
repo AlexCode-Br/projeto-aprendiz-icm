@@ -24,9 +24,9 @@ export function normalizeProfilePhoto(value) {
   return { buffer, dataUrl, mimeType, sizeBytes: buffer.length, extension: mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg' };
 }
 
-export function createProfilePhotoStorage({ db, supabaseAdmin, logger = console }) {
-  const bucket = process.env.SUPABASE_PROFILE_PHOTO_BUCKET || 'profile-photos';
-  const useStorage = Boolean(supabaseAdmin) && process.env.PROFILE_PHOTO_STORAGE_PROVIDER !== 'database';
+export function createProfilePhotoStorage({ db, supabaseAdmin, logger = console, env = process.env }) {
+  const bucket = env.SUPABASE_PROFILE_PHOTO_BUCKET || 'profile-photos';
+  const useStorage = Boolean(supabaseAdmin) && env.PROFILE_PHOTO_STORAGE_PROVIDER !== 'database';
   let bucketPromise;
 
   async function ensureBucket() {

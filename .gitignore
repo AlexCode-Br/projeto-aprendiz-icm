@@ -18,6 +18,10 @@ dist-ssr
 .env
 .env.*
 !.env.example
+.wrangler/
+.dev.vars
+.dev.vars.*
+cloudflare/build/
 *.pem
 *.key
 

@@ -83,9 +83,9 @@ export function normalizeAnnouncementAttachments(value, existingAttachments = ne
   return { items, existingItems: items.filter(item => item.existing), newItems: items.filter(item => !item.existing) };
 }
 
-export function createAnnouncementStorage({ db, supabaseAdmin, logger = console }) {
-  const announcementStorageBucket = process.env.SUPABASE_ANNOUNCEMENT_BUCKET || 'announcement-attachments';
-  const useSupabaseAttachmentStorage = Boolean(supabaseAdmin) && process.env.ANNOUNCEMENT_STORAGE_PROVIDER !== 'database';
+export function createAnnouncementStorage({ db, supabaseAdmin, logger = console, env = process.env }) {
+  const announcementStorageBucket = env.SUPABASE_ANNOUNCEMENT_BUCKET || 'announcement-attachments';
+  const useSupabaseAttachmentStorage = Boolean(supabaseAdmin) && env.ANNOUNCEMENT_STORAGE_PROVIDER !== 'database';
   let announcementBucketPromise;
 
   async function ensureAnnouncementBucket() {

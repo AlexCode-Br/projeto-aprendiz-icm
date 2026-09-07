@@ -1,6 +1,7 @@
 allowBuilds:
   esbuild: true
   core-js: false
+  workerd: true
 minimumReleaseAgeExclude:
   - '@supabase/auth-js@2.112.4'
   - '@supabase/functions-js@2.112.4'

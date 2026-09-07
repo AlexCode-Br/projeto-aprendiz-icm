@@ -1,0 +1,66 @@
+# Migração Render → Cloudflare
+
+## Estado verificado em 07/09/2026
+
+- **Produção ainda no Render. Não alterar DNS antes da validação autenticada.**
+- Branch: `codex/melhorias-projeto-aprendiz`. Não enviar para `main` antecipadamente: o Render faz deploy automático de `main`.
+- Prévia: https://aprendiz-staging.alexandre-magnos-br.workers.dev
+- Worker: `aprendiz-staging`, conta `7c5176210f75766e5e0ed62cbf732572`.
+- Versão remota: `dd9b8ec3-7a9d-4d97-b1cc-0b75c4ef424c`.
+- A prévia está funcional (`READ_ONLY_PREVIEW=false`) e usa o **banco real**, não uma cópia. Não criar/apagar registros de teste indiscriminadamente.
+- Supabase/Auth/Storage continuam no projeto existente `ggghsddanuuekztxngxj`. Nenhuma migração de dados executada.
+- Hyperdrive `aprendiz-supabase`, ID `66babbf9d50c470fa5cd5bd1e6a2523f`, conexão direta TLS ao Supabase, **cache desativado**, limite padrão de 20 conexões.
+- Segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` e `RESEND_API_KEY` transferidos via UI e confirmados com `wrangler secret list` como `secret_text`. Nenhuma senha/chave privada foi colocada no repositório.
+- Remetente e logos dos e-mails preservados. Nenhum e-mail real foi enviado nestes testes.
+- Proteção de tentativas de autenticação usa Durable Object SQLite `AuthRateLimiter`.
+- Nenhum plano pago contratado, nenhum recurso Render desligado e nenhum registro DNS alterado.
+
+## Testes realizados
+
+- Suite existente `pnpm check`: passou antes da publicação (integração PostgreSQL isolada requer `TEST_DATABASE_URL` e foi ignorada).
+- 7 testes dos adaptadores Worker/DB e limitador: passaram.
+- Build Vite com configuração pública real de autenticação: passou.
+- Bundle Wrangler e deploy real: passaram.
+- `/login` e rota SPA retornam 200 com headers de segurança.
+- `/api/auth/me` sem cookie: 401 esperado.
+- `/api/auth/me` com cookie fictício: 401 esperado após consulta real ao Supabase via Hyperdrive; sem escrita no banco.
+- `/api/auth/exchange` sem credencial: 403 esperado.
+- `/api/auth/reset-password` com token inexistente: 400 esperado; exercita Durable Object e banco, sem alterar senha nem enviar e-mail.
+- Revisão estática final das consultas contra o adaptador Worker: sem incompatibilidades críticas encontradas.
+- Em Windows, `wrangler dev --local` falhou com access violation do workerd. Não reinstalar componentes do sistema automaticamente; a publicação remota foi usada para testes de runtime.
+
+## Publicar de forma reproduzível
+
+Na raiz deste worktree:
+
+```sh
+pnpm cloudflare:build
+pnpm cloudflare:deploy
+```
+
+`cloudflare/build.mjs` garante build novo com as configurações **públicas** de `frontend.json`; aceita sobrescrita por `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY`. Não usar uma chave secret/service-role no frontend. Os segredos do Worker são preservados pelo deploy.
+
+`READ_ONLY_PREVIEW=true` bloqueia todas as APIs exceto a consulta de sessão `GET /api/auth/me`. É uma trava de validação, não um modo de navegação completa somente leitura.
+
+## Próximas etapas obrigatórias
+
+1. Usuário entrar na prévia com a conta habitual (senha não deve ser enviada no chat). Conferir dashboard, turmas, alunos, professores, informativos, suporte e configurações, observando erros e tempos. Conferir também área do professor e relatórios. Não afirmar que estas telas foram testadas antes de fazê-lo.
+2. Validar fluxos autenticados/CSRF e operações reversíveis autorizadas. Para integração CRUD completa, usar banco isolado; não rodar as suites destrutivas no banco de produção.
+3. Medir CPU das rotas reais no Workers Free. Os testes iniciais de página estática não provam que rotas pesadas cabem no limite do plano. Qualquer upgrade exige autorização do usuário.
+4. Obter a zona DNS completa na Hostgator, preservar registros de e-mail/validação (MX, SPF, DKIM, DMARC, CAA etc.). Apenas consultas públicas parciais não substituem exportação da zona.
+5. Cadastrar/configurar zona Cloudflare, conferir DNSSEC e nameservers; obter confirmação específica antes da troca de delegação. Anexar domínio ao Worker, preparar TLS, mudar `APP_URL` para `https://aprendizicm.com.br` e validar fluxos de convite/recuperação. Preservar redirecionamento www.
+6. Depois do corte e testes no domínio, configurar CI/deploy e registrar rollback. Manter Render disponível até confirmar estabilidade.
+
+## Referência para rollback / DNS anterior
+
+- Render atual: `srv-da6jo2ou01pc738bu4eg`, `projeto-aprendiz`, Virginia.
+- Commit Render observado: `80353d7bab99be0450fef40bd2fc1efd5b86319a`.
+- Serviço antigo `projeto-aprendiz-api` não faz parte desta migração; não mexer nele.
+- NS observados: `dns3.hostgator.com.br`, `dns4.hostgator.com.br`.
+- Raiz A observada: `216.24.57.1` (TTL 14400).
+- www CNAME observado: `projeto-aprendiz.onrender.com` (TTL 14400).
+- Diretórios `.qa-professor/` e `output/` são do usuário; não apagar nem incluir em commits.
+
+## Autorizações e economia
+
+O usuário autorizou a conexão OAuth do Wrangler e, separadamente, a transferência das credenciais atuais de Supabase/autenticação/Resend para os segredos Cloudflare. Não autorizou plano pago. Para continuar as tarefas operacionais, sugerir um modelo econômico com raciocínio alto; reservar Astra/ultra para incompatibilidades complexas.

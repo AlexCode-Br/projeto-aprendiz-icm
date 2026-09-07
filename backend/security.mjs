@@ -47,7 +47,7 @@ export async function readJson(request, maxBytes = 32768) {
   }
 }
 
-export function createHttpSecurity({ isProduction, appOrigin }) {
+export function createHttpSecurity({ isProduction, appOrigin, env = process.env }) {
   function cookies(request) {
     const parsed = {};
     for (const rawCookie of String(request.headers.cookie || '').split(';')) {
@@ -70,7 +70,7 @@ export function createHttpSecurity({ isProduction, appOrigin }) {
 
   function securityHeaders(contentType = 'application/json; charset=utf-8') {
     const connectSources = ["'self'"];
-    if (process.env.SUPABASE_URL) connectSources.push(new URL(process.env.SUPABASE_URL).origin);
+    if (env.SUPABASE_URL) connectSources.push(new URL(env.SUPABASE_URL).origin);
     const headers = {
       'Content-Type': contentType,
       'X-Content-Type-Options': 'nosniff',
