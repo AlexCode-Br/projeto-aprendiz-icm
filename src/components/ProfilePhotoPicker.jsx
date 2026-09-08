@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import ProfileAvatar from './ProfileAvatar';
 import ProfilePhotoCropper from './ProfilePhotoCropper';
-import Modal from './Modal';
+import ProfilePhotoViewer from './ProfilePhotoViewer';
 import { Camera, Trash2 } from 'lucide-react';
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -45,8 +45,6 @@ export default function ProfilePhotoPicker({ name, currentUrl = '', value, onCha
             </div>
         </div>
         {cropSource && <ProfilePhotoCropper key={cropSource} source={cropSource} onClose={() => setCropSource('')} onApply={async dataUrl => { await onChange(dataUrl); setCropSource(''); }} />}
-        <Modal isOpen={viewerOpen && Boolean(preview)} onClose={() => setViewerOpen(false)} title="Foto de perfil" maxWidth="max-w-md">
-            <img src={preview} alt={`Foto de perfil de ${name}`} className="mx-auto aspect-square max-h-[70dvh] w-full max-w-sm rounded-2xl bg-surface-muted object-contain" />
-        </Modal>
+        <ProfilePhotoViewer isOpen={viewerOpen && Boolean(preview)} onClose={() => setViewerOpen(false)} name={name} src={preview} />
     </div>;
 }
