@@ -9,10 +9,7 @@ lerna-debug.log*
 
 node_modules
 backend/data/
-# Banco isolado de testes da revisão visual (nunca publicar)
-/uiux-qa.db*
 dist/
-dist
 dist-ssr
 *.local
 .env

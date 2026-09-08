@@ -6,22 +6,22 @@ import { Church, MonitorPlay } from 'lucide-react';
 import { catalogKey } from '../../shared/catalog-options.mjs';
 import { catalogNameError, cleanText } from '../../shared/validation.mjs';
 
-const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLocais = [], allCursos = [] }) => {
+const TurmaModal = ({ isOpen, onClose, onSave, turma, allProfessores = [], allLocais = [], allCursos = [] }) => {
     const [formData, setFormData] = useState({ nome: '', local: '', professor: '' });
     const [errors, setErrors] = useState({});
 
     useEffect(() => {
-        if (curso) {
+        if (turma) {
             setFormData({
-                nome: curso.nome || '',
-                local: curso.local || '',
-                professor: curso.professor || '',
+                nome: turma.nome || '',
+                local: turma.local || '',
+                professor: turma.professor || '',
             });
         } else {
             setFormData({ nome: '', local: '', professor: '' });
         }
         setErrors({});
-    }, [curso, isOpen]);
+    }, [turma, isOpen]);
 
     const validate = () => {
         const newErrors = {};
@@ -57,7 +57,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
 
     if (!isOpen) return null;
 
-    const modalTitle = curso ? 'Editar turma' : 'Adicionar turma';
+    const modalTitle = turma ? 'Editar turma' : 'Adicionar turma';
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
@@ -123,4 +123,4 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
     );
 };
 
-export default CursoModal;
+export default TurmaModal;

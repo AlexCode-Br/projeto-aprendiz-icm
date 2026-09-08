@@ -35,7 +35,7 @@ Segredos obrigatórios:
 2. Confirmar `401` em `/api/auth/me` sem sessão.
 3. Confirmar redirecionamento `308` de `www` para a raiz.
 4. Entrar como gestor e professor e abrir as páginas principais.
-5. Observar erros e CPU com `wrangler tail`; `cloudflare/tail-summary.mjs` remove cookies, cabeçalhos e query strings do resumo.
+5. Observar erros e CPU com `pnpm cloudflare:tail`; o resumo remove cookies, cabeçalhos e query strings.
 6. Confirmar MX, DKIM, DMARC e o return-path do Resend após qualquer alteração DNS.
 
 ## Recuperação

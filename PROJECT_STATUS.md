@@ -8,13 +8,13 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit publicado ao criar este registro: `950d720`
+- Último commit da aplicação publicado em produção: `950d720`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
 - Versão Cloudflare verificada: `2fe44911-eacc-4f56-b74d-8f141d8c7500`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
-- Estado atual: produção saudável, endpoint `/api/health` respondendo com banco PostgreSQL conectado e nenhuma pendência conhecida.
+- Estado atual: produção saudável, endpoint `/api/health` respondendo com banco PostgreSQL conectado. A reorganização do código-fonte posterior ao commit acima ainda não foi publicada.
 
 ## Decisões consolidadas
 
@@ -31,9 +31,12 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - O remetente oficial é `naoresponda@aprendizicm.com.br`; os e-mails usam as marcas do Departamento de Louvor e do Projeto Aprendiz.
 - O cabeçalho exibe somente o nome da página atual, no desktop e no mobile.
 
-## Arquivos e diretórios locais
+## Organização do código-fonte
 
-- `.qa-professor/` e `output/` são artefatos locais não versionados. Preserve-os e não os inclua em commits sem autorização explícita.
+- A arquitetura e a responsabilidade dos diretórios estão em `docs/ARCHITECTURE.md`.
+- A cópia local canônica deve ficar em `C:\Users\alexa\Documents\Codex\2026-08-25\v\projeto-aprendiz`.
+- Cópias antigas, rollbacks manuais e artefatos de QA foram removidos; recupere versões anteriores pelo Git.
+- `node_modules/`, `dist/`, `cloudflare/build/`, `.wrangler/` e bancos locais são regeneráveis e permanecem ignorados.
 - Não versione `.env`, tokens, cookies, chaves do Supabase, chaves do Resend ou credenciais da Cloudflare.
 - O arquivo `wrangler.jsonc` é a fonte de verdade da infraestrutura pública.
 
@@ -70,4 +73,3 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 ## Prompt curto para uma nova tarefa
 
 > Continue o Projeto Aprendiz no mesmo repositório. Leia primeiro `PROJECT_STATUS.md`, preserve alterações e arquivos locais que não pertençam à tarefa, valide a implementação antes de publicar e atualize o registro após mudanças relevantes. Minha solicitação é: ...
-

@@ -4,7 +4,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import TurmaCard from '../../components/TurmaCard';
 import ClassScheduleList from '../../components/ClassScheduleList';
 import SearchInput from '../../components/SearchInput';
-import CursoModal from '../../components/CursoModal';
+import TurmaModal from '../../components/TurmaModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import FormSelect from '../../components/FormSelect';
 import { useToast } from '../../contexts/ToastContext';
@@ -14,24 +14,24 @@ import { CHURCH_SUGGESTIONS, COURSE_SUGGESTIONS, catalogKey } from '../../../sha
 const mergeCatalogNames = (...groups) => [...new Map(groups.flat().filter(Boolean).map(name => [catalogKey(name), name])).values()]
     .sort((left, right) => left.localeCompare(right, 'pt-BR'));
 
-const Cursos = () => {
+const Turmas = () => {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const { showToast } = useToast();
-    const [cursos, setCursos] = useState([]);
+    const [turmas, setTurmas] = useState([]);
     const [professoresDisponiveis, setProfessoresDisponiveis] = useState([]);
     const [catalogos, setCatalogos] = useState({ cursos: [], locais: [] });
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLocal, setSelectedLocal] = useState('');
-    const [isCursoModalOpen, setIsCursoModalOpen] = useState(false);
+    const [isTurmaModalOpen, setIsTurmaModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-    const [currentCurso, setCurrentCurso] = useState(null);
+    const [currentTurma, setCurrentTurma] = useState(null);
 
-    const fetchCursos = useCallback(async () => {
+    const fetchTurmas = useCallback(async () => {
         setLoadError('');
         try {
             const [classesResponse, catalogsResponse] = await Promise.all([api.get('/cursos'), api.get('/api/catalogos')]);
-            setCursos(classesResponse.data.cursos);
+            setTurmas(classesResponse.data.cursos);
             setProfessoresDisponiveis(classesResponse.data.professores);
             setCatalogos(catalogsResponse.data);
         } catch (error) {
@@ -40,83 +40,83 @@ const Cursos = () => {
         } finally { setLoading(false); }
     }, [showToast]);
 
-    useEffect(() => { fetchCursos(); }, [fetchCursos]);
+    useEffect(() => { fetchTurmas(); }, [fetchTurmas]);
 
-    const handleOpenCursoModal = (curso = null) => {
-        setCurrentCurso(curso);
-        setIsCursoModalOpen(true);
+    const handleOpenTurmaModal = (turma = null) => {
+        setCurrentTurma(turma);
+        setIsTurmaModalOpen(true);
     };
 
-    const handleCloseCursoModal = () => {
-        setIsCursoModalOpen(false);
-        setCurrentCurso(null);
+    const handleCloseTurmaModal = () => {
+        setIsTurmaModalOpen(false);
+        setCurrentTurma(null);
     };
 
-    const handleOpenConfirmModal = (curso) => {
-        setCurrentCurso(curso);
+    const handleOpenConfirmModal = (turma) => {
+        setCurrentTurma(turma);
         setIsConfirmModalOpen(true);
     };
 
     const handleCloseConfirmModal = () => {
         setIsConfirmModalOpen(false);
-        setCurrentCurso(null);
+        setCurrentTurma(null);
     };
 
-    const handleSaveCurso = async (cursoData) => {
+    const handleSaveTurma = async (turmaData) => {
         try {
-            if (currentCurso) {
-                await api.put(`/cursos/${currentCurso.id}`, cursoData);
+            if (currentTurma) {
+                await api.put(`/cursos/${currentTurma.id}`, turmaData);
                 showToast('Turma atualizada com sucesso!', 'success');
             } else {
-                await api.post('/cursos', cursoData);
+                await api.post('/cursos', turmaData);
                 showToast('Turma adicionada com sucesso!', 'success');
             }
-            handleCloseCursoModal();
-            await fetchCursos();
+            handleCloseTurmaModal();
+            await fetchTurmas();
         } catch (error) {
             showToast(error.message || 'Erro ao salvar a turma.', 'error');
         }
     };
 
-    const handleDeleteCurso = async () => {
+    const handleDeleteTurma = async () => {
         try {
-            await api.delete(`/cursos/${currentCurso.id}`);
+            await api.delete(`/cursos/${currentTurma.id}`);
             showToast('Turma excluída com sucesso!', 'success');
             handleCloseConfirmModal();
-            await fetchCursos();
+            await fetchTurmas();
         } catch (error) {
             showToast(error.message || 'Erro ao excluir a turma.', 'error');
         }
     };
 
-    const filteredCursos = useMemo(() => {
-        return cursos.filter(curso => {
-            const matchesSearch = curso.nome.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesLocal = selectedLocal === '' || curso.local === selectedLocal;
+    const filteredTurmas = useMemo(() => {
+        return turmas.filter(turma => {
+            const matchesSearch = turma.nome.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesLocal = selectedLocal === '' || turma.local === selectedLocal;
             return matchesSearch && matchesLocal;
         });
-    }, [cursos, searchTerm, selectedLocal]);
+    }, [turmas, searchTerm, selectedLocal]);
 
     const courseOptions = useMemo(() => mergeCatalogNames(
         COURSE_SUGGESTIONS,
         catalogos.cursos.filter(item => item.ativo).map(item => item.nome),
-        cursos.map(item => item.nome),
-    ), [catalogos.cursos, cursos]);
+        turmas.map(item => item.nome),
+    ), [catalogos.cursos, turmas]);
     const locationOptions = useMemo(() => mergeCatalogNames(
         CHURCH_SUGGESTIONS,
         catalogos.locais.filter(item => item.ativo).map(item => item.nome),
-        cursos.map(item => item.local),
-    ), [catalogos.locais, cursos]);
-    const filterLocations = useMemo(() => mergeCatalogNames(cursos.map(item => item.local)), [cursos]);
+        turmas.map(item => item.local),
+    ), [catalogos.locais, turmas]);
+    const filterLocations = useMemo(() => mergeCatalogNames(turmas.map(item => item.local)), [turmas]);
 
     if (loading) return <PageSkeleton label="Carregando turmas" />;
-    if (loadError) return <div className="panel empty-state"><p role="alert">{loadError}</p><button type="button" className="btn btn-secondary mt-3" onClick={fetchCursos}>Tentar novamente</button></div>;
+    if (loadError) return <div className="panel empty-state"><p role="alert">{loadError}</p><button type="button" className="btn btn-secondary mt-3" onClick={fetchTurmas}>Tentar novamente</button></div>;
 
     return (
         <>
             <div className="page-header">
                 <div><h1 className="page-title">Turmas</h1><p className="page-description">Cadastre e acompanhe as turmas por curso, igreja ou modalidade e professor.</p></div>
-                <button type="button" onClick={() => handleOpenCursoModal()} className="btn btn-primary w-full sm:w-auto"><Plus aria-hidden="true" />Adicionar turma</button>
+                <button type="button" onClick={() => handleOpenTurmaModal()} className="btn btn-primary w-full sm:w-auto"><Plus aria-hidden="true" />Adicionar turma</button>
             </div>
 
             <section className="panel mb-3 p-4 sm:mb-6 md:p-6" aria-label="Filtros de turmas">
@@ -149,14 +149,14 @@ const Cursos = () => {
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs text-text-muted" role="status">
                         {searchTerm || selectedLocal
-                            ? `${filteredCursos.length} de ${cursos.length} turmas`
-                            : `${filteredCursos.length} ${filteredCursos.length === 1 ? 'turma cadastrada' : 'turmas cadastradas'}`}
+                            ? `${filteredTurmas.length} de ${turmas.length} turmas`
+                            : `${filteredTurmas.length} ${filteredTurmas.length === 1 ? 'turma cadastrada' : 'turmas cadastradas'}`}
                     </p>
                     {(searchTerm || selectedLocal) && <button type="button" onClick={() => { setSearchTerm(''); setSelectedLocal(''); }} className="btn btn-ghost px-2 text-xs">Limpar filtros</button>}
                 </div>
                 <div className="space-y-4">
-                    {filteredCursos.map(curso => <TurmaCard key={curso.id} curso={curso} onEdit={handleOpenCursoModal} onDelete={handleOpenConfirmModal} />)}
-                    {!filteredCursos.length && <div className="panel empty-state"><strong className="text-text-default">Nenhuma turma encontrada</strong><span>{searchTerm || selectedLocal ? 'Tente outra busca ou limpe os filtros.' : 'Use “Adicionar” para montar a primeira turma.'}</span></div>}
+                    {filteredTurmas.map(turma => <TurmaCard key={turma.id} turma={turma} onEdit={handleOpenTurmaModal} onDelete={handleOpenConfirmModal} />)}
+                    {!filteredTurmas.length && <div className="panel empty-state"><strong className="text-text-default">Nenhuma turma encontrada</strong><span>{searchTerm || selectedLocal ? 'Tente outra busca ou limpe os filtros.' : 'Use “Adicionar” para montar a primeira turma.'}</span></div>}
                 </div>
             </section>
 
@@ -175,43 +175,43 @@ const Cursos = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredCursos.map(curso => (
-                                <tr key={curso.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-                                    <td data-label="Curso" className="px-6 py-4 font-medium">{curso.nome}</td>
-                                    <td data-label="Igreja / modalidade" className="px-6 py-4">{curso.local}</td>
-                                    <td data-label="Professor" className="px-6 py-4">{curso.professor}</td>
+                            {filteredTurmas.map(turma => (
+                                <tr key={turma.id} className="border-b border-border hover:bg-surface-hover transition-colors">
+                                    <td data-label="Curso" className="px-6 py-4 font-medium">{turma.nome}</td>
+                                    <td data-label="Igreja / modalidade" className="px-6 py-4">{turma.local}</td>
+                                    <td data-label="Professor" className="px-6 py-4">{turma.professor}</td>
                                     <td data-label="Horário" className="px-6 py-4 text-xs">
-                                        <ClassScheduleList course={curso} />
+                                        <ClassScheduleList course={turma} />
                                     </td>
-                                    <td data-label="Alunos" className="px-6 py-4 text-center">{curso.alunos}</td>
+                                    <td data-label="Alunos" className="px-6 py-4 text-center">{turma.alunos}</td>
                                     <td className="px-6 py-4 text-center">
-                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${curso.status === 'Ativo' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
-                                            {curso.status}
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${turma.status === 'Ativo' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
+                                            {turma.status}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center space-x-2">
-                                            <button type="button" aria-label={`Editar ${curso.nome}`} onClick={() => handleOpenCursoModal(curso)} className="icon-button text-primary hover:bg-primary/10" title="Editar">
+                                            <button type="button" aria-label={`Editar ${turma.nome}`} onClick={() => handleOpenTurmaModal(turma)} className="icon-button text-primary hover:bg-primary/10" title="Editar">
                                                 <Pencil aria-hidden="true" className="w-5 h-5" />
                                             </button>
-                                            <button type="button" aria-label={`Excluir turma ${curso.nome}`} onClick={() => handleOpenConfirmModal(curso)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Excluir turma">
+                                            <button type="button" aria-label={`Excluir turma ${turma.nome}`} onClick={() => handleOpenConfirmModal(turma)} className="icon-button text-danger hover:bg-red-100 dark:hover:bg-red-500/20" title="Excluir turma">
                                                 <Trash2 aria-hidden="true" className="w-5 h-5" />
                                             </button>
                                         </div>
                                     </td>
                                 </tr>
                             ))}
-                            {!filteredCursos.length && <tr><td colSpan="7" className="px-6 py-10 text-center text-sm text-text-muted"><strong className="block text-text-default">Nenhuma turma encontrada</strong><span className="mt-1 block">Limpe os filtros ou use “Adicionar” para montar uma nova turma.</span></td></tr>}
+                            {!filteredTurmas.length && <tr><td colSpan="7" className="px-6 py-10 text-center text-sm text-text-muted"><strong className="block text-text-default">Nenhuma turma encontrada</strong><span className="mt-1 block">Limpe os filtros ou use “Adicionar” para montar uma nova turma.</span></td></tr>}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <CursoModal
-                isOpen={isCursoModalOpen}
-                onClose={handleCloseCursoModal}
-                onSave={handleSaveCurso}
-                curso={currentCurso}
+            <TurmaModal
+                isOpen={isTurmaModalOpen}
+                onClose={handleCloseTurmaModal}
+                onSave={handleSaveTurma}
+                turma={currentTurma}
                 allProfessores={professoresDisponiveis}
                 allLocais={locationOptions}
                 allCursos={courseOptions}
@@ -220,7 +220,7 @@ const Cursos = () => {
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}
                 onClose={handleCloseConfirmModal}
-                onConfirm={handleDeleteCurso}
+                onConfirm={handleDeleteTurma}
                 title="Excluir turma definitivamente?"
                 message="Esta ação excluirá a turma, suas matrículas, chamadas e registros de frequência. Os cadastros dos alunos e do professor serão preservados. Esta ação não pode ser desfeita."
                 confirmLabel="Excluir turma"
@@ -229,4 +229,4 @@ const Cursos = () => {
     );
 };
 
-export default Cursos;
+export default Turmas;

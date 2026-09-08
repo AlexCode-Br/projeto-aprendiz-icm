@@ -2,7 +2,7 @@
 
 Aplicação web com frontend React e backend Node.js para a gestão do Projeto Aprendiz. Gestores e professores usam o mesmo sistema, com rotas, menus e permissões próprias para cada perfil.
 
-Para retomar o desenvolvimento em uma nova tarefa, consulte [PROJECT_STATUS.md](PROJECT_STATUS.md).
+Para retomar o desenvolvimento em uma nova tarefa, consulte [PROJECT_STATUS.md](PROJECT_STATUS.md). A organização técnica e os limites de cada camada estão em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Recursos
 
@@ -10,7 +10,7 @@ Para retomar o desenvolvimento em uma nova tarefa, consulte [PROJECT_STATUS.md](
 - Papéis de Gestor e Professor autorizados no backend, sem confiar em metadados editáveis do usuário.
 - Convites com tokens temporários, de uso único e armazenados somente como hash.
 - E-mails reais via Resend em produção e caixa local em `/dev-mail` durante o desenvolvimento.
-- Gestão de alunos, professores, cursos, turmas, matrículas, informativos com imagens/PDFs privados, suporte e relatórios administrativos.
+- Gestão de alunos, professores, turmas, matrículas, informativos com imagens/PDFs privados, suporte e relatórios de frequência do professor.
 - Período acadêmico ativo mantido internamente para preservar a integridade das turmas, sem seletor na interface.
 - Chamada rápida e relatórios de frequência exclusivos para professores.
 - Dashboard do gestor sem dados de presença, com totais administrativos e gráfico de alunos por turma.
