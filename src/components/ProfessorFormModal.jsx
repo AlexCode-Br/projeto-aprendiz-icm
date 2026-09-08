@@ -54,8 +54,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, locations = []
 
     if (!isOpen) return null;
     const footer = (
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
+        <div className="flex sm:justify-end">
             <button type="submit" form={professorFormId} disabled={isSubmitting} className="btn btn-primary">{isSubmitting ? 'Salvando...' : professor ? 'Salvar alterações' : 'Salvar e enviar convite'}</button>
         </div>
     );

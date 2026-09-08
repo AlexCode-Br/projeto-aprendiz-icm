@@ -216,8 +216,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                             </div>
                         </div>
                     </div>
-                    <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                        <button type="button" onClick={onClose} disabled={saving} className="btn btn-secondary">Cancelar</button>
+                    <div className="mt-6 flex border-t border-border pt-5 sm:justify-end">
                         <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Salvando...' : aluno ? 'Salvar alterações' : 'Adicionar aluno'}</button>
                     </div>
                 </form>

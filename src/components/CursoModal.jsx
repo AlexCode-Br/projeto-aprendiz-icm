@@ -113,8 +113,7 @@ const CursoModal = ({ isOpen, onClose, onSave, curso, allProfessores = [], allLo
                             {errors.professor && <p className="text-danger text-xs mt-1">{errors.professor}</p>}
                         </div>
                     </div>
-                    <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                        <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+                    <div className="mt-6 flex border-t border-border pt-5 sm:justify-end">
                         <button type="submit" className="btn btn-primary">
                             Salvar
                         </button>

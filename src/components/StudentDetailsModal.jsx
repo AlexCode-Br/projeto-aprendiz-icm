@@ -50,7 +50,6 @@ const StudentDetailsModal = ({ student, isOpen, onClose, loading = false, error 
                         </dd>
                     </div>
                 </dl>
-                <div className="mt-4 flex justify-end border-t border-border pt-3"><button type="button" onClick={onClose} className="btn btn-secondary">Fechar</button></div>
             </div>
 
             <div className="hidden sm:block">
@@ -64,7 +63,6 @@ const StudentDetailsModal = ({ student, isOpen, onClose, loading = false, error 
                         </dd>
                     </div>
                 </dl>
-                <div className="mt-6 flex justify-end border-t border-border pt-5"><button type="button" onClick={onClose} className="btn btn-secondary">Fechar</button></div>
             </div>
         </Modal>
     );

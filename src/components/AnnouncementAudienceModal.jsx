@@ -1,4 +1,3 @@
-import { ArrowLeft } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import Modal from './Modal';
 import FormCheckbox from './FormCheckbox';
@@ -18,10 +17,6 @@ const createSelectionState = (professors = [], courses = []) => ({
 });
 
 const cloneCourseSources = sources => new Map([...sources].map(([courseId, professorIds]) => [courseId, new Set(professorIds)]));
-
-const ArrowLeftIcon = () => (
-    <ArrowLeft aria-hidden="true" className="h-4 w-4" />
-);
 
 const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, loading = false, initialAudience }) => {
     const [mode, setMode] = useState('todos');
@@ -185,8 +180,7 @@ const AnnouncementAudienceModal = ({ isOpen, onClose, onConfirm, options = {}, l
                 </div>}
 
                 {error && <p className="mt-4 text-sm text-danger" role="alert">{error}</p>}
-                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                    <button type="button" onClick={onClose} className="btn btn-secondary"><ArrowLeftIcon /> Voltar</button>
+                <div className="mt-6 flex border-t border-border pt-5 sm:justify-end">
                     <button type="submit" disabled={loading || submitting} className="btn btn-primary">{loading ? 'Carregando…' : submitting ? 'Publicando…' : 'Publicar informativo'}</button>
                 </div>
             </form>

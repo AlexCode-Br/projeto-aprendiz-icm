@@ -76,8 +76,7 @@ export default function ProfilePhotoCropper({ source, onApply, onClose }) {
             <button type="button" onClick={() => { setZoom(1); setPosition({ x: 0.5, y: 0.5 }); }} className="btn btn-ghost mx-auto flex"><RotateCcw aria-hidden="true" />Redefinir recorte</button>
         </> : !error && <div className="skeleton mx-auto aspect-square w-full max-w-72" role="status" aria-label="Preparando foto" />}
         {error && <p className="alert-error mt-4" role="alert">{error}</p>}
-        <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-5 sm:flex-row sm:justify-end">
-            <button type="button" className="btn btn-secondary" disabled={busy} onClick={onClose}>Cancelar</button>
+        <div className="mt-5 flex border-t border-border pt-5 sm:justify-end">
             <button type="button" className="btn btn-primary" disabled={!image || busy} onClick={apply}><Check aria-hidden="true" />{busy ? 'Preparando...' : 'Usar esta foto'}</button>
         </div>
     </Modal>;

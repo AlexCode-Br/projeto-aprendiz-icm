@@ -60,8 +60,7 @@ export default function CatalogItemModal({ isOpen, onClose, onSave, item, type, 
                 />
                 <p id="catalog-help" className="mt-2 text-xs leading-5 text-text-muted">Escolha uma sugestão ou digite um novo nome. As opções marcadas como “Já cadastrado” pertencem a outro item do catálogo.</p>
                 {error && <p id="catalog-error" role="alert" className="mt-2 text-xs text-danger">{error}</p>}
-                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                    <button type="button" onClick={onClose} disabled={saving} className="btn btn-secondary">Cancelar</button>
+                <div className="mt-6 flex border-t border-border pt-5 sm:justify-end">
                     <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Salvando...' : 'Salvar'}</button>
                 </div>
             </form>

@@ -440,8 +440,7 @@ const ProfessorRelatorios = () => {
                         <p className="text-xs text-text-muted">
                             {pdfPreview.summary?.turmas ?? 0} turma(s), {pdfPreview.summary?.alunos ?? 0} aluno(s) e {pdfPreview.summary?.chamadas ?? 0} chamada(s)
                         </p>
-                        <div className="flex gap-3">
-                            <button type="button" className="btn btn-secondary flex-1 sm:flex-none" onClick={() => setPdfPreview(null)}>Fechar</button>
+                        <div className="flex">
                             <a className="btn btn-primary flex-1 sm:flex-none" href={pdfPreview.url} download={pdfPreview.fileName}>
                                 <DownloadIcon aria-hidden="true" />
                                 Baixar PDF
@@ -467,8 +466,7 @@ const ProfessorRelatorios = () => {
                         <p className="text-xs text-text-muted">
                             {csvPreview.summary?.turmas ?? 0} turma(s), {csvPreview.summary?.alunos ?? 0} aluno(s) e {csvPreview.summary?.chamadas ?? 0} chamada(s)
                         </p>
-                        <div className="flex gap-3">
-                            <button type="button" className="btn btn-secondary flex-1 sm:flex-none" onClick={() => setCsvPreview(null)}>Fechar</button>
+                        <div className="flex">
                             <a className="btn btn-primary flex-1 sm:flex-none" href={csvPreview.url} download={csvPreview.fileName}>
                                 <DownloadIcon aria-hidden="true" />
                                 Baixar CSV

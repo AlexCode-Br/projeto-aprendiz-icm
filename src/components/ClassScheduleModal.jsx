@@ -58,8 +58,7 @@ export default function ClassScheduleModal({ course, onClose, onSave }) {
                 <button type="button" onClick={()=>setSlots(current=>[...current,{key:nextId.current++,weekday:'',start_time:''}])} disabled={slots.length>=MAX_CLASS_SCHEDULES} className="btn btn-secondary w-full"><Plus aria-hidden="true" />Adicionar dia e horário</button>
             </fieldset>
             {error && <p className="mt-4 text-sm text-danger" role="alert">{error}</p>}
-            <div className="mt-5 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                <button type="button" onClick={onClose} className="btn btn-secondary" disabled={saving}>Cancelar</button>
+            <div className="mt-5 flex border-t border-border pt-5 sm:justify-end">
                 <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'Salvando...' : 'Salvar horários'}</button>
             </div>
         </form>
