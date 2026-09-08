@@ -1,0 +1,73 @@
+# Estado do Projeto Aprendiz
+
+Atualizado em 08 de setembro de 2026 (America/Sao_Paulo).
+
+Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de alterar o projeto e atualize-o depois de mudanças relevantes ou de um deploy.
+
+## Ponto de retomada
+
+- Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
+- Branch de trabalho: `codex/melhorias-projeto-aprendiz`
+- Último commit publicado ao criar este registro: `950d720`
+- Produção: `https://aprendizicm.com.br`
+- Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
+- Worker: `aprendiz-staging`
+- Versão Cloudflare verificada: `2fe44911-eacc-4f56-b74d-8f141d8c7500`
+- Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
+- Estado atual: produção saudável, endpoint `/api/health` respondendo com banco PostgreSQL conectado e nenhuma pendência conhecida.
+
+## Decisões consolidadas
+
+- A antiga página “Cursos e igrejas” tornou-se “Turmas” e mostra somente as turmas ofertadas.
+- Cada turma combina curso, igreja ou modalidade EAD e professor. `EAD` substitui definitivamente `Remoto`.
+- Excluir uma turma remove seus vínculos, mas nunca exclui o cadastro do aluno.
+- Igrejas de alunos e professores usam sugestões completas e também aceitam valores personalizados; EAD não é igreja principal.
+- Horários aceitam múltiplos dias e horários semanais e detectam conflitos entre turmas do mesmo professor.
+- A frequência pertence à turma e ao aluno; relatórios PDF e CSV funcionam como folha de chamada por data e período.
+- Cards mobile de alunos, professores e turmas usam layout compacto e menu vertical de três pontos quando há ações.
+- Detalhes de aluno e professor destacam foto e nome e organizam contatos e vínculos em uma grade compacta.
+- Modais usam o `X` do cabeçalho como saída. Botões `Cancelar`, `Fechar` ou `Voltar` foram removidos quando executavam exatamente a mesma ação; cancelamentos de subações independentes permanecem.
+- Fotos de perfil usam carregamento assíncrono, fallback imediato por inicial e cache no cliente.
+- O remetente oficial é `naoresponda@aprendizicm.com.br`; os e-mails usam as marcas do Departamento de Louvor e do Projeto Aprendiz.
+- O cabeçalho exibe somente o nome da página atual, no desktop e no mobile.
+
+## Arquivos e diretórios locais
+
+- `.qa-professor/` e `output/` são artefatos locais não versionados. Preserve-os e não os inclua em commits sem autorização explícita.
+- Não versione `.env`, tokens, cookies, chaves do Supabase, chaves do Resend ou credenciais da Cloudflare.
+- O arquivo `wrangler.jsonc` é a fonte de verdade da infraestrutura pública.
+
+## Validação e deploy
+
+Antes de publicar:
+
+```bash
+pnpm check
+git diff --check
+git status --short
+```
+
+O conjunto atual possui 64 testes: 63 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
+
+Fluxo de publicação:
+
+```bash
+git add -- <arquivos da alteração>
+git commit -m "Descrição objetiva"
+git push origin codex/melhorias-projeto-aprendiz
+pnpm run cloudflare:deploy
+```
+
+Depois do deploy, confirme:
+
+- o `Current Version ID` informado pelo Wrangler;
+- resposta HTTP 200 do domínio principal;
+- presença do bundle atual no HTML;
+- resposta HTTP 200 de `/api/health` e banco `postgres`.
+
+Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permanentes e qualquer pendência real.
+
+## Prompt curto para uma nova tarefa
+
+> Continue o Projeto Aprendiz no mesmo repositório. Leia primeiro `PROJECT_STATUS.md`, preserve alterações e arquivos locais que não pertençam à tarefa, valide a implementação antes de publicar e atualize o registro após mudanças relevantes. Minha solicitação é: ...
+

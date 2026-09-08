@@ -2,6 +2,8 @@
 
 Aplicação web com frontend React e backend Node.js para a gestão do Projeto Aprendiz. Gestores e professores usam o mesmo sistema, com rotas, menus e permissões próprias para cada perfil.
 
+Para retomar o desenvolvimento em uma nova tarefa, consulte [PROJECT_STATUS.md](PROJECT_STATUS.md).
+
 ## Recursos
 
 - Login e recuperação de senha com Supabase Auth, seguido de sessão própria em cookie `HttpOnly`, `Secure` e proteção CSRF.
