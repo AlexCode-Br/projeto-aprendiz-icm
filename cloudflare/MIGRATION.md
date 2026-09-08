@@ -31,6 +31,9 @@
 - `/api/auth/exchange` sem credencial: 403 esperado.
 - `/api/auth/reset-password` com token inexistente: 400 esperado; exercita Durable Object e banco, sem alterar senha nem enviar e-mail.
 - Medição com `wrangler tail`: página estática consumiu 1 ms de CPU; a primeira consulta autenticada observada chegou a 20 ms durante inicialização; repetição com isolate aquecido consumiu 4 ms de CPU e 5 ms de wall time. O caminho aquecido cabe no limite Free de 10 ms, mas telas autenticadas reais ainda precisam ser medidas.
+- Validação autenticada do gestor concluída no staging, sem escritas: dashboard, turmas, alunos, professores, informativos, suporte e configurações carregaram os mesmos dados observados na produção e todas as respostas medidas terminaram com `outcome=ok`.
+- CPU observada nas rotas principais do gestor: dashboard 8 ms; turmas/catálogos 7–10 ms; alunos/igrejas/foto 6–10 ms; professores/fotos 7–10 ms; informativos 7–9 ms; suporte 3–4 ms; conta/foto 4–6 ms. Houve um pico frio isolado de 21 ms em `/api/suporte/nao-lidos`; as repetições ficaram em 2–7 ms.
+- `cloudflare/tail-summary.mjs` resume eventos de diagnóstico sem imprimir cookies, cabeçalhos, query strings ou corpos de resposta.
 - Revisão estática final das consultas contra o adaptador Worker: sem incompatibilidades críticas encontradas.
 - Em Windows, `wrangler dev --local` falhou com access violation do workerd. Não reinstalar componentes do sistema automaticamente; a publicação remota foi usada para testes de runtime.
 
@@ -49,9 +52,9 @@ pnpm cloudflare:deploy
 
 ## Próximas etapas obrigatórias
 
-1. Usuário entrar na prévia com a conta habitual (senha não deve ser enviada no chat). Conferir dashboard, turmas, alunos, professores, informativos, suporte e configurações, observando erros e tempos. Conferir também área do professor e relatórios. Não afirmar que estas telas foram testadas antes de fazê-lo.
+1. Usuário entrar em outra aba da prévia com uma conta de professor (senha não deve ser enviada no chat). Conferir dashboard, turmas, alunos, frequência, relatórios/PDF/CSV, informativos, suporte e configurações. A conta de gestor validada não recebe acesso às rotas do professor e mostrou 404 corretamente.
 2. Validar fluxos autenticados/CSRF e operações reversíveis autorizadas. Para integração CRUD completa, usar banco isolado; não rodar as suites destrutivas no banco de produção.
-3. Medir CPU das rotas autenticadas reais no Workers Free, especialmente relatórios/PDF, dashboard e listagens. O teste aquecido de autenticação coube em 4 ms, mas não representa as rotas mais pesadas. Qualquer upgrade exige autorização do usuário.
+3. Medir CPU das rotas do professor no Workers Free, especialmente relatórios/PDF. As rotas do gestor caberam em 3–10 ms quando aquecidas, mas o pico frio de 21 ms exige observação após o corte. Qualquer upgrade exige autorização do usuário.
 4. Conferir no painel HostGator se existem registros privados/ocultos além dos oito reconstituídos na Cloudflare. Preservar e-mail/validação (MX, SPF, DKIM, DMARC, CAA etc.).
 5. Conferir DNSSEC; obter confirmação específica antes da troca de delegação na HostGator para `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`. Anexar domínio ao Worker, preparar TLS, mudar `APP_URL` para `https://aprendizicm.com.br` e validar fluxos de convite/recuperação. Preservar redirecionamento www.
 6. Depois do corte e testes no domínio, configurar CI/deploy e registrar rollback. Manter Render disponível até confirmar estabilidade.
