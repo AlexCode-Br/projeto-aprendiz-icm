@@ -21,6 +21,7 @@ import {
 } from './storage.mjs';
 import { createProfilePhotoStorage, normalizeProfilePhoto } from './profile-photos.mjs';
 import { createNotificationService, normalizeNotificationPreferences } from './notifications.mjs';
+import { createLazyClient } from './lazy-client.mjs';
 import {
   catalogNameError,
   cleanText,
@@ -69,13 +70,13 @@ export function createApplication({
   }
 
   const supabaseAuth = usesSupabaseAuth
-    ? createClient(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, {
+    ? createLazyClient(createClient, env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, {
         auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
       })
     : null;
 
   const supabaseAdmin = usesSupabaseAuth && supabaseSecretKey
-    ? createClient(env.SUPABASE_URL, supabaseSecretKey, {
+    ? createLazyClient(createClient, env.SUPABASE_URL, supabaseSecretKey, {
         auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
       })
     : null;
