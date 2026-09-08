@@ -28,7 +28,7 @@ Todas as etapas possuem commits separados e foram validadas pela suíte automati
 
 ### 1. Rate limiting no login e recuperação de senha
 - **Onde:** `backend/server.mjs`, rotas `/api/auth/login`, `/api/auth/forgot-password`, `/api/invitations/accept`, `/api/auth/reset-password`.
-- **Como:** limitador em memória (o serviço roda em instância única no Render): `Map` chaveada por IP e por e-mail normalizado, janela deslizante (ex.: 5 tentativas por 15 min por e-mail, 20 por IP), resposta `429` com mensagem genérica. Registrar tentativas bloqueadas no `audit_log`.
+- **Como:** limitador distribuído em Durable Object, chaveado por IP e por e-mail normalizado, com janela deslizante, resposta `429` genérica e registro das tentativas bloqueadas no `audit_log`.
 - **Cuidado:** não revelar se o e-mail existe (mensagens idênticas para conta existente/inexistente).
 
 ## Estrutural
@@ -85,7 +85,7 @@ Todas as etapas possuem commits separados e foram validadas pela suíte automati
 - Documentar retenção de dados (por quanto tempo dados de ex-alunos são mantidos).
 
 ### 12. Observabilidade
-- Log estruturado de erros no backend (JSON em stderr) para diagnóstico no Render; manter `audit_log` e criar visualização simples para o gestor (página em Configurações).
+- Log estruturado de erros no backend para diagnóstico no Cloudflare Workers; manter `audit_log` interno e sem exposição de dados sensíveis.
 
 ## Ordem sugerida de execução
 

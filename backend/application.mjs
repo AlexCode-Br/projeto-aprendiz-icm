@@ -58,7 +58,7 @@ export function createApplication({
 } = {}) {
   if (!db) throw new TypeError('Uma conexão de banco de dados é obrigatória.');
   const port = Number(env.PORT || 4180);
-  const baseUrl = env.APP_URL || (env.RENDER_EXTERNAL_HOSTNAME ? `https://${env.RENDER_EXTERNAL_HOSTNAME}` : `http://127.0.0.1:${port}`);
+  const baseUrl = env.APP_URL || `http://127.0.0.1:${port}`;
   const appOrigin = new URL(baseUrl).origin;
   const isProduction = env.NODE_ENV === 'production';
   const authProvider = env.AUTH_PROVIDER || (env.SUPABASE_URL ? 'supabase' : 'local');

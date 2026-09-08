@@ -32,4 +32,4 @@ Revisão transversal do login, recuperação de acesso, navegação, telas do ge
 
 ## Limites e publicação
 
-Os testes de navegador utilizam dados sintéticos e autenticação local, não contas ou registros de produção. A integração Supabase/Render não foi modificada nem publicada nesta revisão. A prévia local é servida em `http://127.0.0.1:4199`; o banco `uiux-qa.db*` está explicitamente ignorado pelo Git. A publicação deve ocorrer após aprovação visual. Não houve exclusão de dados de usuários.
+Os testes de navegador utilizam dados sintéticos e autenticação local, não contas ou registros de produção. A prévia local é servida em `http://127.0.0.1:4199`; o banco `uiux-qa.db*` está explicitamente ignorado pelo Git. A publicação no Cloudflare Workers deve ocorrer após aprovação visual. Não houve exclusão de dados de usuários.

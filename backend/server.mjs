@@ -15,7 +15,7 @@ const dataRoot = join(here, 'data');
 const sqlitePath = process.env.SQLITE_PATH || join(dataRoot, 'projeto-aprendiz.db');
 const port = Number(process.env.PORT || 4180);
 const host = process.env.HOST || (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1');
-const baseUrl = process.env.APP_URL || (process.env.RENDER_EXTERNAL_HOSTNAME ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}` : `http://127.0.0.1:${port}`);
+const baseUrl = process.env.APP_URL || `http://127.0.0.1:${port}`;
 const isProduction = process.env.NODE_ENV === 'production';
 const logger = createStructuredLogger();
 await mkdir(dataRoot, { recursive: true });

@@ -38,26 +38,24 @@ Contas de demonstração locais:
 
 Essas contas não são criadas em produção. Use `.env.example` como referência, sem versionar o arquivo `.env`.
 
-## Hospedagem web: Render + Supabase
+## Hospedagem web: Cloudflare Workers + Supabase
 
-O arquivo `render.yaml` descreve o serviço web gratuito no Render. O banco e a autenticação ficam no Supabase. As migrações são aplicadas automaticamente no schema privado `projeto_aprendiz` quando o servidor inicia.
+O frontend, a API e os assets são publicados em um Cloudflare Worker. PostgreSQL, Auth e Storage permanecem no Supabase; o Worker acessa o banco por Hyperdrive e protege tentativas de autenticação com Durable Object.
 
-> **Limitação do Render gratuito:** o serviço pode entrar em repouso sem tráfego e demorar no primeiro acesso seguinte. O banco gratuito do Supabase não expira a cada 30 dias, mas projetos inativos podem ser pausados.
+```bash
+pnpm cloudflare:build
+pnpm cloudflare:deploy
+```
 
-1. Crie e confirme o primeiro usuário em **Supabase Auth**.
-2. No Supabase, configure a URL pública do Render em **Auth → URL Configuration** e conecte um SMTP próprio para e-mails de produção.
-3. Crie um **Blueprint** no Render e conecte este repositório.
-4. Informe a conexão **Supavisor Session** (porta 5432) em `DATABASE_URL`, a chave pública em `SUPABASE_PUBLISHABLE_KEY` e `VITE_SUPABASE_PUBLISHABLE_KEY`, a chave secreta somente no backend em `SUPABASE_SECRET_KEY` e o e-mail do primeiro Gestor em `BOOTSTRAP_ADMIN_EMAIL`.
-5. Informe `RESEND_API_KEY` e `EMAIL_FROM` para os convites de professores.
-6. Aplique o Blueprint. O build, as migrações privadas e `/api/health` já estão configurados.
+O arquivo `wrangler.jsonc` é a fonte de verdade da infraestrutura pública. Os segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` e `RESEND_API_KEY` devem ser cadastrados com `wrangler secret put`, nunca versionados. Consulte [cloudflare/OPERATIONS.md](cloudflare/OPERATIONS.md) antes de publicar.
 
-O backend usa a conexão Supavisor compatível com IPv4. As tabelas da nova aplicação ficam fora do schema público e não são acessadas diretamente pelo navegador. O bucket privado `announcement-attachments` é criado sob demanda pelo backend; os professores acessam os arquivos apenas pela rota autenticada e autorizada da aplicação.
+As tabelas ficam no schema privado `projeto_aprendiz` e não são acessadas diretamente pelo navegador. O bucket privado `announcement-attachments` é criado sob demanda pelo backend; professores acessam os arquivos somente pela rota autenticada e autorizada da aplicação.
 
 ## Variáveis de produção
 
 | Variável | Finalidade |
 |---|---|
-| `DATABASE_URL` | Conexão Supavisor Session do Supabase. |
+| `DATABASE_URL` | Conexão Supavisor Session para execução Node local/alternativa. No Worker, o Hyperdrive fornece a conexão. |
 | `AUTH_PROVIDER` | Deve ser `supabase` na web. |
 | `SUPABASE_URL` / `VITE_SUPABASE_URL` | URL pública do projeto Supabase. |
 | `SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` | Chave pública; nunca use `service_role` ou chave secreta no frontend. |
@@ -66,13 +64,13 @@ O backend usa a conexão Supavisor compatível com IPv4. As tabelas da nova apli
 | `BOOTSTRAP_ADMIN_EMAIL` | E-mail confirmado no Supabase Auth que receberá o papel Gestor. |
 | `RESEND_API_KEY` | Credencial para recuperação de senha e convites. |
 | `EMAIL_FROM` | Remetente validado, como `Projeto Aprendiz <acesso@dominio.com>`. |
-| `APP_URL` | Opcional; URL pública usada nos links. No Render ela é detectada automaticamente. |
+| `APP_URL` | URL pública usada nos links e na validação de origem; em produção, `https://aprendizicm.com.br`. |
 | `APP_TIMEZONE` | Fuso usado no agendamento; padrão `America/Sao_Paulo`. |
 | `DATABASE_SSL` | `true` para a conexão segura com o Supabase. |
 
 ## Privacidade e observabilidade
 
-A política aplicada de exclusão, anonimização e retenção está em [docs/LGPD.md](docs/LGPD.md). A auditoria permanece interna e não é exibida ao gestor. Erros técnicos são escritos em `stderr` como um objeto JSON por linha, com identificador de requisição e sem cookies, tokens, senhas ou corpo da solicitação, facilitando a busca nos logs do Render.
+A política aplicada de exclusão, anonimização e retenção está em [docs/LGPD.md](docs/LGPD.md). A auditoria permanece interna e não é exibida ao gestor. Erros técnicos são escritos como JSON estruturado, com identificador de requisição e sem cookies, tokens, senhas ou corpo da solicitação, para consulta nos logs do Worker.
 
 ## Validação
 
