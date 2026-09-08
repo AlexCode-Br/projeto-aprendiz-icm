@@ -11,6 +11,10 @@ const logger = createStructuredLogger({ write: line => console.error(line), incl
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.hostname === 'www.aprendizicm.com.br') {
+      url.hostname = 'aprendizicm.com.br';
+      return Response.redirect(url.toString(), 308);
+    }
     const { securityHeaders } = createHttpSecurity({ isProduction: true, appOrigin: env.APP_URL, env });
     const json = (status, message) => new Response(JSON.stringify({ message }), { status, headers: securityHeaders() });
     if (!isApiPath(url.pathname) && url.pathname !== '/api') {

@@ -7,6 +7,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "routes": [
+    { "pattern": "aprendizicm.com.br/*", "zone_name": "aprendizicm.com.br" },
+    { "pattern": "www.aprendizicm.com.br/*", "zone_name": "aprendizicm.com.br" }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
@@ -19,7 +23,7 @@
   "vars": {
     "NODE_ENV": "production",
     "AUTH_PROVIDER": "supabase",
-    "APP_URL": "https://aprendiz-staging.alexandre-magnos-br.workers.dev",
+    "APP_URL": "https://aprendizicm.com.br",
     "APP_TIMEZONE": "America/Sao_Paulo",
     "READ_ONLY_PREVIEW": "false",
     "SUPABASE_URL": "https://ggghsddanuuekztxngxj.supabase.co",

@@ -2,7 +2,7 @@
 
 ## Estado verificado em 07/09/2026
 
-- **Produção ainda no Render. Não alterar DNS antes da validação autenticada.**
+- **Produção ainda no Render.** A validação autenticada foi concluída e a troca de delegação DNS foi solicitada na HostGator em 07/09/2026; a Cloudflare ainda aguarda a propagação.
 - Branch: `codex/melhorias-projeto-aprendiz`. Não enviar para `main` antecipadamente: o Render faz deploy automático de `main`.
 - Prévia: https://aprendiz-staging.alexandre-magnos-br.workers.dev
 - Worker: `aprendiz-staging`, conta `7c5176210f75766e5e0ed62cbf732572`.
@@ -13,8 +13,8 @@
 - Segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` e `RESEND_API_KEY` transferidos via UI e confirmados com `wrangler secret list` como `secret_text`. Nenhuma senha/chave privada foi colocada no repositório.
 - Remetente e logos dos e-mails preservados. Nenhum e-mail real foi enviado nestes testes.
 - Proteção de tentativas de autenticação usa Durable Object SQLite `AuthRateLimiter`.
-- Nenhum plano pago contratado, nenhum recurso Render desligado e nenhum registro DNS alterado.
-- A zona `aprendizicm.com.br` foi cadastrada no plano Free, mas ainda está **pendente/inativa** porque a delegação continua na HostGator. Nameservers atribuídos: `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`.
+- Nenhum plano pago contratado e nenhum recurso Render desligado.
+- A zona `aprendizicm.com.br` foi cadastrada no plano Free. A HostGator aceitou a substituição por `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`, mas a delegação pública ainda exibia os nameservers antigos na última consulta; a zona permanece **pendente/inativa** até a propagação.
 - Consulta pública ao registro DS não retornou chave DNSSEC; o pré-requisito de DNSSEC desligado está atendido no estado atual.
 - Os oito registros importados/reconstituídos foram revisados. `ftp`, `mail`, MX, DMARC, DKIM e o return-path do Resend (`send` → `send.forge.rmta.net`) estão como DNS-only; raiz e `www` permanecem preparados como proxy. Nada disso afeta o tráfego enquanto os nameservers não forem trocados.
 - O portal HostGator não mostra caixa de e-mail profissional criada. Ainda assim, os registros de e-mail existentes foram preservados para não ampliar o escopo da migração.
@@ -59,7 +59,7 @@ pnpm cloudflare:deploy
 2. Validar fluxos autenticados/CSRF e operações reversíveis autorizadas. Para integração CRUD completa, usar banco isolado; não rodar as suites destrutivas no banco de produção.
 3. Observar CPU e erros após o corte. As rotas do gestor e o relatório otimizado caberam em 3–10 ms quando aquecidos, mas inicializações frias ainda podem passar brevemente desse valor. Qualquer upgrade exige autorização do usuário.
 4. Conferir no painel HostGator se existem registros privados/ocultos além dos oito reconstituídos na Cloudflare. Preservar e-mail/validação (MX, SPF, DKIM, DMARC, CAA etc.).
-5. Conferir DNSSEC; obter confirmação específica antes da troca de delegação na HostGator para `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`. Anexar domínio ao Worker, preparar TLS, mudar `APP_URL` para `https://aprendizicm.com.br` e validar fluxos de convite/recuperação. Preservar redirecionamento www.
+5. Aguardar a Cloudflare marcar a zona como ativa. O corte está preparado com rotas de Worker para raiz e `www`, `APP_URL=https://aprendizicm.com.br` e redirecionamento permanente de `www` para a raiz. Publicar somente depois da ativação; as rotas mantêm os registros proxied do Render como fallback imediato para rollback.
 6. Depois do corte e testes no domínio, configurar CI/deploy e registrar rollback. Manter Render disponível até confirmar estabilidade.
 
 ## Referência para rollback / DNS anterior
