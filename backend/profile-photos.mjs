@@ -46,6 +46,13 @@ export function createProfilePhotoStorage({ db, supabaseAdmin, logger = console,
     if (error) logger.error('profile_photo_storage_cleanup_failed', error, { path });
   }
 
+  async function removePaths(paths) {
+    const storagePaths = [...new Set((Array.isArray(paths) ? paths : []).filter(Boolean))];
+    if (!useStorage || !storagePaths.length) return;
+    const { error } = await supabaseAdmin.storage.from(bucket).remove(storagePaths);
+    if (error) logger.error('profile_photo_storage_cleanup_failed', error, { count: storagePaths.length });
+  }
+
   async function save(ownerType, ownerId, normalized) {
     const current = await db.prepare('SELECT storage_path FROM profile_photos WHERE owner_type=? AND owner_id=?').get(ownerType, ownerId);
     let storagePath = null;
@@ -85,5 +92,5 @@ export function createProfilePhotoStorage({ db, supabaseAdmin, logger = console,
     return { ...photo, buffer: Buffer.from(await data.arrayBuffer()) };
   }
 
-  return { save, remove, load };
+  return { save, remove, removePaths, load };
 }

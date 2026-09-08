@@ -52,6 +52,38 @@ export function createStudentRoutes(context) {
     return {id:Number(saved.id),name:saved.name,needsSave:false,error:''};
   };
 
+  const bulkStudentIds = value => {
+    if (!Array.isArray(value) || !value.length || value.length > 100) return null;
+    if (value.some(id => !Number.isInteger(Number(id)) || Number(id) < 1)) return null;
+    return [...new Set(value.map(Number))].sort((left, right) => left - right);
+  };
+
+  const anonymizeStudents = async (studentIds, session, ip) => {
+    const placeholders = studentIds.map(() => '?').join(',');
+    let storagePaths = [];
+    await db.transaction(async () => {
+      const lockClause = db.dialect === 'postgres' ? ' FOR UPDATE' : '';
+      const students = await db.prepare(`SELECT id FROM students WHERE id IN (${placeholders}) AND active=1 ORDER BY id${lockClause}`).all(...studentIds);
+      if (students.length !== studentIds.length) {
+        const error = new Error('Um dos alunos selecionados não está mais disponível. Atualize a lista e tente novamente.');
+        error.code = 'STUDENT_SELECTION_CHANGED';
+        throw error;
+      }
+      storagePaths = (await db.prepare(`SELECT storage_path FROM profile_photos WHERE owner_type='student' AND owner_id IN (${placeholders}) AND storage_path IS NOT NULL`).all(...studentIds)).map(row => row.storage_path);
+      await db.prepare(`DELETE FROM profile_photos WHERE owner_type='student' AND owner_id IN (${placeholders})`).run(...studentIds);
+      await db.prepare(`DELETE FROM student_contacts WHERE student_id IN (${placeholders})`).run(...studentIds);
+      await db.prepare(`UPDATE dropout_events SET reason='Dados anonimizados por solicitação',reason_category='outro' WHERE student_id IN (${placeholders})`).run(...studentIds);
+      await db.prepare(`INSERT INTO dropout_events (student_id,class_id,reason,reason_category,occurred_at)
+        SELECT student_id,class_id,?,?,? FROM enrollments WHERE student_id IN (${placeholders}) AND status='ativa'`)
+        .run('Dados anonimizados por solicitação','outro',new Date().toISOString().slice(0,10),...studentIds);
+      await db.prepare(`UPDATE enrollments SET status='cancelada',transferred_to_class_id=NULL WHERE student_id IN (${placeholders}) AND status='ativa'`).run(...studentIds);
+      await db.prepare(`UPDATE students SET name='Aluno anonimizado #' || id,email=NULL,phone=NULL,guardian_name=NULL,guardian_phone=NULL,guardian_consent_at=NULL,church_id=NULL,age_group=NULL,has_instrument=0,active=0,anonymized_at=CURRENT_TIMESTAMP,anonymized_by=?,updated_at=CURRENT_TIMESTAMP WHERE id IN (${placeholders}) AND active=1`).run(session.user_id,...studentIds);
+      const auditValues = studentIds.map(() => '(?,?,?)').join(',');
+      await db.prepare(`INSERT INTO audit_log (user_id,action,ip) VALUES ${auditValues}`).run(...studentIds.flatMap(id => [session.user_id,`student_anonymized:${id}`,ip]));
+    });
+    await profilePhotoStorage.removePaths(storagePaths);
+  };
+
   return async function studentRoutes(request, response, url, ip) {
       if(request.method==='GET'&&url.pathname==='/api/churches'){
         if(!await authorize(request,response,['gestor','professor']))return;
@@ -93,6 +125,61 @@ export function createStudentRoutes(context) {
         if(!result.changes)return json(response,404,{message:'Igreja não encontrada.'});
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'church_deactivated',ip);
         return json(response,200,{success:true});
+      }
+
+      if(request.method==='POST'&&url.pathname==='/api/alunos/bulk/enroll'){
+        const session=await authorize(request,response,['gestor']);if(!session)return;
+        const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
+        const body=await readJson(request),studentIds=bulkStudentIds(body.student_ids),classId=Number(body.class_id);
+        if(!studentIds)return json(response,400,{message:'Selecione entre 1 e 100 alunos válidos.'});
+        if(!Number.isInteger(classId)||classId<1)return json(response,400,{message:'Selecione uma turma válida.'});
+        try{
+          const result=await db.transaction(async()=>{
+            const classLock=db.dialect==='postgres'?' FOR UPDATE':'';
+            const classRow=await db.prepare(`SELECT classes.id,classes.course_id,classes.professor_id,classes.capacity,classes.label,courses.name AS course_name,locations.name AS location_name FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE classes.id=? AND classes.school_year_id=? AND classes.active=1 AND courses.active=1 AND locations.active=1${classLock}`).get(classId,period.id);
+            if(!classRow){const error=new Error('A turma selecionada não está mais disponível.');error.code='BULK_CLASS_NOT_FOUND';throw error;}
+            const placeholders=studentIds.map(()=>'?').join(','),studentLock=db.dialect==='postgres'?' FOR UPDATE':'';
+            const students=await db.prepare(`SELECT id,name FROM students WHERE id IN (${placeholders}) AND active=1 ORDER BY id${studentLock}`).all(...studentIds);
+            if(students.length!==studentIds.length){const error=new Error('Um dos alunos selecionados não está mais disponível. Atualize a lista e tente novamente.');error.code='STUDENT_SELECTION_CHANGED';throw error;}
+            const activeEnrollments=await db.prepare(`SELECT enrollments.student_id,classes.id AS class_id,classes.course_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.student_id IN (${placeholders}) AND enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? ORDER BY enrollments.student_id,classes.id`).all(...studentIds,period.id);
+            const targetStudents=new Set(activeEnrollments.filter(row=>Number(row.class_id)===classId).map(row=>Number(row.student_id)));
+            const sameCourseStudents=new Set(activeEnrollments.filter(row=>Number(row.course_id)===Number(classRow.course_id)).map(row=>Number(row.student_id)));
+            const courseCounts=new Map();
+            for(const enrollment of activeEnrollments){
+              const studentId=Number(enrollment.student_id),courses=courseCounts.get(studentId)||new Set();
+              courses.add(Number(enrollment.course_id));courseCounts.set(studentId,courses);
+            }
+            const overLimit=students.find(student=>!sameCourseStudents.has(Number(student.id))&&(courseCounts.get(Number(student.id))?.size||0)>=3);
+            if(overLimit){const error=new Error(`${overLimit.name} já está vinculado ao limite de 3 cursos.`);error.code='BULK_COURSE_LIMIT';throw error;}
+            const newEnrollmentIds=studentIds.filter(id=>!targetStudents.has(id));
+            if(classRow.capacity){
+              const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(classId);
+              if(Number(occupied.total)+newEnrollmentIds.length>Number(classRow.capacity)){const error=new Error(`A turma possui apenas ${Math.max(0,Number(classRow.capacity)-Number(occupied.total))} vaga(s) disponível(is) para ${newEnrollmentIds.length} nova(s) matrícula(s).`);error.code='BULK_CAPACITY';throw error;}
+            }
+            const transferred=new Set(activeEnrollments.filter(row=>Number(row.course_id)===Number(classRow.course_id)&&Number(row.class_id)!==classId).map(row=>Number(row.student_id))).size;
+            await db.prepare(`UPDATE enrollments SET status='cancelada',transferred_to_class_id=? WHERE student_id IN (${placeholders}) AND status='ativa' AND class_id IN (SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND id<>?)`).run(classId,...studentIds,period.id,classRow.course_id,classId);
+            const enrollmentValues=studentIds.map(()=>"(?,?,'ativa',NULL,NULL)").join(',');
+            await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES ${enrollmentValues} ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(...studentIds.flatMap(id=>[id,classId]));
+            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`students_bulk_enrolled:${classId}:${studentIds.length}`,ip);
+            return{classRow,selected:studentIds.length,added:newEnrollmentIds.length,alreadyEnrolled:targetStudents.size,transferred};
+          });
+          await notificationService.notifyProfessor(result.classRow.professor_id,'newStudent','Alunos adicionados à turma',`${result.selected} aluno(s) foram vinculados à turma ${result.classRow.label||result.classRow.course_name}, em ${result.classRow.location_name}.`,`students-bulk-enrolled/${classId}/${Date.now()}`);
+          return json(response,200,{success:true,selected:result.selected,added:result.added,alreadyEnrolled:result.alreadyEnrolled,transferred:result.transferred,message:`${result.selected} aluno(s) vinculados à turma com sucesso.`});
+        }catch(error){
+          if(error.code==='BULK_CLASS_NOT_FOUND')return json(response,404,{message:error.message});
+          if(['STUDENT_SELECTION_CHANGED','BULK_COURSE_LIMIT','BULK_CAPACITY'].includes(error.code))return json(response,409,{message:error.message});
+          throw error;
+        }
+      }
+
+      if(request.method==='POST'&&url.pathname==='/api/alunos/bulk/anonymize'){
+        const session=await authorize(request,response,['gestor']);if(!session)return;
+        const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
+        const body=await readJson(request),studentIds=bulkStudentIds(body.student_ids);
+        if(!studentIds)return json(response,400,{message:'Selecione entre 1 e 100 alunos válidos.'});
+        try{await anonymizeStudents(studentIds,session,ip);}
+        catch(error){if(error.code==='STUDENT_SELECTION_CHANGED')return json(response,409,{message:error.message});throw error;}
+        return json(response,200,{success:true,anonymized:studentIds.length,message:`Os dados pessoais de ${studentIds.length} aluno(s) foram anonimizados de forma irreversível.`});
       }
     
       const studentContactMatch=url.pathname.match(/^\/api\/alunos\/(\d+)\/contatos$/);
@@ -246,20 +333,8 @@ export function createStudentRoutes(context) {
       if (studentMatch && request.method === 'DELETE') {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
         const id = Number(studentMatch[1]);
-        const student = await db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(id);
-        if (!student) return json(response, 404, { message: 'Aluno ativo não encontrado.' });
-        await profilePhotoStorage.remove('student',id);
-        await db.transaction(async () => {
-          const enrollments = await db.prepare("SELECT class_id FROM enrollments WHERE student_id=? AND status='ativa'").all(id);
-          await db.prepare('DELETE FROM student_contacts WHERE student_id=?').run(id);
-          await db.prepare("UPDATE dropout_events SET reason='Dados anonimizados por solicitação',reason_category='outro' WHERE student_id=?").run(id);
-          for (const enrollment of enrollments) {
-            await db.prepare('INSERT INTO dropout_events (student_id,class_id,reason,reason_category,occurred_at) VALUES (?,?,?,?,?)').run(id,enrollment.class_id,'Dados anonimizados por solicitação','outro',new Date().toISOString().slice(0,10));
-          }
-          await db.prepare("UPDATE enrollments SET status='cancelada',transferred_to_class_id=NULL WHERE student_id=? AND status='ativa'").run(id);
-          await db.prepare(`UPDATE students SET name=?,email=NULL,phone=NULL,guardian_name=NULL,guardian_phone=NULL,guardian_consent_at=NULL,church_id=NULL,age_group=NULL,has_instrument=0,active=0,anonymized_at=CURRENT_TIMESTAMP,anonymized_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(`Aluno anonimizado #${id}`,session.user_id,id);
-          await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`student_anonymized:${id}`,ip);
-        });
+        try{await anonymizeStudents([id],session,ip);}
+        catch(error){if(error.code==='STUDENT_SELECTION_CHANGED')return json(response,404,{message:'Aluno ativo não encontrado.'});throw error;}
         return json(response, 200, { success: true, anonymized: true, message: 'Os dados pessoais do aluno foram anonimizados de forma irreversível.' });
       }
     

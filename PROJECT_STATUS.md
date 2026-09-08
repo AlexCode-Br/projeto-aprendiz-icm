@@ -25,6 +25,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Horários aceitam múltiplos dias e horários semanais e detectam conflitos entre turmas do mesmo professor.
 - A frequência pertence à turma e ao aluno; relatórios PDF e CSV funcionam como folha de chamada por data e período.
 - Cards mobile de alunos, professores e turmas usam layout compacto e menu vertical de três pontos quando há ações.
+- A listagem do gestor mostra igreja e classe dos alunos; nome e foto abrem os demais dados, e até 100 alunos podem ser selecionados para matrícula ou anonimização em lote com operação transacional.
 - Detalhes de aluno e professor destacam foto e nome e organizam contatos e vínculos em uma grade compacta.
 - Modais usam o `X` do cabeçalho como saída. Botões `Cancelar`, `Fechar` ou `Voltar` foram removidos quando executavam exatamente a mesma ação; cancelamentos de subações independentes permanecem.
 - Fotos de perfil usam carregamento assíncrono, fallback imediato por inicial e cache no cliente.
@@ -50,7 +51,7 @@ git diff --check
 git status --short
 ```
 
-O conjunto atual possui 64 testes: 63 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
+O conjunto atual possui 65 testes: 64 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
 
 Fluxo de publicação:
 

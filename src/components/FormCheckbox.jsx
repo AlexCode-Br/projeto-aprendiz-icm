@@ -1,7 +1,13 @@
 import { Check } from 'lucide-react';
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 
-const FormCheckbox = forwardRef(({ checked, onChange, disabled, label, description, className = '', id, name, ...props }, ref) => {
+const FormCheckbox = forwardRef(({ checked, indeterminate = false, onChange, disabled, label, description, className = '', id, name, ...props }, ref) => {
+    const inputRef = useRef(null);
+    useImperativeHandle(ref, () => inputRef.current);
+    useEffect(() => {
+        if (inputRef.current) inputRef.current.indeterminate = indeterminate;
+    }, [indeterminate]);
+
     return (
         <label className={`flex items-start gap-3 cursor-pointer group ${disabled ? 'opacity-60 cursor-not-allowed' : ''} ${className}`}>
             <div className="relative flex items-center justify-center mt-0.5 shrink-0">
@@ -12,7 +18,7 @@ const FormCheckbox = forwardRef(({ checked, onChange, disabled, label, descripti
                     checked={checked}
                     onChange={onChange}
                     disabled={disabled}
-                    ref={ref}
+                    ref={inputRef}
                     className="peer appearance-none h-5 w-5 rounded-[4px] border border-border bg-surface checked:bg-primary checked:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-surface transition-all"
                     {...props}
                 />
