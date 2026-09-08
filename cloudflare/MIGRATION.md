@@ -1,22 +1,22 @@
 # Migração Render → Cloudflare
 
-## Estado verificado em 07/09/2026
+## Estado verificado em 08/09/2026
 
-- **Produção ainda no Render.** A validação autenticada foi concluída e a troca de delegação DNS foi solicitada na HostGator em 07/09/2026; a Cloudflare ainda aguarda a propagação.
+- **Produção está no Cloudflare Worker em `https://aprendizicm.com.br`.** O Render permanece ligado somente como fallback pela URL nativa.
 - Branch: `codex/melhorias-projeto-aprendiz`. Não enviar para `main` antecipadamente: o Render faz deploy automático de `main`.
 - Prévia: https://aprendiz-staging.alexandre-magnos-br.workers.dev
 - Worker: `aprendiz-staging`, conta `7c5176210f75766e5e0ed62cbf732572`.
-- Versão remota: `c902fe31-1972-4d05-b8eb-22d8f2676365`.
+- Versão remota: `213c1ebb-b36e-4b9a-87c6-f8f6f9920e3c`.
 - A prévia está funcional (`READ_ONLY_PREVIEW=false`) e usa o **banco real**, não uma cópia. Não criar/apagar registros de teste indiscriminadamente.
 - Supabase/Auth/Storage continuam no projeto existente `ggghsddanuuekztxngxj`. Nenhuma migração de dados executada.
 - Hyperdrive `aprendiz-supabase`, ID `66babbf9d50c470fa5cd5bd1e6a2523f`, conexão direta TLS ao Supabase, **cache desativado**, limite padrão de 20 conexões.
 - Segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` e `RESEND_API_KEY` transferidos via UI e confirmados com `wrangler secret list` como `secret_text`. Nenhuma senha/chave privada foi colocada no repositório.
 - Remetente e logos dos e-mails preservados. Nenhum e-mail real foi enviado nestes testes.
 - Proteção de tentativas de autenticação usa Durable Object SQLite `AuthRateLimiter`.
-- Nenhum plano pago contratado e nenhum recurso Render desligado.
-- A zona `aprendizicm.com.br` foi cadastrada no plano Free. A HostGator aceitou a substituição por `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`, mas a delegação pública ainda exibia os nameservers antigos na última consulta; a zona permanece **pendente/inativa** até a propagação.
+- Nenhum plano pago contratado e nenhum recurso Render desligado. A URL nativa `https://projeto-aprendiz.onrender.com` foi habilitada e respondeu `200` antes da desvinculação do domínio principal.
+- A zona `aprendizicm.com.br` está **ativa** no plano Free. A delegação pública foi confirmada em `meadow.ns.cloudflare.com` e `sean.ns.cloudflare.com`.
 - Consulta pública ao registro DS não retornou chave DNSSEC; o pré-requisito de DNSSEC desligado está atendido no estado atual.
-- Os oito registros importados/reconstituídos foram revisados. `ftp`, `mail`, MX, DMARC, DKIM e o return-path do Resend (`send` → `send.forge.rmta.net`) estão como DNS-only; raiz e `www` permanecem preparados como proxy. Nada disso afeta o tráfego enquanto os nameservers não forem trocados.
+- Os registros importados/reconstituídos foram revisados. `ftp`, `mail`, MX, DMARC, DKIM e o return-path do Resend (`send` → `send.forge.rmta.net`) permanecem publicados. A raiz é um Custom Domain do Worker; `www` continua proxied e passa por uma rota do Worker que responde com redirecionamento `308` para a raiz.
 - O portal HostGator não mostra caixa de e-mail profissional criada. Ainda assim, os registros de e-mail existentes foram preservados para não ampliar o escopo da migração.
 
 ## Testes realizados
@@ -39,6 +39,8 @@
 - A rota detalhada de frequência consumiu 21 ms na primeira observação e 13 ms aquecida. Os clientes do SDK Supabase, desnecessários para leituras com sessão local, passaram a ser inicializados apenas sob demanda. Na versão otimizada, o relatório consumiu 10 ms e depois 9 ms, ambos com `outcome=ok`.
 - Revisão estática final das consultas contra o adaptador Worker: sem incompatibilidades críticas encontradas.
 - Em Windows, `wrangler dev --local` falhou com access violation do workerd. Não reinstalar componentes do sistema automaticamente; a publicação remota foi usada para testes de runtime.
+- Corte público concluído: `/login` retornou `200`, `/api/auth/me` sem sessão retornou `401`, `www` retornou `308` para a raiz, e nenhum deles apresentou os cabeçalhos do Render. Cinco medições consecutivas de `/api/health` ficaram entre 0,16 s e 0,24 s no cliente de teste.
+- DNS público pós-corte confirmou os dois nameservers Cloudflare e a presença de MX, DMARC, DKIM e return-path do Resend.
 
 ## Publicar de forma reproduzível
 
@@ -59,17 +61,19 @@ pnpm cloudflare:deploy
 2. Validar fluxos autenticados/CSRF e operações reversíveis autorizadas. Para integração CRUD completa, usar banco isolado; não rodar as suites destrutivas no banco de produção.
 3. Observar CPU e erros após o corte. As rotas do gestor e o relatório otimizado caberam em 3–10 ms quando aquecidos, mas inicializações frias ainda podem passar brevemente desse valor. Qualquer upgrade exige autorização do usuário.
 4. Conferir no painel HostGator se existem registros privados/ocultos além dos oito reconstituídos na Cloudflare. Preservar e-mail/validação (MX, SPF, DKIM, DMARC, CAA etc.).
-5. Aguardar a Cloudflare marcar a zona como ativa. O corte está preparado com rotas de Worker para raiz e `www`, `APP_URL=https://aprendizicm.com.br` e redirecionamento permanente de `www` para a raiz. Publicar somente depois da ativação; as rotas mantêm os registros proxied do Render como fallback imediato para rollback.
-6. Depois do corte e testes no domínio, configurar CI/deploy e registrar rollback. Manter Render disponível até confirmar estabilidade.
+5. Fazer um novo login de gestor e de professor no domínio definitivo e repetir um fluxo autenticado reversível; as sessões antigas do domínio Render expiraram após o corte. O mesmo Worker já foi validado autenticado no staging antes da migração.
+6. Observar CPU, erros e entrega de e-mails no domínio final. Depois, configurar CI/deploy e decidir quando promover a branch para `main`. Manter o Render disponível durante a estabilização.
 
 ## Referência para rollback / DNS anterior
 
 - Render atual: `srv-da6jo2ou01pc738bu4eg`, `projeto-aprendiz`, Virginia.
+- Fallback Render: `https://projeto-aprendiz.onrender.com` (subdomínio nativo habilitado). Os vínculos personalizados de raiz/`www` foram removidos do Render para liberar o Custom Domain no Worker.
 - Commit Render observado: `80353d7bab99be0450fef40bd2fc1efd5b86319a`.
 - Serviço antigo `projeto-aprendiz-api` não faz parte desta migração; não mexer nele.
 - NS observados: `dns3.hostgator.com.br`, `dns4.hostgator.com.br`.
 - Raiz A observada: `216.24.57.1` (TTL 14400).
 - www CNAME observado: `projeto-aprendiz.onrender.com` (TTL 14400).
+- Rollback: remover o Custom Domain `aprendizicm.com.br` do Worker, recriar o A proxied da raiz para `216.24.57.1` e readicionar os domínios personalizados no Render. A URL nativa do Render deve continuar habilitada até o fim da estabilização.
 - Diretórios `.qa-professor/` e `output/` são do usuário; não apagar nem incluir em commits.
 
 ## Autorizações e economia

@@ -8,7 +8,7 @@
   "workers_dev": true,
   "preview_urls": false,
   "routes": [
-    { "pattern": "aprendizicm.com.br/*", "zone_name": "aprendizicm.com.br" },
+    { "pattern": "aprendizicm.com.br", "custom_domain": true },
     { "pattern": "www.aprendizicm.com.br/*", "zone_name": "aprendizicm.com.br" }
   ],
   "assets": {
