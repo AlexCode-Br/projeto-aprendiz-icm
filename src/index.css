@@ -90,6 +90,13 @@
         -webkit-font-smoothing: antialiased;
     }
 
+    html.app-shell-active,
+    body.app-shell-active {
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
     button,
     input,
     select,
