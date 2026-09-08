@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
 import CourseIcon from './CourseIcon';
-import { Church, MonitorPlay } from 'lucide-react';
+import { MonitorPlay } from 'lucide-react';
 import { catalogKey } from '../../shared/catalog-options.mjs';
 import { catalogNameError, cleanText } from '../../shared/validation.mjs';
 
@@ -94,7 +94,7 @@ const TurmaModal = ({ isOpen, onClose, onSave, turma, allProfessores = [], allLo
                                 invalid={Boolean(errors.local)}
                                 formatCreateLabel={value => `Usar “${cleanText(value, 100)}”`}
                                 isValidNewOption={value => !catalogNameError(value, 'local ou modalidade') && !allLocais.some(option => catalogKey(option) === catalogKey(value))}
-                                formatOptionLabel={option => <span className="flex items-center gap-2">{catalogKey(option.value) === 'ead' ? <MonitorPlay aria-hidden="true" className="!h-5 !w-5 shrink-0" /> : <Church aria-hidden="true" className="!h-5 !w-5 shrink-0" />}<span>{option.label}</span></span>}
+                                formatOptionLabel={option => <span className="flex items-center gap-2">{catalogKey(option.value) === 'ead' && <MonitorPlay aria-hidden="true" className="!h-5 !w-5 shrink-0" />}<span>{option.label}</span></span>}
                             />
                             <p className="mt-1 text-xs text-text-muted">Para aulas remotas, selecione <strong>EAD</strong>.</p>
                             {errors.local && <p className="text-danger text-xs mt-1">{errors.local}</p>}
