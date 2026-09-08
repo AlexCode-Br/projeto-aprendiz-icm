@@ -165,7 +165,13 @@ export function createApiHandler(context) {
         try{
           const photo=await profilePhotoStorage.load(ownerType,ownerId);
           if(!photo)return json(response,404,{message:'Foto não cadastrada.'});
-          response.writeHead(200,{...securityHeaders(photo.mime_type),'Content-Length':String(photo.buffer.length),'Cache-Control':'private, no-cache','Content-Disposition':'inline'});
+          const versioned=url.searchParams.has('v');
+          response.writeHead(200,{
+            ...securityHeaders(photo.mime_type),
+            'Content-Length':String(photo.buffer.length),
+            'Cache-Control':versioned?'private, max-age=31536000, immutable':'private, no-cache',
+            'Content-Disposition':'inline',
+          });
           return response.end(photo.buffer);
         }catch(error){logger.error('profile_photo_load_failed',error,{ownerType,ownerId});return json(response,502,{message:'Não foi possível carregar a foto.'});}
       }

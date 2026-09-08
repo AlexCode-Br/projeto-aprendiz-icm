@@ -32,12 +32,15 @@ export function createDashboardRoutes(context) {
             WHERE classes.active=1 AND classes.school_year_id=?
             GROUP BY classes.id,classes.label,courses.name,locations.name
             ORDER BY total DESC,courses.name,locations.name`).all(period.id),
-          db.prepare("SELECT students.id,students.name AS nome,courses.name AS curso,locations.name AS local,enrollments.enrolled_at FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.status='ativa' AND students.active=1 AND classes.active=1 AND classes.school_year_id=? ORDER BY enrollments.enrolled_at DESC,enrollments.id DESC LIMIT 6").all(period.id),
+          db.prepare("SELECT students.id,students.name AS nome,courses.name AS curso,locations.name AS local,enrollments.enrolled_at,profile_photos.updated_at AS photo_updated_at FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id LEFT JOIN profile_photos ON profile_photos.owner_type='student' AND profile_photos.owner_id=students.id WHERE enrollments.status='ativa' AND students.active=1 AND classes.active=1 AND classes.school_year_id=? ORDER BY enrollments.enrolled_at DESC,enrollments.id DESC LIMIT 6").all(period.id),
         ]);
         return json(response,200,{
           stats:{totalAlunos:Number(totalAlunos.total||0),cursosAtivos:Number(cursosAtivos.total||0),professores:Number(professores.total||0),ticketsPendentes:Number(ticketsPendentes.total||0)},
           alunosPorTurma:alunosPorTurma.map(row=>({...row,id:Number(row.id),total:Number(row.total||0)})),
-          ultimasInscricoes,
+          ultimasInscricoes:ultimasInscricoes.map(({photo_updated_at,...row})=>({
+            ...row,
+            foto_url:photo_updated_at?`/api/alunos/${row.id}/foto?v=${encodeURIComponent(photo_updated_at)}`:'',
+          })),
         });
       }
       if(request.method==='GET'&&url.pathname==='/api/dashboard/professor'){

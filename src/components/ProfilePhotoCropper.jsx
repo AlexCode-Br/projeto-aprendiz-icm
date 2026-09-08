@@ -44,14 +44,14 @@ export default function ProfilePhotoCropper({ source, onApply, onClose }) {
         setBusy(true);
         try {
             const canvas = document.createElement('canvas');
-            canvas.width = canvas.height = 512;
+            canvas.width = canvas.height = 384;
             const context = canvas.getContext('2d');
             if (!context) throw new Error('Seu navegador não permitiu recortar a foto.');
             context.imageSmoothingQuality = 'high';
-            context.drawImage(image, crop.x, crop.y, crop.size, crop.size, 0, 0, 512, 512);
-            // PNG preserves transparency and matches the preview in both themes.
-            const result = canvas.toDataURL('image/png');
-            if (!result.startsWith('data:image/png;base64,')) throw new Error('Não foi possível preparar a foto.');
+            context.drawImage(image, crop.x, crop.y, crop.size, crop.size, 0, 0, 384, 384);
+            const webp = canvas.toDataURL('image/webp', 0.86);
+            const result = webp.startsWith('data:image/webp;base64,') ? webp : canvas.toDataURL('image/png');
+            if (!/^data:image\/(?:webp|png);base64,/.test(result)) throw new Error('Não foi possível preparar a foto.');
             await onApply(result);
         } catch (cause) { setError(cause.message || 'Não foi possível recortar a foto. Tente novamente.'); }
         finally { setBusy(false); }

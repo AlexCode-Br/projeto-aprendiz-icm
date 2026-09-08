@@ -41,11 +41,13 @@ test('dashboard do gestor mostra somente totais administrativos e alunos por tur
     const today=new Date().toISOString().slice(0,10),database=new DatabaseSync(databasePath);
     database.prepare("UPDATE school_years SET start_date=?,end_date=?,dates_confirmed=1 WHERE active=1").run(shiftDate(today,-180),shiftDate(today,180));
     database.exec("UPDATE enrollments SET enrolled_at='2000-01-01'; UPDATE dropout_events SET occurred_at='2000-01-01'; DELETE FROM attendance_records; DELETE FROM attendance_sessions;");
-    const enrollmentIds=database.prepare('SELECT id FROM enrollments ORDER BY id LIMIT 3').all();
+    const enrollmentIds=database.prepare('SELECT id,student_id FROM enrollments ORDER BY id LIMIT 3').all();
     assert.equal(enrollmentIds.length,3);
     database.prepare('UPDATE enrollments SET enrolled_at=? WHERE id=?').run(shiftDate(today,-1),enrollmentIds[0].id);
     database.prepare('UPDATE enrollments SET enrolled_at=? WHERE id=?').run(shiftDate(today,-2),enrollmentIds[1].id);
     database.prepare('UPDATE enrollments SET enrolled_at=? WHERE id=?').run(shiftDate(today,-35),enrollmentIds[2].id);
+    const photoDataUrl='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+    database.prepare("INSERT INTO profile_photos (owner_type,owner_id,mime_type,size_bytes,data_url) VALUES ('student',?,'image/png',?,?)").run(enrollmentIds[0].student_id,Buffer.from(photoDataUrl.split(',')[1],'base64').length,photoDataUrl);
     const classRow=database.prepare(`SELECT classes.id,professor_profiles.user_id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id JOIN enrollments ON enrollments.class_id=classes.id WHERE enrollments.status='ativa' AND professor_profiles.user_id IS NOT NULL GROUP BY classes.id,professor_profiles.user_id HAVING COUNT(enrollments.id)>=2 LIMIT 1`).get();
     assert.ok(classRow);
     database.prepare('UPDATE classes SET capacity=4 WHERE id=?').run(classRow.id);
@@ -71,6 +73,11 @@ test('dashboard do gestor mostra somente totais administrativos e alunos por tur
     assert.equal(Object.hasOwn(classMetric,'frequencia'),false);
     assert.equal(Object.hasOwn(classMetric,'frequenciaAtual'),false);
     assert.ok(Array.isArray(response.data.ultimasInscricoes));
+    const recentStudentWithPhoto=response.data.ultimasInscricoes.find(item=>Number(item.id)===Number(enrollmentIds[0].student_id));
+    assert.match(recentStudentWithPhoto?.foto_url||'',new RegExp(`^/api/alunos/${enrollmentIds[0].student_id}/foto\\?v=`));
+    const photoResponse=await call(manager,'GET',recentStudentWithPhoto.foto_url);
+    assert.equal(photoResponse.status,200);
+    assert.equal(photoResponse.headers.get('cache-control'),'private, max-age=31536000, immutable');
 
     const professorDashboard=await call(professor,'GET','/api/dashboard/professor');
     assert.equal(professorDashboard.status,200,JSON.stringify(professorDashboard.data));
