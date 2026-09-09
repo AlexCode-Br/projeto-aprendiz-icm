@@ -8,11 +8,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `d5667cd`
+- Último commit da aplicação publicado em produção: `1bde7ce`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `f245021d-47ae-4191-955f-9e665814fbfb`
+- Versão Cloudflare verificada: `8db3b9c6-2fc7-4843-ad60-c5468c5c90da`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -94,6 +94,8 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Validação pós-publicação: `/login`, `/api/health` e o ícone transparente retornaram HTTP 200; `/api/auth/me` retornou HTTP 401 sem sessão, conforme esperado.
 - Restauração de “Permanecer conectado” ao reabrir o PWA publicada no commit `d5667cd`.
 - Versão Cloudflare verificada: `f245021d-47ae-4191-955f-9e665814fbfb`; `/login` e `/api/health` retornaram HTTP 200, banco PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão, conforme esperado.
+- Entrada do PWA corrigida no commit `1bde7ce`: início em `/`, redirecionamento de usuários autenticados que ainda abram `/login` e shell atualizado para v8.
+- Versão Cloudflare verificada: `8db3b9c6-2fc7-4843-ad60-c5468c5c90da`; raiz, `/login` e `/api/health` retornaram HTTP 200, e manifesto, bundle atual e Service Worker v8 foram confirmados em produção.
 
 ## Prompt curto para uma nova tarefa
 
