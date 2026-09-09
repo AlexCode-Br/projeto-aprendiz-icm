@@ -6,6 +6,7 @@ const APP_SHELL = [
   '/projeto-aprendiz-logo.png',
   '/pwa-icon-192.png',
   '/pwa-icon-512.png',
+  '/notification-icon.png',
 ];
 
 self.addEventListener('install', event => {
@@ -52,7 +53,7 @@ self.addEventListener('push', event => {
   event.waitUntil(self.registration.showNotification(title, {
     body,
     icon: '/pwa-icon-192.png',
-    badge: '/pwa-icon-192.png',
+    badge: '/notification-icon.png',
     tag: String(payload.tag || '').slice(0, 180) || undefined,
     data: { url: targetUrl },
   }));
