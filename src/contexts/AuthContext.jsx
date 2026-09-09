@@ -9,9 +9,22 @@ import {
     supabase,
     usesSupabaseAuth,
 } from '../services/supabase';
-import { disablePushNotifications, syncExistingPushSubscription } from '../services/pushNotifications';
+import { clearLocalPushNotifications, disablePushNotifications, syncExistingPushSubscription } from '../services/pushNotifications';
 
 export const AuthContext = createContext(null);
+const LEGACY_SESSION_PERSISTENCE_KEY = 'projeto-aprendiz-session-persistence';
+
+function legacySessionIsPersistent() {
+    try { return window.localStorage.getItem(LEGACY_SESSION_PERSISTENCE_KEY) === 'local'; }
+    catch { return false; }
+}
+
+function setLegacySessionPersistence(remember) {
+    try {
+        if (remember) window.localStorage.setItem(LEGACY_SESSION_PERSISTENCE_KEY, 'local');
+        else window.localStorage.removeItem(LEGACY_SESSION_PERSISTENCE_KEY);
+    } catch { /* storage can be unavailable in privacy-restricted browsers */ }
+}
 
 async function exchangeSession(session, remember = false) {
     if (!session?.access_token) throw new Error('Sessão do Supabase não encontrada.');
@@ -28,22 +41,40 @@ async function exchangeSession(session, remember = false) {
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [rememberedSession, setRememberedSession] = useState(() => usesSupabaseAuth ? isSupabaseSessionPersistent() : legacySessionIsPersistent());
     const navigate = useNavigate();
 
     const loadUser = useCallback(async () => {
         try {
+            // Supabase keeps non-persistent credentials only for this browser
+            // session. Never restore the server-side session without them.
+            if (usesSupabaseAuth) {
+                const { data } = await supabase.auth.getSession();
+                if (!data.session) {
+                    setRememberedSession(false);
+                    setUser(null);
+                    await clearLocalPushNotifications().catch(() => {});
+                    return;
+                }
+                setRememberedSession(isSupabaseSessionPersistent());
+            }
             const response = await api.get('/api/auth/me');
             api.setCsrfToken(response.data.csrfToken);
             setUser(response.data.user);
         } catch {
             if (!usesSupabaseAuth) {
+                setRememberedSession(legacySessionIsPersistent());
                 setUser(null);
+                await clearLocalPushNotifications().catch(() => {});
             } else {
                 const { data } = await supabase.auth.getSession();
-                if (!data.session) setUser(null);
-                else {
+                if (!data.session) {
+                    setRememberedSession(false);
+                    setUser(null);
+                    await clearLocalPushNotifications().catch(() => {});
+                } else {
                     try { setUser(await exchangeSession(data.session, isSupabaseSessionPersistent())); }
-                    catch { setUser(null); }
+                    catch { setRememberedSession(false); setUser(null); }
                 }
             }
         } finally {
@@ -53,8 +84,8 @@ export const AuthProvider = ({ children }) => {
 
     useEffect(() => { loadUser(); }, [loadUser]);
     useEffect(() => {
-        if (user) syncExistingPushSubscription().catch(() => {});
-    }, [user]);
+        if (user && rememberedSession) syncExistingPushSubscription().catch(() => {});
+    }, [user, rememberedSession]);
 
     const login = useCallback(async (email, password, remember = false) => {
         if (usesSupabaseAuth) {
@@ -63,6 +94,8 @@ export const AuthProvider = ({ children }) => {
             if (error) throw new Error(friendlyAuthError(error));
             try {
                 const authenticatedUser = await exchangeSession(data.session, remember);
+                setRememberedSession(Boolean(remember));
+                if (!remember) await disablePushNotifications().catch(() => {});
                 setUser(authenticatedUser);
                 return authenticatedUser;
             } catch (error) {
@@ -73,6 +106,9 @@ export const AuthProvider = ({ children }) => {
         }
         const response = await api.post('/api/auth/login', { email, password, remember });
         api.setCsrfToken(response.data.csrfToken);
+        setRememberedSession(Boolean(remember));
+        setLegacySessionPersistence(Boolean(remember));
+        if (!remember) await disablePushNotifications().catch(() => {});
         setUser(response.data.user);
         return response.data.user;
     }, []);
@@ -88,14 +124,16 @@ export const AuthProvider = ({ children }) => {
             }
             api.setCsrfToken('');
             api.setAccessToken('');
+            setRememberedSession(false);
+            setLegacySessionPersistence(false);
             setUser(null);
             navigate('/login', { replace: true });
         }
     }, [navigate]);
 
     const value = useMemo(() => ({
-        isAuthenticated: Boolean(user), user, loading, login, logout, refreshUser: loadUser, usesSupabaseAuth,
-    }), [user, loading, login, logout, loadUser]);
+        isAuthenticated: Boolean(user), user, loading, login, logout, refreshUser: loadUser, usesSupabaseAuth, rememberedSession,
+    }), [user, loading, login, logout, loadUser, rememberedSession]);
 
     return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
 };

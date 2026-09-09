@@ -179,8 +179,10 @@ export function createApplication({
   async function createAppSession(user, ip, remember = false) {
     const token = randomBytes(32).toString('base64url');
     const csrfToken = randomBytes(24).toString('base64url');
-    const maxAge = remember ? 30 * 86400 : 8 * 3600;
-    const expires = new Date(Date.now() + maxAge * 1000).toISOString();
+    // A non-remembered login must disappear when the browser/PWA closes.
+    // Keep a finite server-side expiry as a safety net for abandoned sessions.
+    const maxAge = remember ? 30 * 86400 : null;
+    const expires = new Date(Date.now() + (remember ? maxAge * 1000 : 8 * 3600 * 1000)).toISOString();
     await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at) VALUES (?,?,?,?)').run(user.id, sha256(token), csrfToken, expires);
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(user.id, 'login', ip);
     return { token, csrfToken, maxAge };

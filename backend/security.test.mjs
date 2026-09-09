@@ -23,6 +23,12 @@ test('cookie malformado é ignorado sem descartar os pares válidos', () => {
   assert.deepEqual(cookies(request), { pa_session: 'sessao valida', tema: 'claro' });
 });
 
+test('cookie de sessão não define Max-Age quando o login não é persistente', () => {
+  const { cookie } = createHttpSecurity({ isProduction: false, appOrigin: 'http://localhost' });
+  assert.equal(cookie('pa_session', 'token', null), 'pa_session=token; Path=/; HttpOnly; SameSite=Strict');
+  assert.match(cookie('pa_session', 'token', 30), /Max-Age=30/);
+});
+
 test('limitador usa janela deslizante e libera após o período', () => {
   let now = 1_000;
   const limiter = createSlidingWindowRateLimiter({ clock: () => now });

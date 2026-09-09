@@ -68,9 +68,22 @@ export async function disablePushNotifications() {
   if (!pushCapability().supported) return;
   const registration = await navigator.serviceWorker.ready;
   const subscription = await registration.pushManager.getSubscription();
-  if (!subscription) return;
-  await subscription.unsubscribe();
-  await api.post('/api/account/push/unsubscribe', { endpoint: subscription.endpoint });
+  if (subscription) {
+    const endpoint = subscription.endpoint;
+    await subscription.unsubscribe().catch(() => {});
+    await api.post('/api/account/push/unsubscribe', { endpoint });
+  }
+  await clearLocalPushNotifications(registration);
+}
+
+export async function clearLocalPushNotifications(registration = null) {
+  if (!pushCapability().supported) return;
+  const activeRegistration = registration || await navigator.serviceWorker.ready;
+  const notifications = typeof activeRegistration.getNotifications === 'function'
+    ? await activeRegistration.getNotifications()
+    : [];
+  notifications.forEach(notification => notification.close());
+  if (typeof navigator.clearAppBadge === 'function') await navigator.clearAppBadge().catch(() => {});
 }
 
 export async function testPushNotifications() {

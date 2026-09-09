@@ -65,7 +65,8 @@ export function createHttpSecurity({ isProduction, appOrigin, env = process.env 
   }
 
   function cookie(name, value, maxAge = 0) {
-    return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${isProduction ? '; Secure' : ''}`;
+    const lifetime = maxAge === null || maxAge === undefined ? '' : `; Max-Age=${maxAge}`;
+    return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict${lifetime}${isProduction ? '; Secure' : ''}`;
   }
 
   function securityHeaders(contentType = 'application/json; charset=utf-8') {
