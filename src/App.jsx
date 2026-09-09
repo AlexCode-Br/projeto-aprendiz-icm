@@ -28,6 +28,12 @@ const ProfessorConfiguracoes = React.lazy(() => import('./pages/professor/Profes
 
 const PageLoading = () => <div className="space-y-5 py-8" role="status" aria-label="Carregando página"><div className="skeleton h-9 w-72 max-w-full" /><div className="skeleton h-4 w-96 max-w-full" /><div className="grid gap-4 sm:grid-cols-2"><div className="skeleton h-32 rounded-xl" /><div className="skeleton h-32 rounded-xl" /></div></div>;
 
+const dashboardPath = user => user?.role === 'gestor' ? '/gestor/dashboard' : '/professor/dashboard';
+
+const LoginRoute = () => {
+    const { user } = React.useContext(AuthContext);
+    return user ? <Navigate to={dashboardPath(user)} replace /> : <Login />;
+};
 
 const NotFound = () => (
     <div className="flex items-center justify-center h-full">
@@ -42,12 +48,7 @@ const NotFound = () => (
 const DashboardRedirector = () => {
     const { user } = React.useContext(AuthContext);
     if (!user) return <Navigate to="/login" replace />;
-    
-    const dashboardPath = user.role === 'gestor' 
-        ? '/gestor/dashboard' 
-        : '/professor/dashboard';
-        
-    return <Navigate to={dashboardPath} replace />;
+    return <Navigate to={dashboardPath(user)} replace />;
 };
 
 const AppRoutes = () => {
@@ -85,7 +86,7 @@ const AppRoutes = () => {
 
     return (
         <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<LoginRoute />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />

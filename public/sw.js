@@ -1,6 +1,6 @@
-const CACHE_NAME = 'projeto-aprendiz-shell-v7';
+const CACHE_NAME = 'projeto-aprendiz-shell-v8';
 const APP_SHELL = [
-  '/login',
+  '/',
   '/manifest.webmanifest',
   '/favicon-aprendiz.svg',
   '/projeto-aprendiz-logo.png',
@@ -31,7 +31,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/') || url.pathname === '/api' || url.pathname === '/dev-mail') return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match('/login')));
+    event.respondWith(fetch(request).catch(() => caches.match('/')));
     return;
   }
 

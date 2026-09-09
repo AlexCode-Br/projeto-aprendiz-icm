@@ -44,6 +44,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - O clique em uma notificação abre ou foca o app na rota correspondente ao aviso: alunos, suporte, turmas ou configurações, conforme o perfil do usuário.
 - Sessões sem “Permanecer conectado” usam cookie de sessão, não restauram uma sessão Supabase ausente e não mantêm notificações push ativas; ao abrir o app sem sessão, notificações pendentes e o indicador local são limpos.
 - Sessões com “Permanecer conectado” podem ser restauradas pelo cookie seguro do aplicativo mesmo se o Android ainda não tiver disponibilizado o estado local do Supabase ao reabrir o PWA.
+- O PWA inicia em `/` e a rota `/login` redireciona usuários já autenticados ao painel; o identificador instalado continua `/login` para preservar a atualização de instalações existentes.
 - O Service Worker usa um ícone grande transparente para evitar o fallback de inicial do navegador em notificações Android/One UI, mantendo apenas a identidade do app.
 - O shell do aplicativo e os modais acompanham a altura real do viewport visual e a área segura inferior; isso preserva a rolagem completa em todas as páginas quando o PWA abre por notificação, retorna do segundo plano ou muda de orientação.
 
@@ -66,7 +67,7 @@ git diff --check
 git status --short
 ```
 
-O conjunto atual possui 77 testes: 76 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
+O conjunto atual possui 78 testes: 77 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
 
 Fluxo de publicação:
 
