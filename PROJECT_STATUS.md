@@ -26,6 +26,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - A frequência pertence à turma e ao aluno; relatórios PDF e CSV funcionam como folha de chamada por data e período.
 - Cards mobile de alunos, professores e turmas usam layout compacto e menu vertical de três pontos quando há ações.
 - A listagem do gestor mostra igreja e classe dos alunos; nome e foto abrem os demais dados, e até 100 alunos podem ser selecionados para matrícula ou anonimização em lote com operação transacional.
+- A listagem de professores exibe professor, cursos e acesso; igreja deixou de ser coluna, e nome/foto abrem “Dados do professor”, mantendo somente editar, reenviar convite e excluir nas ações.
 - Detalhes de aluno e professor destacam foto e nome e organizam contatos e vínculos em uma grade compacta.
 - Modais usam o `X` do cabeçalho como saída. Botões `Cancelar`, `Fechar` ou `Voltar` foram removidos quando executavam exatamente a mesma ação; cancelamentos de subações independentes permanecem.
 - Fotos de perfil usam carregamento assíncrono, fallback imediato por inicial e cache no cliente.
