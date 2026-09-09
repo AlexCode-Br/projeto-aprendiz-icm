@@ -6,7 +6,7 @@ import { Music2, Users, BookOpen, ShieldCheck, Sun, Moon } from 'lucide-react';
 const AuthLayout = ({ children, title, description, footer = true, isLogin = false }) => {
     const [isDark, setIsDark] = useDarkMode();
     return (
-    <main className={`auth-page ${isLogin ? 'auth-page--light' : ''}`}>
+    <main className={`auth-page ${isLogin ? 'auth-page--light auth-page--login' : ''}`}>
         <div className={`w-full overflow-hidden rounded-3xl border border-border bg-surface shadow-lg ${isLogin ? 'max-w-md' : 'grid max-w-[980px] lg:grid-cols-[0.9fr_1fr]'}`}>
             {!isLogin && <aside className="auth-brand">
                 <div><img src={Logo} width="300" height="149" alt="Projeto Aprendiz" className="h-auto w-44 object-contain brightness-0 invert" /></div>

@@ -39,7 +39,7 @@ const Login = () => {
     };
 
     return (
-        <AuthLayout isLogin title="Bem-vindo!" description="Entre com seu e-mail e senha para acessar a plataforma.">
+        <AuthLayout isLogin title="Bem-vindo!">
             {showSuccess ? (
                 <div className="py-5 text-center" role="status" aria-live="polite">
                     <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10 text-success" aria-hidden="true"><Check className="!h-8 !w-8" /></span>

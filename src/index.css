@@ -253,9 +253,21 @@
 
     .auth-page {
         @apply flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 via-white to-red-50/40 px-4 py-8 dark:from-[#18191a] dark:via-[#1f2021] dark:to-[#251d1d];
+        height: 100dvh;
+        min-height: 100dvh;
+        overflow: hidden;
+        overscroll-behavior: none;
+        box-sizing: border-box;
     }
 
     .auth-page.auth-page--light { background: #f7f7f8; color: var(--color-text-default); color-scheme: light; }
+    .auth-page--login {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        padding-block: max(0.75rem, env(safe-area-inset-top)) max(0.75rem, env(safe-area-inset-bottom));
+    }
+    .auth-page--login > div { max-height: 100%; }
     .dark .auth-page--light .text-primary { color: #b71c1c; }
     .dark .auth-page--light .alert-error { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
 
