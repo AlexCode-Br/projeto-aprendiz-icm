@@ -8,11 +8,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `bb76f4f`
+- Último commit da aplicação publicado em produção: `ecd2b8e`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `7402df5b-5296-4c4e-8bb7-2c3ad2b0d7c7`
+- Versão Cloudflare verificada: `23fa1eee-1c03-4d68-adb8-8936ebe4e83d`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -43,6 +43,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Os ícones instaláveis usam a marca do Projeto Aprendiz em fundo vermelho; o Service Worker usa uma versão monocromática da marca como badge da notificação para melhor contraste na barra do dispositivo.
 - O clique em uma notificação abre ou foca o app na rota correspondente ao aviso: alunos, suporte, turmas ou configurações, conforme o perfil do usuário.
 - Sessões sem “Lembrar meu acesso” usam cookie de sessão, não restauram uma sessão Supabase ausente e não mantêm notificações push ativas; ao abrir o app sem sessão, notificações pendentes e o indicador local são limpos.
+- O Service Worker usa um ícone grande transparente para evitar o fallback de inicial do navegador em notificações Android/One UI, mantendo apenas a identidade do app.
 
 ## Organização do código-fonte
 
