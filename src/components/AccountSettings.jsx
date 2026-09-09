@@ -19,12 +19,6 @@ import { personNameError } from '../../shared/validation.mjs';
 
 const preferenceIcons = { newStudent: Mail, newTicket: MessageSquare, courseUpdates: UsersRound, systemAlerts: ShieldCheck, systemNews: FileText };
 
-function maskEmail(value = '') {
-    const [local, domain = ''] = value.split('@');
-    if (!local || !domain) return value;
-    return `${local.slice(0, Math.min(4, local.length))}${'*'.repeat(Math.max(3, local.length - 4))}@${domain}`;
-}
-
 function formatAccessDate(value) {
     if (!value) return 'Acesso recente';
     const date = new Date(value);
@@ -220,10 +214,10 @@ export default function AccountSettings() {
 
         <form onSubmit={saveProfile} className="panel p-5 sm:p-7">
             <SectionHeader icon={UserRound} title="Perfil" description="Suas informações pessoais e como você aparece no sistema." collapsible={false} />
-            <div className="mt-6 grid items-center gap-6 border-t border-border pt-6 md:grid-cols-[10rem_minmax(0,1fr)_auto]">
+            <div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 border-t border-border pt-6 sm:gap-6 md:grid-cols-[10rem_minmax(0,1fr)_auto]">
                 <ProfilePhotoPicker compact name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={savePhoto} disabled={Boolean(saving)} saving={saving === 'photo'} />
                 <label className="block text-sm font-semibold text-text-default" htmlFor="settings-name">Nome completo<input id="settings-name" required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ nome: event.target.value })} className="form-control mt-2" /><span className="mt-2 block text-xs font-normal text-text-muted">Este nome será exibido no sistema.</span></label>
-                <button disabled={Boolean(saving)} className="submit-btn w-full md:w-auto">{saving === 'profile' ? 'Salvando…' : 'Salvar'}</button>
+                <button disabled={Boolean(saving)} className="submit-btn col-span-2 w-full md:col-span-1 md:w-auto">{saving === 'profile' ? 'Salvando…' : 'Salvar'}</button>
             </div>
         </form>
 
@@ -232,7 +226,7 @@ export default function AccountSettings() {
             {expanded.security && <div className="mt-6 border-t border-border pt-6">
                 <div className="grid items-center gap-5 rounded-xl bg-danger/5 p-5 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto]">
                     <span className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10 text-danger"><Mail aria-hidden="true" className="h-7 w-7" /></span>
-                    <div><h3 className="font-bold text-text-default">Senha</h3><p className="mt-1 text-sm leading-6 text-text-muted">A alteração é feita por um link seguro enviado para seu e-mail.</p><strong className="mt-1 block text-sm text-text-default">{maskEmail(user.email)}</strong></div>
+                    <div><h3 className="font-bold text-text-default">Senha</h3><p className="mt-1 text-sm leading-6 text-text-muted">A alteração é feita por um link seguro enviado para seu e-mail.</p></div>
                     <button type="button" onClick={requestPasswordReset} disabled={Boolean(saving)} className="btn btn-secondary border-danger text-danger hover:bg-danger/5"><Send aria-hidden="true" />{saving === 'password' ? 'Enviando…' : 'Alterar senha'}</button>
                 </div>
                 <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-text-muted"><Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />Você receberá um e-mail com um link temporário para definir sua nova senha.</p>

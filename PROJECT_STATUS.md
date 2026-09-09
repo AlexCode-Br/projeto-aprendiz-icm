@@ -48,7 +48,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - O Service Worker usa um ícone grande transparente para evitar o fallback de inicial do navegador em notificações Android/One UI, mantendo apenas a identidade do app.
 - O shell do aplicativo e os modais acompanham a altura real do viewport visual e a área segura inferior; isso preserva a rolagem completa em todas as páginas quando o PWA abre por notificação, retorna do segundo plano ou muda de orientação.
 - Configurações da conta usa cartões responsivos e recolhíveis para perfil, segurança, notificações, dispositivos e exclusão; a foto continua sendo salva automaticamente e o nome mantém confirmação explícita.
-- A troca de senha em Configurações envia o link seguro de recuperação ao e-mail mascarado, sem solicitar ou manipular a senha atual dentro da página autenticada.
+- A troca de senha em Configurações envia um link seguro de recuperação sem exibir o endereço de e-mail nessa seção nem solicitar ou manipular a senha atual dentro da página autenticada.
 - Preferências de notificação são salvas automaticamente a cada alteração e incluem “Comunicados do sistema”, desativado por padrão.
 - “Dispositivos conectados” lista assinaturas Web Push reais, identifica sistema e navegador, destaca o dispositivo atual e permite remover autorizações antigas sem expor endpoints secretos.
 - A exclusão da conta exige a digitação do e-mail, revoga sessões e notificações e anonimiza dados pessoais sem apagar registros acadêmicos ou auditorias; a última conta ativa de gestor é protegida contra exclusão.
