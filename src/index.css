@@ -351,6 +351,31 @@
     .attendance-table td:last-child button { flex: 1; padding-inline: 0.5rem; font-size: 12px; }
 }
 
+/* A single musical entrance, started only after the login logo has loaded.
+   Transforms preserve the existing layout and stop before the user signs in. */
+.auth-page--login .auth-login-logo[data-ready='true'] {
+    transform-origin: 50% 65%;
+    animation: login-logo-reveal 1.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes login-logo-reveal {
+    0% {
+        opacity: 0;
+        clip-path: inset(0 100% 0 0);
+        transform: translateY(8px) scale(0.96);
+    }
+    55% {
+        opacity: 1;
+        clip-path: inset(0 0 0 0);
+        transform: translateY(-3px) scale(1.015);
+    }
+    100% {
+        opacity: 1;
+        clip-path: inset(0 0 0 0);
+        transform: none;
+    }
+}
+
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(12px); }
     to {
@@ -421,6 +446,7 @@
 #sidebar-overlay { transition: opacity 0.3s ease-in-out; }
 
 @media (prefers-reduced-motion: reduce) {
+    .auth-page--login .auth-login-logo[data-ready='true'] { animation: none; }
     html { scroll-behavior: auto; }
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
