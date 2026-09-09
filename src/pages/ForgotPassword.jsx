@@ -26,7 +26,7 @@ const ForgotPassword = () => {
     };
 
     return (
-        <AuthLayout title="Recuperar acesso" description="Informe o e-mail cadastrado para receber um link seguro de redefinição.">
+        <AuthLayout title="Recuperar acesso" description="Informe o e-mail cadastrado para receber um link seguro de redefinição." footer={false} showThemeToggle={false} showBrandLabel={false}>
             {message ? (
                 <div className="space-y-5">
                     <div className="alert-success" role="status">{message}</div>
