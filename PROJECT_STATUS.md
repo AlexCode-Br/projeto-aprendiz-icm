@@ -31,7 +31,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Modais usam o `X` do cabeçalho como saída. Botões `Cancelar`, `Fechar` ou `Voltar` foram removidos quando executavam exatamente a mesma ação; cancelamentos de subações independentes permanecem.
 - Fotos de perfil usam carregamento assíncrono, fallback imediato por inicial e cache no cliente.
 - Fotos ampliadas usam uma visualização global circular sem botão de fechar: clique ou toque fora e `Esc` encerram a visualização, e o gesto de pinça permite zoom no mobile.
-- Ao cadastrar um aluno ou vinculá-lo a uma nova turma pela edição, o professor responsável recebe um e-mail com o curso, a identificação da turma e o local; edições sem nova matrícula não repetem o aviso.
+- Ao cadastrar um aluno, vinculá-lo a uma nova turma ou removê-lo de uma turma pela edição, o professor responsável recebe um e-mail com o curso, a identificação da turma e o local; edições sem mudança de matrícula não repetem o aviso.
 - O remetente oficial é `naoresponda@aprendizicm.com.br`; os e-mails usam as marcas do Departamento de Louvor e do Projeto Aprendiz.
 - O cabeçalho exibe somente o nome da página atual, no desktop e no mobile.
 
