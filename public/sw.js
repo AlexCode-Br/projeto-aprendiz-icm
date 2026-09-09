@@ -1,4 +1,4 @@
-const CACHE_NAME = 'projeto-aprendiz-shell-v5';
+const CACHE_NAME = 'projeto-aprendiz-shell-v6';
 const APP_SHELL = [
   '/login',
   '/manifest.webmanifest',
@@ -55,7 +55,6 @@ self.addEventListener('push', event => {
   } catch {}
   event.waitUntil(self.registration.showNotification(title, {
     body,
-    icon: '/pwa-maskable-192-v5.png',
     badge: '/notification-icon-v5.png',
     tag: String(payload.tag || '').slice(0, 180) || undefined,
     data: { url: targetUrl },
