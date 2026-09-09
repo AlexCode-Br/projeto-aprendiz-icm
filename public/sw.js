@@ -1,12 +1,15 @@
-const CACHE_NAME = 'projeto-aprendiz-shell-v4';
+const CACHE_NAME = 'projeto-aprendiz-shell-v5';
 const APP_SHELL = [
   '/login',
   '/manifest.webmanifest',
   '/favicon-aprendiz.svg',
   '/projeto-aprendiz-logo.png',
-  '/pwa-icon-192-v4.png',
-  '/pwa-icon-512-v4.png',
-  '/notification-icon-v4.png',
+  '/pwa-icon-192-v5.png',
+  '/pwa-icon-512-v5.png',
+  '/pwa-maskable-192-v5.png',
+  '/pwa-maskable-512-v5.png',
+  '/apple-touch-icon-v5.png',
+  '/notification-icon-v5.png',
 ];
 
 self.addEventListener('install', event => {
@@ -52,8 +55,8 @@ self.addEventListener('push', event => {
   } catch {}
   event.waitUntil(self.registration.showNotification(title, {
     body,
-    icon: '/pwa-icon-192-v4.png',
-    badge: '/notification-icon-v4.png',
+    icon: '/pwa-maskable-192-v5.png',
+    badge: '/notification-icon-v5.png',
     tag: String(payload.tag || '').slice(0, 180) || undefined,
     data: { url: targetUrl },
   }));
