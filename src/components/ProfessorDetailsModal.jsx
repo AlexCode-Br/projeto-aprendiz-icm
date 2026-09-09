@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { BookOpen, Mail, MapPin, UserRound } from 'lucide-react';
+import { BookOpen, Mail, MapPin } from 'lucide-react';
 import Modal from './Modal';
 import { WhatsAppIcon } from './ContactLink';
 import ProfileAvatar from './ProfileAvatar';
@@ -49,7 +49,6 @@ const ProfessorDetailsModal = ({ isOpen, onClose, professor }) => {
                             {courses.length ? courses.map(course => <span key={course} className="rounded-full bg-primary px-2.5 py-1 text-[0.6875rem] font-semibold leading-tight text-white">{course}</span>) : <span className="italic text-text-muted">Nenhum curso vinculado</span>}
                         </span>
                     </DetailItem>
-                    <DetailItem icon={UserRound} label="Acesso">{professor.acesso || professor.status}</DetailItem>
                 </dl>
             </div>
         </Modal>
