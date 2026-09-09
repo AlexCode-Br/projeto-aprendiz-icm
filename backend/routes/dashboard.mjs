@@ -22,7 +22,8 @@ export function createDashboardRoutes(context) {
           db.prepare('SELECT COUNT(DISTINCT professor_profiles.id) AS total FROM professor_profiles JOIN classes ON classes.professor_id=professor_profiles.id WHERE professor_profiles.active=1 AND classes.active=1 AND classes.school_year_id=?').get(period.id),
           db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE status<>'Resolvido'").get(),
           db.prepare(`SELECT classes.id,
-            COALESCE(NULLIF(classes.label,''),courses.name || ' — ' || locations.name) AS curso,
+            courses.name AS curso,
+            locations.name AS local,
             COUNT(DISTINCT CASE WHEN enrollments.status='ativa' AND students.active=1 THEN students.id END) AS total
             FROM classes
             JOIN courses ON courses.id=classes.course_id

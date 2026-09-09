@@ -70,6 +70,8 @@ test('dashboard do gestor mostra somente totais administrativos e alunos por tur
     assert.equal(Object.hasOwn(response.data,'chamadasPendentes'),false);
     const classMetric=response.data.alunosPorTurma.find(item=>item.id===Number(classRow.id));
     assert.equal(classMetric.total,2);
+    assert.equal(typeof classMetric.curso,'string');
+    assert.equal(typeof classMetric.local,'string');
     assert.equal(Object.hasOwn(classMetric,'frequencia'),false);
     assert.equal(Object.hasOwn(classMetric,'frequenciaAtual'),false);
     assert.ok(Array.isArray(response.data.ultimasInscricoes));

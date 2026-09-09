@@ -56,12 +56,8 @@ const Dashboard = () => {
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
-                <section className="panel p-4 md:p-6 xl:col-span-2" aria-labelledby="students-by-class-title">
-                    <h2 id="students-by-class-title" className="text-lg font-semibold text-text-default">Alunos por turma</h2>
-                    <p className="mt-1 text-sm text-text-muted">Quantidade de alunos atualmente matriculados em cada turma ativa.</p>
-                    <div className="mt-4" style={{ position: 'relative', height: '40vh', minHeight: '320px' }}>
-                        {loading ? <div className="skeleton h-full rounded-xl" /> : <EnrollmentOverviewChart data={dashboard.alunosPorTurma || []} />}
-                    </div>
+                <section className="panel overflow-hidden xl:col-span-2" aria-labelledby="students-by-class-title">
+                    <EnrollmentOverviewChart data={dashboard.alunosPorTurma || []} loading={loading} />
                 </section>
                 <RecentActivities students={dashboard.ultimasInscricoes || []} onSelectStudent={setSelectedStudentId} />
             </div>
