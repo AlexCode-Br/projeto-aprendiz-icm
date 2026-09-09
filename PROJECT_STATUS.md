@@ -85,6 +85,12 @@ Depois do deploy, confirme:
 
 Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permanentes e qualquer pendência real.
 
+### Publicação — 09/09/2026
+
+- Correção de rolagem do PWA após abertura por notificação publicada no commit `6deef72`.
+- Versão Cloudflare verificada: `f9c65336-a45a-436d-a5da-5399fc28d49f`.
+- Validação pós-publicação: `/login`, `/api/health` e o ícone transparente retornaram HTTP 200; `/api/auth/me` retornou HTTP 401 sem sessão, conforme esperado.
+
 ## Prompt curto para uma nova tarefa
 
 > Continue o Projeto Aprendiz no mesmo repositório. Leia primeiro `PROJECT_STATUS.md`, preserve alterações e arquivos locais que não pertençam à tarefa, valide a implementação antes de publicar e atualize o registro após mudanças relevantes. Minha solicitação é: ...
