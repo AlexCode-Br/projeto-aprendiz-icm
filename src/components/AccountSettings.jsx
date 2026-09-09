@@ -214,10 +214,12 @@ export default function AccountSettings() {
 
         <form onSubmit={saveProfile} className="panel p-5 sm:p-7">
             <SectionHeader icon={UserRound} title="Perfil" description="Suas informações pessoais e como você aparece no sistema." collapsible={false} />
-            <div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 border-t border-border pt-6 sm:gap-6 md:grid-cols-[10rem_minmax(0,1fr)_auto]">
-                <ProfilePhotoPicker compact name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={savePhoto} disabled={Boolean(saving)} saving={saving === 'photo'} />
-                <label className="block text-sm font-semibold text-text-default" htmlFor="settings-name">Nome completo<input id="settings-name" required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ nome: event.target.value })} className="form-control mt-2" /><span className="mt-2 block text-xs font-normal text-text-muted">Este nome será exibido no sistema.</span></label>
-                <button disabled={Boolean(saving)} className="submit-btn col-span-2 w-full md:col-span-1 md:w-auto">{saving === 'profile' ? 'Salvando…' : 'Salvar'}</button>
+            <div className="mt-6 grid gap-5 border-t border-border pt-6">
+                <ProfilePhotoPicker name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={savePhoto} disabled={Boolean(saving)} saving={saving === 'photo'} />
+                <div className="grid items-end gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <label className="block text-sm font-semibold text-text-default" htmlFor="settings-name">Nome completo<input id="settings-name" required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ nome: event.target.value })} className="form-control mt-2" /><span className="mt-2 block text-xs font-normal text-text-muted">Este nome será exibido no sistema.</span></label>
+                    <button disabled={Boolean(saving)} className="submit-btn w-full sm:w-auto">{saving === 'profile' ? 'Salvando…' : 'Salvar nome'}</button>
+                </div>
             </div>
         </form>
 

@@ -13,7 +13,7 @@ export default function ProfilePhotoPicker({ name, currentUrl = '', value, onCha
     const [cacheKey, setCacheKey] = useState(0);
     const [cropSource, setCropSource] = useState('');
     const [viewerOpen, setViewerOpen] = useState(false);
-    useEffect(() => { setError(''); setCacheKey(key => key + 1); }, [currentUrl, name]);
+    useEffect(() => { setError(''); setCacheKey(key => key + 1); }, [currentUrl]);
     const preview = typeof value === 'string' ? value : value === null ? '' : currentUrl ? `${currentUrl}${currentUrl.includes('?') ? '&' : '?'}preview=${cacheKey}` : '';
 
     const selectFile = event => {
