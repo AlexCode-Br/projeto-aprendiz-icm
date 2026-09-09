@@ -8,7 +8,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `3458104`
+- Último commit da aplicação publicado em produção: `983c614`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
@@ -62,7 +62,7 @@ git diff --check
 git status --short
 ```
 
-O conjunto atual possui 72 testes: 71 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
+O conjunto atual possui 73 testes: 72 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
 
 Fluxo de publicação:
 
