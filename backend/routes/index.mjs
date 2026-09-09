@@ -39,7 +39,17 @@ export function createApiHandler(context) {
     securityHeaders,
     logger,
     userFromSupabaseToken,
+    cookie,
+    supabaseAdmin,
+    requireSupabaseAdmin,
+    randomBytes,
   } = context;
+  const pushDeviceView = row => ({
+    id: Number(row.id),
+    userAgent: row.user_agent || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  });
   const authRoutes = createAuthRoutes(context);
   const scheduleRoutes = createScheduleRoutes(context);
   const announcementRoutes = createAnnouncementRoutes(context);
@@ -123,8 +133,8 @@ export function createApiHandler(context) {
     if(request.method==='GET'&&url.pathname==='/api/account/push'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
       const configuration=await webPushService.configuration();
-      const count=await db.prepare('SELECT COUNT(*) AS total FROM push_subscriptions WHERE user_id=?').get(session.user_id);
-      return json(response,200,{...configuration,subscriptions:Number(count?.total||0)});
+      const devices=await db.prepare('SELECT id,user_agent,created_at,updated_at FROM push_subscriptions WHERE user_id=? ORDER BY updated_at DESC,id DESC').all(session.user_id);
+      return json(response,200,{...configuration,subscriptions:devices.length,devices:devices.map(pushDeviceView)});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/push/subscribe'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
@@ -140,7 +150,8 @@ export function createApiHandler(context) {
       if(!existing||Number(existing.user_id)!==Number(session.user_id)||existing.p256dh!==subscription.p256dh||existing.auth!==subscription.auth){
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'push_notifications_enabled',ip);
       }
-      return json(response,200,{success:true,message:'Notificações ativadas neste dispositivo.'});
+      const device=await db.prepare('SELECT id,user_agent,created_at,updated_at FROM push_subscriptions WHERE user_id=? AND endpoint=?').get(session.user_id,subscription.endpoint);
+      return json(response,200,{success:true,message:'Notificações ativadas neste dispositivo.',device:pushDeviceView(device)});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/push/unsubscribe'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
@@ -149,6 +160,16 @@ export function createApiHandler(context) {
       await db.prepare('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?').run(session.user_id,endpoint);
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'push_notifications_disabled',ip);
       return json(response,200,{success:true,message:'Notificações desativadas neste dispositivo.'});
+    }
+    const pushDeviceMatch=url.pathname.match(/^\/api\/account\/push\/devices\/(\d+)$/);
+    if(request.method==='DELETE'&&pushDeviceMatch){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const deviceId=Number(pushDeviceMatch[1]);
+      const device=await db.prepare('SELECT id FROM push_subscriptions WHERE id=? AND user_id=?').get(deviceId,session.user_id);
+      if(!device)return json(response,404,{message:'Este dispositivo não está mais conectado.'});
+      await db.prepare('DELETE FROM push_subscriptions WHERE id=? AND user_id=?').run(deviceId,session.user_id);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`push_device_removed:${deviceId}`,ip);
+      return json(response,200,{success:true,message:'Dispositivo removido das notificações.'});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/push/test'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;
@@ -167,6 +188,37 @@ export function createApiHandler(context) {
       });
       await notificationService.notifyUser(session.user_id,'systemAlerts','Sua senha foi alterada','A senha de acesso da sua conta foi alterada. Se não reconhece esta ação, entre em contato com a administração imediatamente.',`supabase-password-change/${session.user_id}/${Date.now()}`);
       return json(response,200,{success:true});
+    }
+    if(request.method==='POST'&&url.pathname==='/api/account/delete'){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const body=await readJson(request);
+      if(cleanEmail(body.confirmation)!==cleanEmail(session.email))return invalid(response,{confirmation:'Digite o e-mail completo da conta para confirmar.'});
+      if(usesSupabaseAuth&&!requireSupabaseAdmin(response))return;
+      if(session.role==='gestor'){
+        const managers=await db.prepare("SELECT COUNT(*) AS total FROM users WHERE role='gestor' AND active=1").get();
+        if(Number(managers?.total||0)<=1)return json(response,409,{message:'A última conta de gestor não pode ser excluída. Cadastre outro gestor antes de continuar.'});
+      }
+      const account=await db.prepare('SELECT auth_user_id FROM users WHERE id=? AND active=1').get(session.user_id);
+      const professor=session.role==='professor'?await db.prepare('SELECT id FROM professor_profiles WHERE user_id=?').get(session.user_id):null;
+      const ownerType=professor?'professor':'user',ownerId=Number(professor?.id||session.user_id);
+      const photo=await db.prepare('SELECT storage_path FROM profile_photos WHERE owner_type=? AND owner_id=?').get(ownerType,ownerId);
+      const replacementPassword=await hashPassword(randomBytes(48).toString('base64url'));
+      await db.transaction(async()=>{
+        await db.prepare('DELETE FROM push_subscriptions WHERE user_id=?').run(session.user_id);
+        await db.prepare('DELETE FROM user_settings WHERE user_id=?').run(session.user_id);
+        await db.prepare('DELETE FROM password_resets WHERE user_id=?').run(session.user_id);
+        await db.prepare('DELETE FROM profile_photos WHERE owner_type=? AND owner_id=?').run(ownerType,ownerId);
+        if(professor)await db.prepare("UPDATE professor_profiles SET user_id=NULL,name='Professor removido #' || id,email='professor-removido-' || id || '@deleted.invalid',phone=NULL,home_location_id=NULL,active=0 WHERE id=?").run(professor.id);
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'account_deleted',ip);
+        await db.prepare("UPDATE users SET auth_user_id=NULL,name='Conta excluída',email='conta-removida-' || id || '@deleted.invalid',password_hash=?,active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(replacementPassword,session.user_id);
+        await db.prepare('DELETE FROM sessions WHERE user_id=?').run(session.user_id);
+      });
+      await profilePhotoStorage.removePaths([photo?.storage_path]);
+      if(usesSupabaseAuth&&account?.auth_user_id){
+        const {error}=await supabaseAdmin.auth.admin.deleteUser(account.auth_user_id);
+        if(error)logger.error('account_auth_deletion_failed',error,{userId:session.user_id});
+      }
+      return json(response,200,{success:true,message:'Sua conta foi excluída e seus dados pessoais foram removidos.'},{'Set-Cookie':cookie('pa_session','',0)});
     }
 
     const accountPhoto=url.pathname==='/api/profile-photo';

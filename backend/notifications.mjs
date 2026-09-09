@@ -3,6 +3,7 @@ export const NOTIFICATION_DEFAULTS = Object.freeze({
   newTicket: true,
   courseUpdates: true,
   systemAlerts: true,
+  systemNews: false,
 });
 
 export function normalizeNotificationPreferences(value) {

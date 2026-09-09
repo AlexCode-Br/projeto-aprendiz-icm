@@ -30,8 +30,16 @@ export async function readPushState() {
     await subscription.unsubscribe();
     subscription = null;
   }
-  if (subscription) await api.post('/api/account/push/subscribe', { subscription: subscription.toJSON() });
-  return { ...capability, ...data, active: Boolean(subscription), permission: Notification.permission };
+  let currentDeviceId = null;
+  if (subscription) {
+    const { data: registered } = await api.post('/api/account/push/subscribe', { subscription: subscription.toJSON() });
+    currentDeviceId = Number(registered.device?.id || 0) || null;
+    if (registered.device && !(data.devices || []).some(device => Number(device.id) === currentDeviceId)) {
+      data.devices = [registered.device, ...(data.devices || [])];
+      data.subscriptions = data.devices.length;
+    }
+  }
+  return { ...capability, ...data, currentDeviceId, active: Boolean(subscription), permission: Notification.permission };
 }
 
 export async function syncExistingPushSubscription() {
@@ -88,4 +96,8 @@ export async function clearLocalPushNotifications(registration = null) {
 
 export async function testPushNotifications() {
   return api.post('/api/account/push/test', {});
+}
+
+export async function removePushDevice(deviceId) {
+  return api.delete(`/api/account/push/devices/${Number(deviceId)}`);
 }

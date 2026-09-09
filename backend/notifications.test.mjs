@@ -8,6 +8,7 @@ test('preferências de notificação são restritas às opções suportadas', ()
     newTicket: true,
     courseUpdates: true,
     systemAlerts: true,
+    systemNews: false,
   });
 });
 
@@ -38,6 +39,7 @@ test('destino da notificação acompanha o perfil e o tipo do aviso', () => {
   assert.equal(notificationDestination('newStudent', 'professor'), '/professor/alunos');
   assert.equal(notificationDestination('courseUpdates', 'gestor'), '/gestor/cursos');
   assert.equal(notificationDestination('systemAlerts', 'professor'), '/configuracoes');
+  assert.equal(notificationDestination('systemNews', 'gestor'), '/configuracoes');
 });
 
 test('uma falha no e-mail não impede a entrega da notificação push', async () => {
