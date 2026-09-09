@@ -6,10 +6,12 @@ import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import Modal from '../../components/Modal';
 import { SupportConversation, SupportTicketList } from '../../components/support/SupportUI';
+import Pagination from '../../components/Pagination';
 import api from '../../services/api';
 import { SUPPORT_STATUSES } from '../../../shared/validation.mjs';
 
 const filters = ['Todos','Abertos','Em atendimento','Resolvidos','Não lidos'];
+const ITEMS_PER_PAGE = 5;
 const isSameTicket = (left,right) => left != null && right != null && String(left) === String(right);
 
 const Suporte = () => {
@@ -20,6 +22,7 @@ const Suporte = () => {
   const [detail,setDetail]=useState(null);
   const [search,setSearch]=useState('');
   const [filter,setFilter]=useState('Todos');
+  const [currentPage,setCurrentPage]=useState(1);
   const [loading,setLoading]=useState(true);
   const [detailLoading,setDetailLoading]=useState(false);
   const [error,setError]=useState('');
@@ -74,6 +77,7 @@ const Suporte = () => {
   },[showToast]);
 
   useEffect(()=>{const timer=setTimeout(()=>fetchTickets(),250);return()=>clearTimeout(timer);},[fetchTickets]);
+  useEffect(()=>{setCurrentPage(1);},[search,filter]);
   useEffect(()=>()=>{selectedIdRef.current=null;detailRequestRef.current+=1;},[]);
   useEffect(()=>{
     const refresh=()=>{const ticketId=selectedIdRef.current;fetchTickets({silent:true});if(ticketId)fetchDetail(ticketId,{silent:true});};
@@ -150,6 +154,12 @@ const Suporte = () => {
     unread:tickets.filter(ticket=>ticket.nao_lidas>0).length,
     waiting:tickets.filter(ticket=>ticket.aguardando==='Gestor'&&ticket.status!=='Resolvido').length,
   }),[tickets]);
+  const totalPages=Math.max(1,Math.ceil(tickets.length/ITEMS_PER_PAGE));
+  const paginatedTickets=useMemo(()=>{
+    const start=(currentPage-1)*ITEMS_PER_PAGE;
+    return tickets.slice(start,start+ITEMS_PER_PAGE);
+  },[tickets,currentPage]);
+  useEffect(()=>{if(currentPage>totalPages)setCurrentPage(totalPages);},[currentPage,totalPages]);
 
   const actions=detail?.ticket?<>
     <label className="sr-only" htmlFor="support-status">Status do chamado</label>
@@ -179,7 +189,8 @@ const Suporte = () => {
     <div className="panel grid min-h-[38rem] overflow-hidden lg:grid-cols-[minmax(19rem,0.82fr)_minmax(0,1.7fr)]">
       <aside className={`${selectedId?'hidden lg:block':'block'} border-r-0 border-border lg:border-r`} aria-label="Chamados">
         <div className="border-b border-border px-5 py-4"><h2 className="font-bold text-text-default">Chamados</h2><p className="mt-1 text-xs text-text-muted">Ordenados por atenção necessária e atividade recente.</p></div>
-        <div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={tickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor"/></div>
+        <div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={paginatedTickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor"/></div>
+        {!loading&&<Pagination currentPage={currentPage} totalItems={tickets.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact />}
       </aside>
       <div className={`${selectedId?'block':'hidden lg:block'}`}>
         <SupportConversation detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedIdRef.current)} onBack={closeTicket} onSend={sendReply} sending={sending} actions={actions}/>

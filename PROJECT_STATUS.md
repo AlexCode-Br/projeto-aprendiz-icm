@@ -52,6 +52,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Preferências de notificação são salvas automaticamente a cada alteração e incluem “Comunicados do sistema”, desativado por padrão.
 - “Dispositivos conectados” lista assinaturas Web Push reais, identifica sistema e navegador, destaca o dispositivo atual e permite remover autorizações antigas sem expor endpoints secretos.
 - A exclusão da conta exige a digitação do e-mail, revoga sessões e notificações e anonimiza dados pessoais sem apagar registros acadêmicos ou auditorias; a última conta ativa de gestor é protegida contra exclusão.
+- As listas de turmas, alunos, professores, informativos e chamados do gestor exibem cinco registros por página, com navegação compacta por setas após a aplicação das buscas e filtros.
 
 ## Organização do código-fonte
 

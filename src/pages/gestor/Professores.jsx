@@ -12,7 +12,10 @@ import api from '../../services/api';
 import { Plus } from 'lucide-react';
 import SearchInput from '../../components/SearchInput';
 import ProfileAvatar from '../../components/ProfileAvatar';
+import Pagination from '../../components/Pagination';
 import { STUDENT_CHURCH_SUGGESTIONS, catalogKey } from '../../../shared/catalog-options.mjs';
+
+const ITEMS_PER_PAGE = 5;
 
 // Ícones de Ação
 
@@ -30,6 +33,7 @@ const Professores = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCourse, setSelectedCourse] = useState('');
     const [selectedLocal, setSelectedLocal] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [isDetailsModalOpen, setDetailsModalOpen] = useState(false);
     const [isImpactModalOpen, setImpactModalOpen] = useState(false);
@@ -178,6 +182,16 @@ const Professores = () => {
             (selectedLocal === '' || prof.local === selectedLocal)
         );
     }, [professores, searchTerm, selectedCourse, selectedLocal]);
+    const totalPages = Math.max(1, Math.ceil(filteredProfessores.length / ITEMS_PER_PAGE));
+    const paginatedProfessores = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredProfessores.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredProfessores, currentPage]);
+
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedCourse, selectedLocal]);
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
 
     if (loading) return <PageSkeleton label="Carregando professores" />;
     if (loadError) return <div className="panel empty-state"><p role="alert">{loadError}</p><button type="button" className="btn btn-secondary mt-3" onClick={fetchProfessores}>Tentar novamente</button></div>;
@@ -221,7 +235,7 @@ const Professores = () => {
             </section>
 
             <section className="space-y-3 md:hidden" aria-label="Professores encontrados">
-                {filteredProfessores.map(prof => <article key={prof.id} className="panel min-w-0 p-3.5" aria-label={prof.nome}>
+                {paginatedProfessores.map(prof => <article key={prof.id} className="panel min-w-0 p-3.5" aria-label={prof.nome}>
                     <header className="flex items-center gap-2.5">
                         <button type="button" onClick={() => handleOpenDetailsModal(prof)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left hover:text-primary" aria-label={`Ver detalhes de ${prof.nome}`}>
                             <ProfileAvatar name={prof.nome} src={prof.foto_url} className="h-9 w-9" textClassName="text-xs" />
@@ -260,7 +274,7 @@ const Professores = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredProfessores.map(prof => (
+                            {paginatedProfessores.map(prof => (
                                 <tr key={prof.id} className="border-b border-border hover:bg-surface-hover transition-colors">
                                     <td className="px-6 py-4 font-medium"><button type="button" onClick={() => handleOpenDetailsModal(prof)} aria-label={`Ver dados de ${prof.nome}`} className="flex min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={prof.nome} src={prof.foto_url} className="h-10 w-10" /><span className="break-words">{prof.nome}</span></button></td>
                                     <td data-label="Cursos" className="px-6 py-4"><span className="inline-flex flex-wrap gap-1">{prof.cursos.map(course => <span key={course} className="badge">{course}</span>)}</span></td>
@@ -281,6 +295,8 @@ const Professores = () => {
                     </table>
                 </div>
             </div>
+
+            <Pagination currentPage={currentPage} totalItems={filteredProfessores.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact className="mt-4 rounded-xl border border-border bg-surface" />
 
             <ProfessorFormModal isOpen={isFormModalOpen} onClose={() => setFormModalOpen(false)} onSave={handleSaveProfessor} professor={currentProfessor} locations={profileLocations} />
             <ProfessorDetailsModal isOpen={isDetailsModalOpen} onClose={() => setDetailsModalOpen(false)} professor={currentProfessor} />

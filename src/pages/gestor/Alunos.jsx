@@ -26,7 +26,7 @@ const Alunos = () => {
     // Estados de Paginação
     const [currentPage, setCurrentPage] = useState(1);
     const [totalAlunos, setTotalAlunos] = useState(0);
-    const [itemsPerPage] = useState(10);
+    const [itemsPerPage] = useState(5);
     const [offerings, setOfferings] = useState([]);
     const [churches, setChurches] = useState([]);
 
@@ -102,6 +102,12 @@ const Alunos = () => {
         }, 300);
         return () => { clearTimeout(timer); requestSequence.current += 1; };
     }, [fetchAlunos]);
+
+    useEffect(() => {
+        if (loading) return;
+        const totalPages = Math.max(1, Math.ceil(totalAlunos / itemsPerPage));
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, itemsPerPage, loading, totalAlunos]);
 
     const fetchAcademicOptions = useCallback(async () => {
         try {
@@ -331,6 +337,8 @@ const Alunos = () => {
                 totalItems={totalAlunos}
                 itemsPerPage={itemsPerPage}
                 onPageChange={setCurrentPage}
+                compact
+                className="mt-4 rounded-xl border border-border bg-surface"
             />
 
             {/* Modais */}

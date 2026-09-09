@@ -7,12 +7,14 @@ import SearchInput from '../../components/SearchInput';
 import TurmaModal from '../../components/TurmaModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import FormSelect from '../../components/FormSelect';
+import Pagination from '../../components/Pagination';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 import { CHURCH_SUGGESTIONS, COURSE_SUGGESTIONS, catalogKey } from '../../../shared/catalog-options.mjs';
 
 const mergeCatalogNames = (...groups) => [...new Map(groups.flat().filter(Boolean).map(name => [catalogKey(name), name])).values()]
     .sort((left, right) => left.localeCompare(right, 'pt-BR'));
+const ITEMS_PER_PAGE = 5;
 
 const Turmas = () => {
     const [loading, setLoading] = useState(true);
@@ -23,6 +25,7 @@ const Turmas = () => {
     const [catalogos, setCatalogos] = useState({ cursos: [], locais: [] });
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedLocal, setSelectedLocal] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
     const [isTurmaModalOpen, setIsTurmaModalOpen] = useState(false);
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [currentTurma, setCurrentTurma] = useState(null);
@@ -96,6 +99,16 @@ const Turmas = () => {
             return matchesSearch && matchesLocal;
         });
     }, [turmas, searchTerm, selectedLocal]);
+    const totalPages = Math.max(1, Math.ceil(filteredTurmas.length / ITEMS_PER_PAGE));
+    const paginatedTurmas = useMemo(() => {
+        const start = (currentPage - 1) * ITEMS_PER_PAGE;
+        return filteredTurmas.slice(start, start + ITEMS_PER_PAGE);
+    }, [filteredTurmas, currentPage]);
+
+    useEffect(() => { setCurrentPage(1); }, [searchTerm, selectedLocal]);
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
 
     const courseOptions = useMemo(() => mergeCatalogNames(
         COURSE_SUGGESTIONS,
@@ -155,7 +168,7 @@ const Turmas = () => {
                     {(searchTerm || selectedLocal) && <button type="button" onClick={() => { setSearchTerm(''); setSelectedLocal(''); }} className="btn btn-ghost px-2 text-xs">Limpar filtros</button>}
                 </div>
                 <div className="space-y-4">
-                    {filteredTurmas.map(turma => <TurmaCard key={turma.id} turma={turma} onEdit={handleOpenTurmaModal} onDelete={handleOpenConfirmModal} />)}
+                    {paginatedTurmas.map(turma => <TurmaCard key={turma.id} turma={turma} onEdit={handleOpenTurmaModal} onDelete={handleOpenConfirmModal} />)}
                     {!filteredTurmas.length && <div className="panel empty-state"><strong className="text-text-default">Nenhuma turma encontrada</strong><span>{searchTerm || selectedLocal ? 'Tente outra busca ou limpe os filtros.' : 'Use “Adicionar” para montar a primeira turma.'}</span></div>}
                 </div>
             </section>
@@ -175,7 +188,7 @@ const Turmas = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filteredTurmas.map(turma => (
+                            {paginatedTurmas.map(turma => (
                                 <tr key={turma.id} className="border-b border-border hover:bg-surface-hover transition-colors">
                                     <td data-label="Curso" className="px-6 py-4 font-medium">{turma.nome}</td>
                                     <td data-label="Igreja / modalidade" className="px-6 py-4">{turma.local}</td>
@@ -206,6 +219,8 @@ const Turmas = () => {
                     </table>
                 </div>
             </div>
+
+            <Pagination currentPage={currentPage} totalItems={filteredTurmas.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact className="mt-4 rounded-xl border border-border bg-surface" />
 
             <TurmaModal
                 isOpen={isTurmaModalOpen}
