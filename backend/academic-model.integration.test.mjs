@@ -125,7 +125,7 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
       telefone: '(71) 99999-1000',
       classe: 'Jovem',
       church_id: church.data.id,
-      turmas: [classId],
+      turmas: Array.isArray(classId) ? classId : [classId],
       instrumento: 'Não',
     });
     const first = await call(manager, 'POST', '/alunos', studentPayload('Aluno Sem Email Um'));
@@ -193,6 +193,15 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(unchangedClassesUpdate.status, 200, JSON.stringify(unchangedClassesUpdate.data));
     const unchangedUpdateNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
     assert.equal(unchangedUpdateNotifications.includes('Aluno Sem Email Um Atualizado'), false);
+    const secondaryOffering = classes.data.cursos.find(item => item.professor === 'Marina Oliveira' && item.id !== offering.id);
+    assert.ok(secondaryOffering);
+    const addedSecondary = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um Atualizado', [destination.data.id, secondaryOffering.id]));
+    assert.equal(addedSecondary.status, 200, JSON.stringify(addedSecondary.data));
+    const removedSecondary = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um Atualizado', destination.data.id));
+    assert.equal(removedSecondary.status, 200, JSON.stringify(removedSecondary.data));
+    const removalNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
+    assert.match(removalNotifications, /foi removida da turma/i);
+    assert.ok(removalNotifications.includes(secondaryOffering.nome));
 
     const contact = await call(manager, 'POST', `/api/alunos/${second.data.id}/contatos`, { note: 'Responsável pediu retorno amanhã.', outcome: 'retorno_agendado' });
     assert.equal(contact.status, 201, JSON.stringify(contact.data));

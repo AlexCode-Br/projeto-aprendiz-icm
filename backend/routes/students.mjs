@@ -74,25 +74,46 @@ export function createStudentRoutes(context) {
     return `${className}${locationName ? `, em ${locationName}` : ''}`;
   };
 
-  const notifyProfessorsAboutNewEnrollments = async (studentId, studentName, classRows, operation) => {
+  const notifyProfessorsAboutEnrollmentChanges = async (studentId, studentName, { added = [], removed = [] }, operation) => {
     const classesByProfessor = new Map();
-    for (const classRow of classRows) {
+    for (const classRow of added) {
       const professorId = Number(classRow.professor_id);
       if (!professorId) continue;
-      const professorClasses = classesByProfessor.get(professorId) || [];
-      professorClasses.push(classRow);
-      classesByProfessor.set(professorId, professorClasses);
+      const professorChanges = classesByProfessor.get(professorId) || { added: [], removed: [] };
+      professorChanges.added.push(classRow);
+      classesByProfessor.set(professorId, professorChanges);
     }
-    await Promise.all([...classesByProfessor].map(([professorId, professorClasses]) => {
-      const classDescriptions = professorClasses.map(classNotificationLabel);
-      const body = classDescriptions.length === 1
-        ? `Uma nova matrícula de ${studentName} foi registrada na turma ${classDescriptions[0]}.`
-        : `Novas matrículas de ${studentName} foram registradas nas turmas:\n${classDescriptions.map(description => `- ${description}`).join('\n')}`;
-      const classKey = professorClasses.map(classRow => Number(classRow.id)).sort((left, right) => left - right).join('-');
+    for (const classRow of removed) {
+      const professorId = Number(classRow.professor_id);
+      if (!professorId) continue;
+      const professorChanges = classesByProfessor.get(professorId) || { added: [], removed: [] };
+      professorChanges.removed.push(classRow);
+      classesByProfessor.set(professorId, professorChanges);
+    }
+    await Promise.all([...classesByProfessor].map(([professorId, changes]) => {
+      const bodyParts = [];
+      if (changes.added.length) {
+        const descriptions = changes.added.map(classNotificationLabel);
+        bodyParts.push(descriptions.length === 1
+          ? `Uma nova matrícula de ${studentName} foi registrada na turma ${descriptions[0]}.`
+          : `Novas matrículas de ${studentName} foram registradas nas turmas:\n${descriptions.map(description => `- ${description}`).join('\n')}`);
+      }
+      if (changes.removed.length) {
+        const descriptions = changes.removed.map(classNotificationLabel);
+        bodyParts.push(descriptions.length === 1
+          ? `A matrícula de ${studentName} foi removida da turma ${descriptions[0]}.`
+          : `As matrículas de ${studentName} foram removidas das turmas:\n${descriptions.map(description => `- ${description}`).join('\n')}`);
+      }
+      const body = bodyParts.join('\n\n');
+      const classRows = [...changes.added, ...changes.removed];
+      const classKey = classRows.map(classRow => Number(classRow.id)).sort((left, right) => left - right).join('-');
+      const subject = changes.added.length && changes.removed.length
+        ? 'Alteração na matrícula do aluno'
+        : changes.added.length ? 'Novo aluno em sua turma' : 'Aluno removido da sua turma';
       return notificationService.notifyProfessor(
         professorId,
         'newStudent',
-        'Novo aluno em sua turma',
+        subject,
         body,
         `${operation}/${studentId}/classes-${classKey}`,
       );
@@ -308,7 +329,7 @@ export function createStudentRoutes(context) {
           });
           const classSummary=classRows.map(item=>item.course_name).join(', ');
           await notificationService.notifyManagers('newStudent','Novo aluno cadastrado',`${name} foi cadastrado${classSummary?` nas turmas de ${classSummary}`:''}.`,`student-created/${studentId}`);
-          await notifyProfessorsAboutNewEnrollments(studentId,name,classRows,'student-created');
+          await notifyProfessorsAboutEnrollmentChanges(studentId,name,{ added: classRows },'student-created');
           return json(response, 201, { id: studentId });
         } catch (error) {
           if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });
@@ -338,7 +359,7 @@ export function createStudentRoutes(context) {
         const currentStudent=await db.prepare('SELECT id,guardian_consent_at FROM students WHERE id=? AND active=1').get(id);
         if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
         try {
-          const newClassRows=await db.transaction(async()=>{
+          const enrollmentChanges=await db.transaction(async()=>{
             const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id,id);
             if (classError) {
               const error = new Error(classError);
@@ -349,7 +370,8 @@ export function createStudentRoutes(context) {
             const church=await savePreparedChurch(churchChoice,session,ip);
             await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,guardian_consent_at=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
               .run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsentAt,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
-            const currentEnrollments=await db.prepare("SELECT enrollments.id,enrollments.class_id,classes.course_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?").all(id,period.id);
+            const enrollmentLock=db.dialect==='postgres'?' FOR UPDATE':'';
+            const currentEnrollments=await db.prepare("SELECT enrollments.id,enrollments.class_id,classes.course_id,classes.professor_id,classes.label,courses.name AS course_name,locations.name AS location_name FROM enrollments JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?"+enrollmentLock).all(id,period.id);
             const currentClassIds=new Set(currentEnrollments.map(enrollment=>Number(enrollment.class_id)));
             const selectedIds=new Set(classRows.map(classRow=>Number(classRow.id)));
             const selectedByCourse=new Map(classRows.map(classRow=>[Number(classRow.course_id),Number(classRow.id)]));
@@ -362,9 +384,14 @@ export function createStudentRoutes(context) {
               await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES (?,?,'ativa',NULL,NULL) ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(id,classRow.id);
             }
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
-            return classRows.filter(classRow=>!currentClassIds.has(Number(classRow.id)));
+            return {
+              added: classRows.filter(classRow=>!currentClassIds.has(Number(classRow.id))),
+              removed: currentEnrollments.filter(enrollment=>!selectedIds.has(Number(enrollment.class_id))),
+            };
           });
-          if(newClassRows.length)await notifyProfessorsAboutNewEnrollments(id,name,newClassRows,`student-updated/${Date.now()}`);
+          if(enrollmentChanges.added.length || enrollmentChanges.removed.length) {
+            await notifyProfessorsAboutEnrollmentChanges(id,name,enrollmentChanges,`student-updated/${Date.now()}`);
+          }
           return json(response, 200, { success: true });
         } catch (error) {
           if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });
