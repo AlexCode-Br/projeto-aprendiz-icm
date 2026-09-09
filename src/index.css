@@ -145,6 +145,20 @@
         @apply mx-auto w-full max-w-[1440px];
     }
 
+    .app-shell {
+        height: 100vh;
+        height: var(--app-viewport-height, 100dvh);
+        min-height: 0;
+    }
+
+    .app-modal-dialog {
+        max-height: calc(var(--app-viewport-height, 100dvh) - 1.5rem);
+    }
+
+    @media (min-width: 640px) {
+        .app-modal-dialog { max-height: calc(var(--app-viewport-height, 100dvh) - 2.5rem); }
+    }
+
     .page-header {
         @apply mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between;
     }
@@ -253,8 +267,8 @@
 
     .auth-page {
         @apply flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 via-white to-red-50/40 px-4 py-8 dark:from-[#18191a] dark:via-[#1f2021] dark:to-[#251d1d];
-        height: 100dvh;
-        min-height: 100dvh;
+        height: var(--app-viewport-height, 100dvh);
+        min-height: var(--app-viewport-height, 100dvh);
         overflow: hidden;
         overscroll-behavior: none;
         box-sizing: border-box;
@@ -301,6 +315,28 @@
 
     .alert-warning {
         @apply rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100;
+    }
+}
+
+/* These declarations stay outside Tailwind layers so the safe-area padding
+   wins over the responsive p-* utilities on the main scroll container. */
+.app-main-scroll {
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    scroll-padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+    .app-main-scroll {
+        padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+        scroll-padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    }
+}
+
+@media (min-width: 1024px) {
+    .app-main-scroll {
+        padding-bottom: max(2rem, env(safe-area-inset-bottom));
+        scroll-padding-bottom: max(2rem, env(safe-area-inset-bottom));
     }
 }
 

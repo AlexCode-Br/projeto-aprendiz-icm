@@ -65,7 +65,7 @@ const Modal = ({ isOpen, onClose, title, children, footer = null, maxWidth = 'ma
 
     return createPortal(
         <div ref={backdropRef} onMouseDown={event => event.target === backdropRef.current && onClose()} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 backdrop-blur-[3px] sm:p-5" role="presentation">
-            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`flex w-full ${maxWidth} max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-lg sm:max-h-[calc(100dvh-2.5rem)]`}>
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} className={`app-modal-dialog flex w-full ${maxWidth} flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-lg`}>
                 <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
                     <h2 id={titleId} className="text-lg font-semibold text-text-default sm:text-xl">{title}</h2>
                     <button ref={closeRef} type="button" onClick={onClose} className="icon-button shrink-0" aria-label="Fechar janela">
