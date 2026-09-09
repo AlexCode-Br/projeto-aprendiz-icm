@@ -132,7 +132,7 @@ export default function AccountSettings() {
     const togglePush = async () => {
         if (saving || pushState.loading) return;
         if (!rememberedSession) {
-            showToast('Para receber notificações com o aplicativo fechado, marque “Lembrar meu acesso” ao entrar.', 'warning', 7000);
+            showToast('Para receber notificações com o aplicativo fechado, marque “Permanecer conectado” ao entrar.', 'warning', 7000);
             return;
         }
         setSaving('push');
@@ -205,7 +205,7 @@ export default function AccountSettings() {
                 </button>
                 <div className="col-span-2 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-sm text-text-muted">
-                        {pushState.loading ? 'Verificando este dispositivo...' : !rememberedSession ? 'Para receber avisos mesmo com o Projeto Aprendiz fechado, entre marcando “Lembrar meu acesso”.' : pushState.requiresInstall ? 'No iPhone, abra este site pelo Safari, toque em Compartilhar e em “Adicionar à Tela de Início”. Depois, abra o aplicativo instalado para ativar.' : !pushState.supported ? 'Este navegador não oferece notificações web.' : !pushState.configured ? 'O servidor ainda precisa das chaves de segurança para enviar notificações.' : pushState.permission === 'denied' ? 'As notificações foram bloqueadas nas configurações deste navegador.' : pushState.active ? 'Este dispositivo receberá avisos mesmo quando o Projeto Aprendiz não estiver aberto.' : 'Ative para receber novos alunos, chamados, alterações de turmas e alertas na barra de notificações.'}
+                        {pushState.loading ? 'Verificando este dispositivo...' : !rememberedSession ? 'Para receber avisos mesmo com o Projeto Aprendiz fechado, entre marcando “Permanecer conectado”.' : pushState.requiresInstall ? 'No iPhone, abra este site pelo Safari, toque em Compartilhar e em “Adicionar à Tela de Início”. Depois, abra o aplicativo instalado para ativar.' : !pushState.supported ? 'Este navegador não oferece notificações web.' : !pushState.configured ? 'O servidor ainda precisa das chaves de segurança para enviar notificações.' : pushState.permission === 'denied' ? 'As notificações foram bloqueadas nas configurações deste navegador.' : pushState.active ? 'Este dispositivo receberá avisos mesmo quando o Projeto Aprendiz não estiver aberto.' : 'Ative para receber novos alunos, chamados, alterações de turmas e alertas na barra de notificações.'}
                     </p>
                     {pushState.active && <button type="button" onClick={testDeviceNotification} disabled={Boolean(saving)} className="inline-flex min-h-9 items-center gap-2 rounded text-sm font-semibold text-primary hover:underline disabled:opacity-60"><Mail aria-hidden="true" />{saving === 'test-push' ? 'Enviando...' : 'Enviar teste ao dispositivo'}</button>}
                 </div>

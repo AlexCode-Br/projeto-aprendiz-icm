@@ -42,7 +42,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Notificações Web Push reutilizam as preferências dos avisos por e-mail, exigem consentimento explícito por dispositivo, cifram o conteúdo com VAPID e removem assinaturas expiradas. No iPhone, a ativação é oferecida somente no web app instalado na Tela de Início.
 - Os ícones instaláveis usam a marca do Projeto Aprendiz em fundo vermelho; o Service Worker usa uma versão monocromática da marca como badge da notificação para melhor contraste na barra do dispositivo.
 - O clique em uma notificação abre ou foca o app na rota correspondente ao aviso: alunos, suporte, turmas ou configurações, conforme o perfil do usuário.
-- Sessões sem “Lembrar meu acesso” usam cookie de sessão, não restauram uma sessão Supabase ausente e não mantêm notificações push ativas; ao abrir o app sem sessão, notificações pendentes e o indicador local são limpos.
+- Sessões sem “Permanecer conectado” usam cookie de sessão, não restauram uma sessão Supabase ausente e não mantêm notificações push ativas; ao abrir o app sem sessão, notificações pendentes e o indicador local são limpos.
 - O Service Worker usa um ícone grande transparente para evitar o fallback de inicial do navegador em notificações Android/One UI, mantendo apenas a identidade do app.
 
 ## Organização do código-fonte

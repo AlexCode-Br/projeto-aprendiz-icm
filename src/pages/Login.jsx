@@ -71,7 +71,7 @@ const Login = () => {
                         <FormCheckbox
                             checked={remember}
                             onChange={event => setRemember(event.target.checked)}
-                            label="Lembrar meu acesso"
+                            label="Permanecer conectado"
                             className="items-center min-h-11"
                         />
                         <Link to="/forgot-password" className="font-semibold text-primary hover:text-primary-dark hover:underline">Esqueceu a senha?</Link>
