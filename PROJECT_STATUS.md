@@ -8,11 +8,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `86b0fa0`
+- Último commit da aplicação publicado em produção: `e8c4b76`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `985f408c-8e54-4bf9-b29f-0f32f7467f84`
+- Versão Cloudflare verificada: `81c95f23-7382-4044-88fa-2db99eeaf3e0`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
