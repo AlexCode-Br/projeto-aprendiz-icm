@@ -76,7 +76,7 @@ const Dashboard = () => {
                 <div><h1 className="page-title">Visão geral</h1><p className="page-description">Acompanhe alunos, turmas, professores e atendimentos em um só lugar.</p></div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 sm:gap-6">
+            <div className="grid grid-cols-2 gap-3 sm:gap-6 xl:grid-cols-4">
                 <StatCard to="/gestor/alunos" title="Total de Alunos" value={dashboard.stats.totalAlunos ?? 0} loading={loading} icon={<AlunosIcon />} colorClass="primary" delay="100" />
                 <StatCard to="/gestor/cursos" title="Turmas Ativas" value={dashboard.stats.cursosAtivos ?? 0} loading={loading} icon={<TurmasIcon />} colorClass="neutral" delay="200" />
                 <StatCard to="/gestor/professores" title="Professores" value={dashboard.stats.professores ?? 0} loading={loading} icon={<ProfessoresIcon />} colorClass="primary" delay="300" />
