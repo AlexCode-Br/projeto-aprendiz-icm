@@ -8,11 +8,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `5041597`
+- Último commit da aplicação publicado em produção: `ca2239a`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `821b512e-c86a-43d2-b368-52fb088ff963`
+- Versão Cloudflare verificada: `8982f9c3-0b2d-46cc-bc48-5957bb59dabb`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -110,6 +110,8 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `96d26e60-c965-4287-8879-ebc0820a504a`; raiz e `/login` retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão, os bundles de Configurações e foto de perfil retornaram HTTP 200 e `www` redirecionou com HTTP 308 para a raiz.
 - Perfil compacto das Configurações restaurado conforme o modelo aprovado no commit `5041597`, preservando a correção que evita recarregar a foto durante a digitação do nome.
 - Versão Cloudflare verificada: `821b512e-c86a-43d2-b368-52fb088ff963`; raiz e `/login` retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão, o bundle atual de Configurações retornou HTTP 200 e `www` redirecionou com HTTP 308 para a raiz.
+- Paginação de cinco registros nas listas de turmas, alunos, professores, informativos e suporte publicada no commit `ca2239a`.
+- Versão Cloudflare verificada: `8982f9c3-0b2d-46cc-bc48-5957bb59dabb`; raiz, `/login` e o bundle principal retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
 
 ## Prompt curto para uma nova tarefa
 
