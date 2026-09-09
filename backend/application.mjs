@@ -353,7 +353,8 @@ export function createApplication({
     if (classIds.length) {
       const placeholders = classIds.map(() => '?').join(',');
       classes = await db.prepare(`
-        SELECT classes.id,classes.course_id,classes.professor_id,classes.capacity,courses.name AS course_name
+        SELECT classes.id,classes.course_id,classes.professor_id,classes.capacity,classes.label,
+          courses.name AS course_name,locations.name AS location_name
         FROM classes
         JOIN courses ON courses.id=classes.course_id
         JOIN locations ON locations.id=classes.location_id
@@ -365,7 +366,9 @@ export function createApplication({
     } else if (legacyCourseNames.length) {
       const placeholders = legacyCourseNames.map(() => '?').join(',');
       classes = await db.prepare(`
-        SELECT MIN(classes.id) AS id,courses.id AS course_id,MIN(classes.professor_id) AS professor_id,MAX(classes.capacity) AS capacity,courses.name AS course_name
+        SELECT MIN(classes.id) AS id,courses.id AS course_id,MIN(classes.professor_id) AS professor_id,
+          MAX(classes.capacity) AS capacity,MIN(classes.label) AS label,courses.name AS course_name,
+          MIN(locations.name) AS location_name
         FROM classes
         JOIN courses ON courses.id=classes.course_id
         JOIN locations ON locations.id=classes.location_id

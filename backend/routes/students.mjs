@@ -58,6 +58,47 @@ export function createStudentRoutes(context) {
     return [...new Set(value.map(Number))].sort((left, right) => left - right);
   };
 
+  const classNotificationLabel = classRow => {
+    const courseName = String(classRow.course_name || 'Turma').trim();
+    const classLabel = String(classRow.label || '').trim();
+    const locationName = String(classRow.location_name || '').trim();
+    const normalizeLabel = value => String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[‐‑‒–—―]/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+    const normalizedClassLabel = normalizeLabel(classLabel);
+    const defaultLabels = new Set([
+      normalizeLabel(courseName),
+      normalizeLabel(`${courseName} - ${locationName}`),
+    ]);
+    const className = classLabel && !defaultLabels.has(normalizedClassLabel)
+      ? `${courseName} — ${classLabel}`
+      : courseName;
+    return `${className}${locationName ? `, em ${locationName}` : ''}`;
+  };
+
+  const notifyProfessorsAboutNewEnrollments = async (studentId, studentName, classRows, operation) => {
+    const classesByProfessor = new Map();
+    for (const classRow of classRows) {
+      const professorId = Number(classRow.professor_id);
+      if (!professorId) continue;
+      const professorClasses = classesByProfessor.get(professorId) || [];
+      professorClasses.push(classRow);
+      classesByProfessor.set(professorId, professorClasses);
+    }
+    await Promise.all([...classesByProfessor].map(([professorId, professorClasses]) => {
+      const classDescriptions = professorClasses.map(classNotificationLabel);
+      const body = classDescriptions.length === 1
+        ? `Uma nova matrícula de ${studentName} foi registrada na turma ${classDescriptions[0]}.`
+        : `Novas matrículas de ${studentName} foram registradas nas turmas:\n${classDescriptions.map(description => `- ${description}`).join('\n')}`;
+      const classKey = professorClasses.map(classRow => Number(classRow.id)).sort((left, right) => left - right).join('-');
+      return notificationService.notifyProfessor(
+        professorId,
+        'newStudent',
+        'Novo aluno em sua turma',
+        body,
+        `${operation}/${studentId}/classes-${classKey}`,
+      );
+    }));
+  };
+
   const anonymizeStudents = async (studentIds, session, ip) => {
     const placeholders = studentIds.map(() => '?').join(',');
     let storagePaths = [];
@@ -267,9 +308,7 @@ export function createStudentRoutes(context) {
           });
           const classSummary=classRows.map(item=>item.course_name).join(', ');
           await notificationService.notifyManagers('newStudent','Novo aluno cadastrado',`${name} foi cadastrado${classSummary?` nas turmas de ${classSummary}`:''}.`,`student-created/${studentId}`);
-          for(const professorId of [...new Set(classRows.map(item=>Number(item.professor_id)).filter(Boolean))]){
-            await notificationService.notifyProfessor(professorId,'newStudent','Novo aluno em sua turma',`${name} foi incluído em uma de suas turmas.`,`student-created/${studentId}`);
-          }
+          await notifyProfessorsAboutNewEnrollments(studentId,name,classRows,'student-created');
           return json(response, 201, { id: studentId });
         } catch (error) {
           if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });
@@ -299,7 +338,7 @@ export function createStudentRoutes(context) {
         const currentStudent=await db.prepare('SELECT id,guardian_consent_at FROM students WHERE id=? AND active=1').get(id);
         if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
         try {
-          await db.transaction(async()=>{
+          const newClassRows=await db.transaction(async()=>{
             const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id,id);
             if (classError) {
               const error = new Error(classError);
@@ -311,6 +350,7 @@ export function createStudentRoutes(context) {
             await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,guardian_consent_at=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
               .run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsentAt,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
             const currentEnrollments=await db.prepare("SELECT enrollments.id,enrollments.class_id,classes.course_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?").all(id,period.id);
+            const currentClassIds=new Set(currentEnrollments.map(enrollment=>Number(enrollment.class_id)));
             const selectedIds=new Set(classRows.map(classRow=>Number(classRow.id)));
             const selectedByCourse=new Map(classRows.map(classRow=>[Number(classRow.course_id),Number(classRow.id)]));
             for(const enrollment of currentEnrollments){
@@ -322,7 +362,9 @@ export function createStudentRoutes(context) {
               await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES (?,?,'ativa',NULL,NULL) ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(id,classRow.id);
             }
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
+            return classRows.filter(classRow=>!currentClassIds.has(Number(classRow.id)));
           });
+          if(newClassRows.length)await notifyProfessorsAboutNewEnrollments(id,name,newClassRows,`student-updated/${Date.now()}`);
           return json(response, 200, { success: true });
         } catch (error) {
           if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });

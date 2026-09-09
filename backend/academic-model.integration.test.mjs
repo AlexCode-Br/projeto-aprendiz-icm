@@ -58,7 +58,7 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.ok(Array.isArray(catalogs.data.locais));
 
     const classes = await call(manager, 'GET', '/cursos');
-    const offering = classes.data.cursos[0];
+    const offering = classes.data.cursos.find(item => item.professor === 'Marina Oliveira') || classes.data.cursos[0];
     assert.ok(offering);
     const professorsBeforeProfileEdit = await call(manager, 'GET', '/professores');
     const existingProfessor = professorsBeforeProfileEdit.data.professores.find(item => item.nome === offering.professor);
@@ -132,6 +132,11 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     const second = await call(manager, 'POST', '/alunos', studentPayload('Aluno Sem Email Dois'));
     assert.equal(first.status, 201, JSON.stringify(first.data));
     assert.equal(second.status, 201, JSON.stringify(second.data));
+    const creationNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
+    assert.ok(creationNotifications.includes('Novo aluno em sua turma'));
+    assert.ok(creationNotifications.includes('Aluno Sem Email Um'));
+    assert.ok(creationNotifications.includes(offering.nome));
+    assert.ok(creationNotifications.includes(offering.local));
     const customChurchStudent = await call(manager, 'POST', '/alunos', {
       ...studentPayload('Aluno de Igreja Digitada'),
       church_id: 'ICM Mirantes de Periperi',
@@ -181,6 +186,13 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(destination.status, 201, JSON.stringify(destination.data));
     const updated = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um', destination.data.id));
     assert.equal(updated.status, 200, JSON.stringify(updated.data));
+    const editNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
+    assert.match(editNotifications, /Turma C/i);
+    assert.ok(editNotifications.includes(offering.local));
+    const unchangedClassesUpdate = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um Atualizado', destination.data.id));
+    assert.equal(unchangedClassesUpdate.status, 200, JSON.stringify(unchangedClassesUpdate.data));
+    const unchangedUpdateNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
+    assert.equal(unchangedUpdateNotifications.includes('Aluno Sem Email Um Atualizado'), false);
 
     const contact = await call(manager, 'POST', `/api/alunos/${second.data.id}/contatos`, { note: 'Responsável pediu retorno amanhã.', outcome: 'retorno_agendado' });
     assert.equal(contact.status, 201, JSON.stringify(contact.data));
