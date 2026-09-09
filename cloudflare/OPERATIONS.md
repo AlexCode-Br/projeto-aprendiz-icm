@@ -28,6 +28,10 @@ Segredos obrigatórios:
 - `SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SECRET_KEY`
 - `RESEND_API_KEY`
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+
+Gere o par VAPID uma única vez com `pnpm vapid:generate` e cadastre os dois valores com `wrangler secret put`. Trocar esse par invalida as assinaturas existentes e exige nova ativação nos dispositivos.
 
 ## Verificação pós-deploy
 
@@ -37,6 +41,7 @@ Segredos obrigatórios:
 4. Entrar como gestor e professor e abrir as páginas principais.
 5. Observar erros e CPU com `pnpm cloudflare:tail`; o resumo remove cookies, cabeçalhos e query strings.
 6. Confirmar MX, DKIM, DMARC e o return-path do Resend após qualquer alteração DNS.
+7. Em Configurações, ativar as notificações em um dispositivo e confirmar o recebimento pelo botão de teste.
 
 ## Recuperação
 

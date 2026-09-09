@@ -8,6 +8,7 @@ import { createProfessorRoutes } from './professors.mjs';
 import { createReportRoutes } from './reports.mjs';
 import { createStudentRoutes } from './students.mjs';
 import { createSupportRoutes } from './support.mjs';
+import { normalizePushSubscription } from '../web-push.mjs';
 
 export function createApiHandler(context) {
   const {
@@ -31,6 +32,7 @@ export function createApiHandler(context) {
     schoolYearView,
     duplicateError,
     notificationService,
+    webPushService,
     normalizeNotificationPreferences,
     profilePhotoStorage,
     normalizeProfilePhoto,
@@ -117,6 +119,42 @@ export function createApiHandler(context) {
         await context.sendEmail(session.email,'Teste de notificações — Projeto Aprendiz',`Olá, ${session.name}.\n\nAs notificações por e-mail da sua conta estão funcionando corretamente.\n\nProjeto Aprendiz`,`notification-test/${session.user_id}/${Date.now()}`);
         return json(response,200,{message:'E-mail de teste enviado com sucesso.'});
       }catch(error){logger.error('notification_test_failed',error,{userId:session.user_id});return json(response,502,{message:'Não foi possível enviar o e-mail de teste. Revise a configuração do remetente.'});}
+    }
+    if(request.method==='GET'&&url.pathname==='/api/account/push'){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const configuration=await webPushService.configuration();
+      const count=await db.prepare('SELECT COUNT(*) AS total FROM push_subscriptions WHERE user_id=?').get(session.user_id);
+      return json(response,200,{...configuration,subscriptions:Number(count?.total||0)});
+    }
+    if(request.method==='POST'&&url.pathname==='/api/account/push/subscribe'){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const configuration=await webPushService.configuration();
+      if(!configuration.configured)return json(response,503,{message:'As notificações no dispositivo ainda não estão configuradas no servidor.'});
+      const body=await readJson(request),subscription=normalizePushSubscription(body.subscription);
+      if(subscription.error)return invalid(response,{subscription:subscription.error});
+      const userAgent=cleanText(request.headers['user-agent'],500);
+      const existing=await db.prepare('SELECT user_id,p256dh,auth FROM push_subscriptions WHERE endpoint=?').get(subscription.endpoint);
+      await db.prepare(`INSERT INTO push_subscriptions (user_id,endpoint,p256dh,auth,user_agent)
+        VALUES (?,?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,p256dh=excluded.p256dh,auth=excluded.auth,user_agent=excluded.user_agent,updated_at=CURRENT_TIMESTAMP`)
+        .run(session.user_id,subscription.endpoint,subscription.p256dh,subscription.auth,userAgent);
+      if(!existing||Number(existing.user_id)!==Number(session.user_id)||existing.p256dh!==subscription.p256dh||existing.auth!==subscription.auth){
+        await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'push_notifications_enabled',ip);
+      }
+      return json(response,200,{success:true,message:'Notificações ativadas neste dispositivo.'});
+    }
+    if(request.method==='POST'&&url.pathname==='/api/account/push/unsubscribe'){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const body=await readJson(request),endpoint=String(body.endpoint||'').trim();
+      if(!endpoint||endpoint.length>2048)return invalid(response,{subscription:'Assinatura de notificações inválida.'});
+      await db.prepare('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?').run(session.user_id,endpoint);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'push_notifications_disabled',ip);
+      return json(response,200,{success:true,message:'Notificações desativadas neste dispositivo.'});
+    }
+    if(request.method==='POST'&&url.pathname==='/api/account/push/test'){
+      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const result=await webPushService.sendToUser(session.user_id,{title:'Teste de notificações — Projeto Aprendiz',body:'As notificações deste dispositivo estão funcionando corretamente.',tag:`push-test/${session.user_id}/${Date.now()}`,url:'/configuracoes'});
+      if(!result.sent)return json(response,result.reason==='not_configured'?503:409,{message:result.reason==='not_subscribed'?'Ative as notificações neste dispositivo antes de testar.':'Não foi possível entregar a notificação de teste neste dispositivo.'});
+      return json(response,200,{message:`Notificação enviada para ${result.delivered} ${result.delivered===1?'dispositivo':'dispositivos'}.`});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/password-changed'){
       const session=await authorize(request,response,['gestor','professor']);if(!session)return;

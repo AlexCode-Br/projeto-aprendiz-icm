@@ -21,6 +21,7 @@ import {
 } from './storage.mjs';
 import { createProfilePhotoStorage, normalizeProfilePhoto } from './profile-photos.mjs';
 import { createNotificationService, normalizeNotificationPreferences } from './notifications.mjs';
+import { createWebPushService } from './web-push.mjs';
 import { createLazyClient } from './lazy-client.mjs';
 import {
   catalogNameError,
@@ -95,7 +96,8 @@ export function createApplication({
   }
 
   const { sendEmail } = createEmailService({ db, isProduction, env });
-  const notificationService = createNotificationService({ db, sendEmail, logger });
+  const webPushService = createWebPushService({ db, env, logger });
+  const notificationService = createNotificationService({ db, sendEmail, sendPush: webPushService.sendToUser, logger });
 
   function requireSupabaseAdmin(response) {
     if (!usesSupabaseAuth || supabaseAdmin) return true;
@@ -640,6 +642,7 @@ export function createApplication({
     baseUrl,
     sendEmail,
     notificationService,
+    webPushService,
     normalizeNotificationPreferences,
     sha256,
     isProduction,

@@ -31,3 +31,25 @@ test('serviço respeita preferência desativada antes de enviar e-mail', async (
   assert.equal(delivered.sent, true);
   assert.equal(sent.length, 1);
 });
+
+test('uma falha no e-mail não impede a entrega da notificação push', async () => {
+  const pushed = [];
+  const db = {
+    prepare(sql) {
+      return {
+        get: async () => sql.includes('preferences_json') ? { preferences_json: '{}' } : { id: 7, name: 'Ana', email: 'ana@example.com' },
+      };
+    },
+  };
+  const service = createNotificationService({
+    db,
+    sendEmail: async () => { throw new Error('indisponível'); },
+    sendPush: async (...args) => { pushed.push(args); return { sent: true }; },
+    logger: { error() {} },
+  });
+  const result = await service.notifyUser(7, 'systemAlerts', 'Aviso', 'Conteúdo', 'aviso/7');
+  assert.equal(result.sent, true);
+  assert.deepEqual(result.channels, { email: false, push: true });
+  assert.equal(pushed[0][0], 7);
+  assert.equal(pushed[0][1].title, 'Aviso');
+});

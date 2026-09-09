@@ -1,5 +1,5 @@
 import { createApplication, isApiPath } from '../backend/application.mjs';
-import { createWorkerDatabase } from '../backend/worker-database.mjs';
+import { createWorkerDatabase, ensurePushSubscriptionsSchema } from '../backend/worker-database.mjs';
 import { createHttpSecurity } from '../backend/security.mjs';
 import { createStructuredLogger } from '../backend/logger.mjs';
 import { invokeApi } from './http-bridge.mjs';
@@ -26,7 +26,7 @@ export default {
       const headers = new Headers(asset.headers);
       const contentType = headers.get('Content-Type') || 'application/octet-stream';
       for (const [key, value] of Object.entries(securityHeaders(contentType))) headers.set(key, value);
-      headers.set('Cache-Control', contentType.includes('text/html') ? 'no-store' : /^\/assets\//.test(path) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
+      headers.set('Cache-Control', ['/sw.js','/manifest.webmanifest'].includes(path) ? 'no-cache' : contentType.includes('text/html') ? 'no-store' : /^\/assets\//.test(path) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
       return new Response(asset.body, { status: asset.status, headers });
     }
     if (url.pathname === '/api') return json(404, 'Rota não encontrada.');
@@ -38,6 +38,7 @@ export default {
     let db;
     try {
       db = createWorkerDatabase(env, { logger });
+      await ensurePushSubscriptionsSchema(db);
       const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER) });
       return await invokeApi(request, application.handler);
     } catch (error) {

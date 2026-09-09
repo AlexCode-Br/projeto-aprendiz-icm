@@ -6,12 +6,14 @@ O sistema é uma aplicação web única, responsiva e orientada a dois perfis: g
 
 ```text
 Navegador
+  ├─ Service worker (instalação, Web Push e cache público do shell)
   └─ Cloudflare Worker
        ├─ assets do frontend React
        ├─ API HTTP e regras de autorização
        ├─ Durable Object para limite de autenticação
        └─ Hyperdrive → PostgreSQL do Supabase
                          ├─ Auth
+                         ├─ assinaturas Web Push privadas
                          └─ Storage privado
 ```
 
@@ -37,6 +39,8 @@ Navegador
 - Páginas coordenam carregamento e estado, mas regras de negócio e validações reutilizáveis ficam em `shared/` ou no backend.
 - Componentes não acessam o banco. O navegador usa `src/services/api.js` e a API valida novamente autenticação, autorização e dados recebidos.
 - O browser nunca recebe chaves privadas nem acessa o schema do PostgreSQL diretamente.
+- Cada navegador autorizado registra uma assinatura Web Push privada. A API envia o conteúdo cifrado com VAPID, remove endpoints expirados e mantém a chave privada exclusivamente no Worker.
+- As preferências de notificação são compartilhadas entre e-mail e push; ativar ou desativar push é uma escolha independente para cada dispositivo.
 - Arquivos em `public/` são reservados a URLs estáveis; assets importados pelo código ficam em `src/assets/` e recebem hash do Vite.
 - Migrações antigas não são removidas: bancos novos e existentes dependem da sequência completa.
 - Testes ficam próximos ao backend porque exercitam os mesmos módulos e contratos sem uma segunda estrutura paralela.

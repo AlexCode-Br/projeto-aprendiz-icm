@@ -25,7 +25,7 @@ const tablesWithId = new Set([
   'professor_profiles', 'professor_invites', 'students', 'courses', 'classes',
   'school_years', 'churches', 'enrollments', 'attendance_sessions', 'attendance_records',
   'announcements', 'announcement_attachments', 'support_tickets', 'support_messages',
-  'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos',
+  'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos', 'push_subscriptions',
 ]);
 const applicationTables = new Set([
   ...tablesWithId, 'user_settings', 'announcement_reads', 'announcement_recipients',
@@ -171,9 +171,43 @@ class WorkerDatabase {
   }
 }
 
+// The Worker connects through Hyperdrive and intentionally does not run the
+// full application migration set on every request. Keep the push table
+// bootstrap narrowly scoped and idempotent so a deployment can safely enable
+// Web Push even when the production migration runner is not available.
+let pushSchemaReady = false;
+let pushSchemaPromise = null;
+
+export function ensurePushSubscriptionsSchema(database) {
+  if (pushSchemaReady) return Promise.resolve();
+  if (!pushSchemaPromise) {
+    pushSchemaPromise = database.exec(`
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.push_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES projeto_aprendiz.users(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx
+        ON projeto_aprendiz.push_subscriptions(user_id);
+      ALTER TABLE projeto_aprendiz.push_subscriptions ENABLE ROW LEVEL SECURITY;
+      REVOKE ALL ON TABLE projeto_aprendiz.push_subscriptions FROM PUBLIC, anon, authenticated;
+      REVOKE ALL ON SEQUENCE projeto_aprendiz.push_subscriptions_id_seq FROM PUBLIC, anon, authenticated;
+    `).then(() => { pushSchemaReady = true; }).catch(error => {
+      pushSchemaPromise = null;
+      throw error;
+    });
+  }
+  return pushSchemaPromise;
+}
+
 // Instantiate inside fetch()/scheduled(), never in module scope. Hyperdrive
 // owns the origin connection pool; the driver connection belongs to one request.
 // Its configuration MUST have query caching disabled for auth/read-after-write.
 export function createWorkerDatabase(env, options) { return new WorkerDatabase(env, options); }
 
-export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8 };
+export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8, ensurePushSubscriptionsSchema };

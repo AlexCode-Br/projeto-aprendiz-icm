@@ -8,6 +8,7 @@ import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { friendlyAuthError, supabase } from '../services/supabase';
+import { disablePushNotifications, enablePushNotifications, pushCapability, readPushState, testPushNotifications } from '../services/pushNotifications';
 import { personNameError } from '../../shared/validation.mjs';
 
 const fieldClass = 'form-control mt-1';
@@ -24,6 +25,7 @@ export default function AccountSettings() {
     const [saving, setSaving] = useState('');
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [pushState, setPushState] = useState(() => ({ ...pushCapability(), configured: false, active: false, loading: true }));
 
     const loadAccount = useCallback(async () => {
         setLoading(true);
@@ -37,6 +39,12 @@ export default function AccountSettings() {
         finally { setLoading(false); }
     }, []);
     useEffect(() => { loadAccount(); }, [loadAccount]);
+    const refreshPushState = useCallback(async () => {
+        setPushState(previous => ({ ...previous, loading: true }));
+        try { setPushState({ ...(await readPushState()), loading: false }); }
+        catch { setPushState(previous => ({ ...previous, loading: false, error: 'Não foi possível consultar as notificações deste dispositivo.' })); }
+    }, []);
+    useEffect(() => { refreshPushState(); }, [refreshPushState]);
 
     const passwordValid = useMemo(() => password.newPassword.length >= 10 && /[A-Z]/.test(password.newPassword) && /[a-z]/.test(password.newPassword) && /\d/.test(password.newPassword) && /[^A-Za-z0-9]/.test(password.newPassword), [password.newPassword]);
 
@@ -117,6 +125,28 @@ export default function AccountSettings() {
         try { const { data } = await api.post('/api/account/preferences/test', {}); showToast(data.message, 'success', 6000); }
         catch (error) { showToast(error.message, 'error', 6000); } finally { setSaving(''); }
     };
+    const togglePush = async () => {
+        if (saving || pushState.loading) return;
+        setSaving('push');
+        try {
+            if (pushState.active) {
+                await disablePushNotifications();
+                showToast('Notificações desativadas neste dispositivo.', 'success');
+            } else {
+                await enablePushNotifications();
+                showToast('Notificações ativadas neste dispositivo.', 'success');
+            }
+            await refreshPushState();
+        } catch (error) { showToast(error.message, 'error', 7000); }
+        finally { setSaving(''); }
+    };
+    const testDeviceNotification = async () => {
+        if (saving || pushState.loading) return;
+        setSaving('test-push');
+        try { const { data } = await testPushNotifications(); showToast(data.message, 'success', 6000); }
+        catch (error) { showToast(error.message, 'error', 7000); }
+        finally { setSaving(''); }
+    };
     const options = user?.role === 'gestor' ? [
         ['newStudent', 'Novas inscrições', 'Avisar quando um aluno for cadastrado.'], ['newTicket', 'Novos chamados', 'Avisar sobre solicitações de suporte.'], ['courseUpdates', 'Alterações em turmas', 'Receber atualizações de cursos e professores.'], ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
     ] : [
@@ -150,14 +180,29 @@ export default function AccountSettings() {
         </form>
         <section className="panel p-5 md:p-7">
             <div className="settings-section-header">
-                <h2 className="form-section-title"><Bell aria-hidden="true" />Notificações por e-mail</h2>
+                <h2 className="form-section-title"><Bell aria-hidden="true" />Tipos de notificação</h2>
                 <button type="button" onClick={savePreferences} disabled={Boolean(saving)} className="submit-btn justify-self-end disabled:opacity-60">{saving === 'preferences' ? 'Salvando...' : 'Salvar preferências'}</button>
                 <div className="col-span-2 flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm text-text-muted">Escolha quais atualizações serão enviadas ao e-mail de acesso cadastrado.</p>
+                    <p className="text-sm text-text-muted">Escolha quais atualizações serão enviadas por e-mail e aos dispositivos ativados.</p>
                     <button type="button" onClick={testNotifications} disabled={Boolean(saving)} className="inline-flex min-h-9 items-center gap-2 rounded text-sm font-semibold text-primary hover:underline disabled:opacity-60"><Mail aria-hidden="true" />{saving === 'test-notification' ? 'Enviando...' : 'Enviar teste'}</button>
                 </div>
             </div>
             <div className="mt-4 divide-y divide-border">{options.map(([key, title, description]) => <div key={key} className="py-4"><FormSwitch checked={Boolean(preferences[key])} onChange={event => setPreferences({ ...preferences, [key]: event.target.checked })} label={title} description={description} /></div>)}</div>
+        </section>
+        <section className="panel p-5 md:p-7">
+            <div className="settings-section-header">
+                <h2 className="form-section-title"><Bell aria-hidden="true" />Notificações no dispositivo</h2>
+                <button type="button" onClick={togglePush} disabled={Boolean(saving) || pushState.loading || !pushState.supported || !pushState.configured || pushState.requiresInstall || pushState.permission === 'denied'} className="submit-btn justify-self-end disabled:opacity-50">
+                    {saving === 'push' ? 'Aguarde...' : pushState.active ? 'Desativar neste dispositivo' : 'Ativar neste dispositivo'}
+                </button>
+                <div className="col-span-2 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-sm text-text-muted">
+                        {pushState.loading ? 'Verificando este dispositivo...' : pushState.requiresInstall ? 'No iPhone, abra este site pelo Safari, toque em Compartilhar e em “Adicionar à Tela de Início”. Depois, abra o aplicativo instalado para ativar.' : !pushState.supported ? 'Este navegador não oferece notificações web.' : !pushState.configured ? 'O servidor ainda precisa das chaves de segurança para enviar notificações.' : pushState.permission === 'denied' ? 'As notificações foram bloqueadas nas configurações deste navegador.' : pushState.active ? 'Este dispositivo receberá avisos mesmo quando o Projeto Aprendiz não estiver aberto.' : 'Ative para receber novos alunos, chamados, alterações de turmas e alertas na barra de notificações.'}
+                    </p>
+                    {pushState.active && <button type="button" onClick={testDeviceNotification} disabled={Boolean(saving)} className="inline-flex min-h-9 items-center gap-2 rounded text-sm font-semibold text-primary hover:underline disabled:opacity-60"><Mail aria-hidden="true" />{saving === 'test-push' ? 'Enviando...' : 'Enviar teste ao dispositivo'}</button>}
+                </div>
+                {pushState.error && <p role="alert" className="col-span-2 text-sm text-danger">{pushState.error}</p>}
+            </div>
         </section>
     </div>;
 }

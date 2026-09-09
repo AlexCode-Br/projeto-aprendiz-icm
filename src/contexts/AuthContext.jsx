@@ -9,6 +9,7 @@ import {
     supabase,
     usesSupabaseAuth,
 } from '../services/supabase';
+import { disablePushNotifications, syncExistingPushSubscription } from '../services/pushNotifications';
 
 export const AuthContext = createContext(null);
 
@@ -51,6 +52,9 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     useEffect(() => { loadUser(); }, [loadUser]);
+    useEffect(() => {
+        if (user) syncExistingPushSubscription().catch(() => {});
+    }, [user]);
 
     const login = useCallback(async (email, password, remember = false) => {
         if (usesSupabaseAuth) {
@@ -74,7 +78,10 @@ export const AuthProvider = ({ children }) => {
     }, []);
 
     const logout = useCallback(async () => {
-        try { await api.post('/api/auth/logout', {}); } finally {
+        try {
+            await disablePushNotifications().catch(() => {});
+            await api.post('/api/auth/logout', {});
+        } finally {
             if (usesSupabaseAuth) {
                 await supabase.auth.signOut().catch(() => {});
                 clearSupabaseAuthStorage();

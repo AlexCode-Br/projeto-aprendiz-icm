@@ -49,7 +49,7 @@ pnpm cloudflare:build
 pnpm cloudflare:deploy
 ```
 
-O arquivo `wrangler.jsonc` é a fonte de verdade da infraestrutura pública. Os segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` e `RESEND_API_KEY` devem ser cadastrados com `wrangler secret put`, nunca versionados. Consulte [cloudflare/OPERATIONS.md](cloudflare/OPERATIONS.md) antes de publicar.
+O arquivo `wrangler.jsonc` é a fonte de verdade da infraestrutura pública. Os segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `RESEND_API_KEY`, `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` devem ser cadastrados com `wrangler secret put`, nunca versionados. Consulte [cloudflare/OPERATIONS.md](cloudflare/OPERATIONS.md) antes de publicar.
 
 As tabelas ficam no schema privado `projeto_aprendiz` e não são acessadas diretamente pelo navegador. O bucket privado `announcement-attachments` é criado sob demanda pelo backend; professores acessam os arquivos somente pela rota autenticada e autorizada da aplicação.
 
@@ -67,6 +67,8 @@ As tabelas ficam no schema privado `projeto_aprendiz` e não são acessadas dire
 | `RESEND_API_KEY` | Credencial para recuperação de senha e convites. |
 | `EMAIL_FROM` | Remetente validado, como `Projeto Aprendiz <acesso@dominio.com>`. |
 | `APP_URL` | URL pública usada nos links e na validação de origem; em produção, `https://aprendizicm.com.br`. |
+| `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Par estável usado para assinar Web Push; gere com `pnpm vapid:generate` e mantenha a chave privada somente no servidor. |
+| `VAPID_SUBJECT` | Contato do remetente Web Push; padrão `mailto:naoresponda@aprendizicm.com.br`. |
 | `APP_TIMEZONE` | Fuso usado no agendamento; padrão `America/Sao_Paulo`. |
 | `DATABASE_SSL` | `true` para a conexão segura com o Supabase. |
 
