@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { canRestoreServerSession } from '../services/authSessionPolicy';
 import {
     clearSupabaseAuthStorage,
     friendlyAuthError,
@@ -45,18 +46,24 @@ export const AuthProvider = ({ children }) => {
     const navigate = useNavigate();
 
     const loadUser = useCallback(async () => {
+        let supabaseSession = null;
+        let persistentSession = usesSupabaseAuth ? isSupabaseSessionPersistent() : legacySessionIsPersistent();
         try {
-            // Supabase keeps non-persistent credentials only for this browser
-            // session. Never restore the server-side session without them.
             if (usesSupabaseAuth) {
                 const { data } = await supabase.auth.getSession();
-                if (!data.session) {
+                supabaseSession = data.session;
+
+                // A persistent app session is backed by the secure server cookie.
+                // Some installed browsers can restore that cookie before exposing
+                // Supabase's local state, so do not send remembered users back to
+                // login only because the intermediary token is temporarily absent.
+                if (!canRestoreServerSession({ usesSupabaseAuth, supabaseSession, persistentSession })) {
                     setRememberedSession(false);
                     setUser(null);
                     await clearLocalPushNotifications().catch(() => {});
                     return;
                 }
-                setRememberedSession(isSupabaseSessionPersistent());
+                setRememberedSession(persistentSession);
             }
             const response = await api.get('/api/auth/me');
             api.setCsrfToken(response.data.csrfToken);
@@ -67,13 +74,13 @@ export const AuthProvider = ({ children }) => {
                 setUser(null);
                 await clearLocalPushNotifications().catch(() => {});
             } else {
-                const { data } = await supabase.auth.getSession();
-                if (!data.session) {
+                if (!supabaseSession) {
                     setRememberedSession(false);
                     setUser(null);
+                    clearSupabaseAuthStorage();
                     await clearLocalPushNotifications().catch(() => {});
                 } else {
-                    try { setUser(await exchangeSession(data.session, isSupabaseSessionPersistent())); }
+                    try { setUser(await exchangeSession(supabaseSession, persistentSession)); }
                     catch { setRememberedSession(false); setUser(null); }
                 }
             }
