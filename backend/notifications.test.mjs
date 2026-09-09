@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createNotificationService, normalizeNotificationPreferences } from './notifications.mjs';
+import { createNotificationService, normalizeNotificationPreferences, notificationDestination } from './notifications.mjs';
 
 test('preferências de notificação são restritas às opções suportadas', () => {
   assert.deepEqual(normalizeNotificationPreferences({ newStudent: false, newTicket: 'false', injected: true }), {
@@ -32,6 +32,14 @@ test('serviço respeita preferência desativada antes de enviar e-mail', async (
   assert.equal(sent.length, 1);
 });
 
+test('destino da notificação acompanha o perfil e o tipo do aviso', () => {
+  assert.equal(notificationDestination('newTicket', 'gestor'), '/gestor/suporte');
+  assert.equal(notificationDestination('newTicket', 'professor'), '/professor/suporte');
+  assert.equal(notificationDestination('newStudent', 'professor'), '/professor/alunos');
+  assert.equal(notificationDestination('courseUpdates', 'gestor'), '/gestor/cursos');
+  assert.equal(notificationDestination('systemAlerts', 'professor'), '/configuracoes');
+});
+
 test('uma falha no e-mail não impede a entrega da notificação push', async () => {
   const pushed = [];
   const db = {
@@ -52,4 +60,5 @@ test('uma falha no e-mail não impede a entrega da notificação push', async ()
   assert.deepEqual(result.channels, { email: false, push: true });
   assert.equal(pushed[0][0], 7);
   assert.equal(pushed[0][1].title, 'Aviso');
+  assert.equal(pushed[0][1].url, '/configuracoes');
 });

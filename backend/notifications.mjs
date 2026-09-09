@@ -10,6 +10,14 @@ export function normalizeNotificationPreferences(value) {
   return Object.fromEntries(Object.keys(NOTIFICATION_DEFAULTS).map(key => [key, typeof source[key] === 'boolean' ? source[key] : NOTIFICATION_DEFAULTS[key]]));
 }
 
+export function notificationDestination(preference, role) {
+  const prefix = role === 'professor' ? '/professor' : '/gestor';
+  if (preference === 'newStudent') return `${prefix}/alunos`;
+  if (preference === 'newTicket') return `${prefix}/suporte`;
+  if (preference === 'courseUpdates') return role === 'professor' ? '/professor/turmas' : '/gestor/cursos';
+  return '/configuracoes';
+}
+
 export function createNotificationService({ db, sendEmail, sendPush = async () => ({ sent: false }), logger = console }) {
   async function preferencesFor(userId) {
     const row = await db.prepare('SELECT preferences_json FROM user_settings WHERE user_id=?').get(userId);
@@ -21,11 +29,7 @@ export function createNotificationService({ db, sendEmail, sendPush = async () =
   async function notifyUser(userId, preference, subject, body, idempotencyKey) {
     const user = await db.prepare('SELECT id,name,email,role FROM users WHERE id=? AND active=1').get(userId);
     if (!user || !(await preferencesFor(user.id))[preference]) return { sent: false, reason: 'disabled' };
-    const destination = preference === 'newStudent'
-      ? user.role === 'professor' ? '/professor/alunos' : '/gestor/alunos'
-      : preference === 'newTicket' ? user.role === 'professor' ? '/professor/suporte' : '/gestor/suporte'
-      : preference === 'courseUpdates' ? user.role === 'professor' ? '/professor/turmas' : '/gestor/cursos'
-      : '/configuracoes';
+    const destination = notificationDestination(preference, user.role);
     const [emailResult, pushResult] = await Promise.allSettled([
       sendEmail(user.email, subject, `Olá, ${user.name}.\n\n${body}\n\nProjeto Aprendiz`, idempotencyKey),
       sendPush(user.id, { title: subject, body, tag: idempotencyKey, url: destination }),
