@@ -12,7 +12,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `80d6566a-6ac8-44e0-a33d-0eaf2dcb4ef5`
+- Versão Cloudflare verificada: `ca5bb520-b459-437a-b76b-5fd6d2396b81`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -40,6 +40,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - O cabeçalho exibe somente o nome da página atual, no desktop e no mobile.
 - O frontend é instalável como PWA em desktop, Android e iPhone; o service worker armazena somente o shell estático e nunca respostas da API ou dados privados. O Worker garante a tabela de inscrições push de forma idempotente na primeira requisição de cada isolamento.
 - Notificações Web Push reutilizam as preferências dos avisos por e-mail, exigem consentimento explícito por dispositivo, cifram o conteúdo com VAPID e removem assinaturas expiradas. No iPhone, a ativação é oferecida somente no web app instalado na Tela de Início.
+- Os ícones instaláveis usam a marca do Projeto Aprendiz em fundo vermelho; o Service Worker usa uma versão monocromática da marca como badge da notificação para melhor contraste na barra do dispositivo.
 
 ## Organização do código-fonte
 
