@@ -46,10 +46,12 @@ test('gestor adiciona e anonimiza vários alunos com uma única ação segura', 
         assert.equal(directoryResult.status, 200);
         assert.equal(classesResult.status, 200);
         const students = directoryResult.data.alunos.slice(0, 2);
-        const targetClass = classesResult.data.cursos.find(item => students.every(student => !student.turmas.some(turma => turma.id === item.id)));
+        const targetClass = classesResult.data.cursos.find(item => item.professor === 'Marina Oliveira' && students.every(student => !student.turmas.some(turma => turma.id === item.id)));
         assert.equal(students.length, 2);
         assert.ok(targetClass);
         const studentIds = students.map(student => student.id);
+        const newcomer = directoryResult.data.alunos.find(student => !studentIds.includes(student.id) && !student.turmas.some(turma => turma.id === targetClass.id));
+        assert.ok(newcomer);
 
         const forbidden = await call(professor, 'POST', '/api/alunos/bulk/enroll', { student_ids: studentIds, class_id: targetClass.id });
         assert.equal(forbidden.status, 403);
@@ -59,10 +61,31 @@ test('gestor adiciona e anonimiza vários alunos com uma única ação segura', 
         const enrolled = await call(manager, 'POST', '/api/alunos/bulk/enroll', { student_ids: studentIds, class_id: targetClass.id });
         assert.equal(enrolled.status, 200, JSON.stringify(enrolled.data));
         assert.equal(enrolled.data.selected, 2);
+        assert.equal(enrolled.data.added, 2);
+        assert.equal(enrolled.data.alreadyEnrolled, 0);
         for (const studentId of studentIds) {
             const detail = await call(manager, 'GET', `/alunos/${studentId}`);
             assert.ok(detail.data.turmas.some(turma => turma.id === targetClass.id));
         }
+        const emailAfterEnrollment = await (await fetch(`${baseUrl}/dev-mail`)).text();
+        assert.match(emailAfterEnrollment, /2 alunos foram adicionados/i);
+
+        const repeatedEnrollment = await call(manager, 'POST', '/api/alunos/bulk/enroll', { student_ids: studentIds, class_id: targetClass.id });
+        assert.equal(repeatedEnrollment.status, 200, JSON.stringify(repeatedEnrollment.data));
+        assert.equal(repeatedEnrollment.data.added, 0);
+        assert.equal(repeatedEnrollment.data.alreadyEnrolled, 2);
+        assert.match(repeatedEnrollment.data.message, /já estavam matriculados/i);
+        const emailAfterRepeatedEnrollment = await (await fetch(`${baseUrl}/dev-mail`)).text();
+        assert.equal(emailAfterRepeatedEnrollment, emailAfterEnrollment);
+
+        const partialEnrollment = await call(manager, 'POST', '/api/alunos/bulk/enroll', { student_ids: [studentIds[0], newcomer.id], class_id: targetClass.id });
+        assert.equal(partialEnrollment.status, 200, JSON.stringify(partialEnrollment.data));
+        assert.equal(partialEnrollment.data.added, 1);
+        assert.equal(partialEnrollment.data.alreadyEnrolled, 1);
+        assert.match(partialEnrollment.data.message, /1 aluno foi adicionado/i);
+        assert.match(partialEnrollment.data.message, /1 já estava matriculado/i);
+        const emailAfterPartialEnrollment = await (await fetch(`${baseUrl}/dev-mail`)).text();
+        assert.match(emailAfterPartialEnrollment, /1 aluno foi adicionado/i);
 
         const anonymized = await call(manager, 'POST', '/api/alunos/bulk/anonymize', { student_ids: studentIds });
         assert.equal(anonymized.status, 200, JSON.stringify(anonymized.data));

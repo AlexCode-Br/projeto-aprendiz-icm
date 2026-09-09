@@ -218,15 +218,26 @@ export function createStudentRoutes(context) {
               const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(classId);
               if(Number(occupied.total)+newEnrollmentIds.length>Number(classRow.capacity)){const error=new Error(`A turma possui apenas ${Math.max(0,Number(classRow.capacity)-Number(occupied.total))} vaga(s) disponível(is) para ${newEnrollmentIds.length} nova(s) matrícula(s).`);error.code='BULK_CAPACITY';throw error;}
             }
-            const transferred=new Set(activeEnrollments.filter(row=>Number(row.course_id)===Number(classRow.course_id)&&Number(row.class_id)!==classId).map(row=>Number(row.student_id))).size;
-            await db.prepare(`UPDATE enrollments SET status='cancelada',transferred_to_class_id=? WHERE student_id IN (${placeholders}) AND status='ativa' AND class_id IN (SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND id<>?)`).run(classId,...studentIds,period.id,classRow.course_id,classId);
-            const enrollmentValues=studentIds.map(()=>"(?,?,'ativa',NULL,NULL)").join(',');
-            await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES ${enrollmentValues} ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(...studentIds.flatMap(id=>[id,classId]));
-            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`students_bulk_enrolled:${classId}:${studentIds.length}`,ip);
+            const newEnrollmentSet=new Set(newEnrollmentIds);
+            const transferred=new Set(activeEnrollments.filter(row=>newEnrollmentSet.has(Number(row.student_id))&&Number(row.course_id)===Number(classRow.course_id)&&Number(row.class_id)!==classId).map(row=>Number(row.student_id))).size;
+            if(newEnrollmentIds.length){
+              const newPlaceholders=newEnrollmentIds.map(()=>'?').join(',');
+              await db.prepare(`UPDATE enrollments SET status='cancelada',transferred_to_class_id=? WHERE student_id IN (${newPlaceholders}) AND status='ativa' AND class_id IN (SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND id<>?)`).run(classId,...newEnrollmentIds,period.id,classRow.course_id,classId);
+              const enrollmentValues=newEnrollmentIds.map(()=>"(?,?,'ativa',NULL,NULL)").join(',');
+              await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES ${enrollmentValues} ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(...newEnrollmentIds.flatMap(id=>[id,classId]));
+              await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`students_bulk_enrolled:${classId}:${newEnrollmentIds.length}`,ip);
+            }
             return{classRow,selected:studentIds.length,added:newEnrollmentIds.length,alreadyEnrolled:targetStudents.size,transferred};
           });
-          await notificationService.notifyProfessor(result.classRow.professor_id,'newStudent','Alunos adicionados à turma',`${result.selected} aluno(s) foram vinculados à turma ${result.classRow.label||result.classRow.course_name}, em ${result.classRow.location_name}.`,`students-bulk-enrolled/${classId}/${Date.now()}`);
-          return json(response,200,{success:true,selected:result.selected,added:result.added,alreadyEnrolled:result.alreadyEnrolled,transferred:result.transferred,message:`${result.selected} aluno(s) vinculados à turma com sucesso.`});
+          if(result.added){
+            await notificationService.notifyProfessor(result.classRow.professor_id,'newStudent','Alunos adicionados à turma',`${result.added} ${result.added===1?'aluno foi adicionado':'alunos foram adicionados'} à turma ${classNotificationLabel(result.classRow)}.`,`students-bulk-enrolled/${classId}/${Date.now()}`);
+          }
+          const message=result.added===0
+            ? `Nenhum aluno foi adicionado: ${result.selected===1?'o aluno selecionado já estava matriculado':'todos os alunos selecionados já estavam matriculados'} nesta turma.`
+            : result.alreadyEnrolled
+              ? `${result.added} ${result.added===1?'aluno foi adicionado':'alunos foram adicionados'} à turma. ${result.alreadyEnrolled} ${result.alreadyEnrolled===1?'já estava matriculado':'já estavam matriculados'} e não recebeu nova notificação.`
+              : `${result.added} ${result.added===1?'aluno foi adicionado':'alunos foram adicionados'} à turma com sucesso.`;
+          return json(response,200,{success:true,selected:result.selected,added:result.added,alreadyEnrolled:result.alreadyEnrolled,transferred:result.transferred,message});
         }catch(error){
           if(error.code==='BULK_CLASS_NOT_FOUND')return json(response,404,{message:error.message});
           if(['STUDENT_SELECTION_CHANGED','BULK_COURSE_LIMIT','BULK_CAPACITY'].includes(error.code))return json(response,409,{message:error.message});
