@@ -1,4 +1,4 @@
-const CACHE_NAME = 'projeto-aprendiz-shell-v6';
+const CACHE_NAME = 'projeto-aprendiz-shell-v7';
 const APP_SHELL = [
   '/login',
   '/manifest.webmanifest',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   '/pwa-maskable-512-v5.png',
   '/apple-touch-icon-v5.png',
   '/notification-icon-v5.png',
+  '/notification-large-icon-empty-v1.png',
 ];
 
 self.addEventListener('install', event => {
@@ -55,6 +56,9 @@ self.addEventListener('push', event => {
   } catch {}
   event.waitUntil(self.registration.showNotification(title, {
     body,
+    // Chromium otherwise inserts the site's fallback initial as a second,
+    // redundant large icon on notification layouts such as Samsung One UI.
+    icon: '/notification-large-icon-empty-v1.png',
     badge: '/notification-icon-v5.png',
     tag: String(payload.tag || '').slice(0, 180) || undefined,
     data: { url: targetUrl },
