@@ -1,6 +1,6 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 08 de setembro de 2026 (America/Sao_Paulo).
+Atualizado em 09 de setembro de 2026 (America/Sao_Paulo).
 
 Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de alterar o projeto e atualize-o depois de mudanças relevantes ou de um deploy.
 
@@ -20,12 +20,14 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - A antiga página “Cursos e igrejas” tornou-se “Turmas” e mostra somente as turmas ofertadas.
 - Cada turma combina curso, igreja ou modalidade EAD e professor. `EAD` substitui definitivamente `Remoto`.
+- O curso ofertado é definido na criação da turma e não pode ser alterado depois; na edição, o gestor modifica somente igreja/localidade e professor.
 - Excluir uma turma remove seus vínculos, mas nunca exclui o cadastro do aluno.
 - Igrejas de alunos e professores usam sugestões completas e também aceitam valores personalizados; EAD não é igreja principal.
 - Horários aceitam múltiplos dias e horários semanais e detectam conflitos entre turmas do mesmo professor.
 - A frequência pertence à turma e ao aluno; relatórios PDF e CSV funcionam como folha de chamada por data e período.
 - Cards mobile de alunos, professores e turmas usam layout compacto e menu vertical de três pontos quando há ações.
-- A seção “Alunos por turma” da visão geral usa um ranking horizontal compacto, permite ordenação local e mostra no máximo seis turmas por vez.
+- A seção “Alunos por turma” da visão geral usa um ranking horizontal compacto, ordena por mais ou menos alunos e navega em páginas de até seis turmas.
+- A seção “Últimas inscrições” representa matrículas reais, ordenadas por `enrollments.enrolled_at`, navega em páginas de até cinco registros e filtra por recentes, hoje, ontem ou semana no fuso da aplicação.
 - A listagem do gestor mostra igreja e classe dos alunos; nome e foto abrem os demais dados, e até 100 alunos podem ser selecionados para matrícula ou anonimização em lote com operação transacional.
 - A matrícula em lote ignora alunos que já estão na turma, informa separadamente quantos foram realmente adicionados e não repete o e-mail ao professor quando nenhuma matrícula nova foi criada.
 - A listagem de professores exibe professor, cursos e acesso; igreja deixou de ser coluna, e nome/foto abrem “Dados do professor”, mantendo somente editar, reenviar convite e excluir nas ações.
@@ -56,7 +58,7 @@ git diff --check
 git status --short
 ```
 
-O conjunto atual possui 65 testes: 64 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
+O conjunto atual possui 69 testes: 68 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
 
 Fluxo de publicação:
 

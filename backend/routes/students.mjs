@@ -224,7 +224,7 @@ export function createStudentRoutes(context) {
               const newPlaceholders=newEnrollmentIds.map(()=>'?').join(',');
               await db.prepare(`UPDATE enrollments SET status='cancelada',transferred_to_class_id=? WHERE student_id IN (${newPlaceholders}) AND status='ativa' AND class_id IN (SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND id<>?)`).run(classId,...newEnrollmentIds,period.id,classRow.course_id,classId);
               const enrollmentValues=newEnrollmentIds.map(()=>"(?,?,'ativa',NULL,NULL)").join(',');
-              await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES ${enrollmentValues} ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(...newEnrollmentIds.flatMap(id=>[id,classId]));
+              await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES ${enrollmentValues} ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',enrolled_at=CASE WHEN enrollments.status='ativa' THEN enrollments.enrolled_at ELSE CURRENT_TIMESTAMP END,completed_at=NULL,transferred_to_class_id=NULL`).run(...newEnrollmentIds.flatMap(id=>[id,classId]));
               await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`students_bulk_enrolled:${classId}:${newEnrollmentIds.length}`,ip);
             }
             return{classRow,selected:studentIds.length,added:newEnrollmentIds.length,alreadyEnrolled:targetStudents.size,transferred};
@@ -392,7 +392,7 @@ export function createStudentRoutes(context) {
                 .run(selectedByCourse.get(Number(enrollment.course_id))||null,enrollment.id);
             }
             for (const classRow of classRows) {
-              await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES (?,?,'ativa',NULL,NULL) ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',completed_at=NULL,transferred_to_class_id=NULL`).run(id,classRow.id);
+              await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES (?,?,'ativa',NULL,NULL) ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',enrolled_at=CASE WHEN enrollments.status='ativa' THEN enrollments.enrolled_at ELSE CURRENT_TIMESTAMP END,completed_at=NULL,transferred_to_class_id=NULL`).run(id,classRow.id);
             }
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'student_updated',ip);
             return {

@@ -1,3 +1,4 @@
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { enrollmentBarWidth, MAX_VISIBLE_CLASSES, rankEnrollmentClasses } from '../../utils/enrollment-ranking.js';
@@ -6,15 +7,17 @@ import FormSelect from '../FormSelect.jsx';
 const SORT_OPTIONS = [
     { value: 'most', label: 'Mais alunos' },
     { value: 'least', label: 'Menos alunos' },
-    { value: 'az', label: 'A–Z' },
-    { value: 'za', label: 'Z–A' },
 ];
 
 const EnrollmentOverviewChart = ({ data = [], loading = false }) => {
     const [sortBy, setSortBy] = useState('most');
+    const [page, setPage] = useState(0);
 
     const classes = useMemo(() => data.map(item => ({ ...item, total: Math.max(0, Number(item.total) || 0) })), [data]);
-    const visibleClasses = useMemo(() => rankEnrollmentClasses(classes, sortBy), [classes, sortBy]);
+    const rankedClasses = useMemo(() => rankEnrollmentClasses(classes, sortBy, classes.length), [classes, sortBy]);
+    const totalPages = Math.max(1, Math.ceil(rankedClasses.length / MAX_VISIBLE_CLASSES));
+    const currentPage = Math.min(page, totalPages - 1);
+    const visibleClasses = rankedClasses.slice(currentPage * MAX_VISIBLE_CLASSES, (currentPage + 1) * MAX_VISIBLE_CLASSES);
 
     const largestVisibleTotal = Math.max(0, ...visibleClasses.map(item => item.total));
 
@@ -32,7 +35,7 @@ const EnrollmentOverviewChart = ({ data = [], loading = false }) => {
                         className="min-w-0 flex-1 md:w-44 md:flex-none"
                         value={sortBy}
                         options={SORT_OPTIONS}
-                        onChange={event => setSortBy(event.target.value)}
+                        onChange={event => { setSortBy(event.target.value); setPage(0); }}
                         isClearable={false}
                         isSearchable={false}
                     />
@@ -75,10 +78,22 @@ const EnrollmentOverviewChart = ({ data = [], loading = false }) => {
                 </div>
             )}
 
-            <footer className="border-t border-border bg-surface-muted/50 px-4 py-3 text-xs text-text-muted md:px-6">
-                {loading
-                    ? 'Carregando turmas…'
-                    : `Mostrando ${visibleClasses.length} de ${classes.length} ${classes.length === 1 ? 'turma' : 'turmas'}`}
+            <footer className="flex items-center justify-between border-t border-border bg-surface-muted/50 px-4 py-3 md:px-6">
+                <span className="text-xs text-text-muted">
+                    {loading
+                        ? 'Carregando turmas…'
+                        : classes.length
+                            ? `Mostrando ${currentPage * MAX_VISIBLE_CLASSES + 1}–${currentPage * MAX_VISIBLE_CLASSES + visibleClasses.length} de ${classes.length}`
+                            : 'Nenhuma turma'}
+                </span>
+                <nav className="flex items-center gap-1" aria-label="Navegação das turmas">
+                    <button type="button" className="icon-button h-9 w-9" onClick={() => setPage(currentPage - 1)} disabled={loading || currentPage === 0} aria-label="Página anterior das turmas">
+                        <ChevronLeft aria-hidden="true" />
+                    </button>
+                    <button type="button" className="icon-button h-9 w-9" onClick={() => setPage(currentPage + 1)} disabled={loading || currentPage >= totalPages - 1} aria-label="Próxima página das turmas">
+                        <ChevronRight aria-hidden="true" />
+                    </button>
+                </nav>
             </footer>
         </>
     );

@@ -165,6 +165,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       transferred_to_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL,
       UNIQUE(student_id, class_id)
     );
+    CREATE INDEX IF NOT EXISTS enrollments_recent_active_idx ON enrollments(enrolled_at DESC,id DESC) WHERE status='ativa';
     CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);
     CREATE TABLE IF NOT EXISTS attendance_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -457,6 +458,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     const enrollmentColumns=await db.prepare('PRAGMA table_info(enrollments)').all();
     if(!enrollmentColumns.some(column=>column.name==='completed_at'))await db.exec('ALTER TABLE enrollments ADD COLUMN completed_at TEXT;');
     if(!enrollmentColumns.some(column=>column.name==='transferred_to_class_id'))await db.exec('ALTER TABLE enrollments ADD COLUMN transferred_to_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;');
+    await db.exec("CREATE INDEX IF NOT EXISTS enrollments_recent_active_idx ON enrollments(enrolled_at DESC,id DESC) WHERE status='ativa';");
     await db.exec('CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);');
     const dropoutColumns=await db.prepare('PRAGMA table_info(dropout_events)').all();
     if(!dropoutColumns.some(column=>column.name==='reason_category'))await db.exec("ALTER TABLE dropout_events ADD COLUMN reason_category TEXT NOT NULL DEFAULT 'outro' CHECK(reason_category IN ('mudanca','desinteresse','horario','saude','familia','outro')); UPDATE dropout_events SET reason_category=CASE WHEN LOWER(reason) LIKE '%horário%' OR LOWER(reason) LIKE '%horario%' THEN 'horario' WHEN LOWER(reason) LIKE '%pessoais%' OR LOWER(reason) LIKE '%familia%' THEN 'familia' ELSE 'outro' END;");

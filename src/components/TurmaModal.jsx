@@ -25,7 +25,7 @@ const TurmaModal = ({ isOpen, onClose, onSave, turma, allProfessores = [], allLo
 
     const validate = () => {
         const newErrors = {};
-        const courseError = catalogNameError(formData.nome, 'curso');
+        const courseError = turma ? '' : catalogNameError(formData.nome, 'curso');
         const locationError = catalogNameError(formData.local, 'local ou modalidade');
         if (courseError) newErrors.nome = courseError;
         if (locationError) newErrors.local = locationError;
@@ -41,7 +41,7 @@ const TurmaModal = ({ isOpen, onClose, onSave, turma, allProfessores = [], allLo
             return;
         }
         onSave({
-            nome: cleanText(formData.nome, 100),
+            ...(!turma && { nome: cleanText(formData.nome, 100) }),
             local: cleanText(formData.local, 100),
             professor: formData.professor,
         });
@@ -63,7 +63,7 @@ const TurmaModal = ({ isOpen, onClose, onSave, turma, allProfessores = [], allLo
         <Modal isOpen={isOpen} onClose={onClose} title={modalTitle}>
                 <form onSubmit={handleSubmit} noValidate>
                     <div className="space-y-4">
-                        <div>
+                        {!turma && <div>
                             <label htmlFor="nome" className="form-label">Curso ofertado</label>
                             <FormSelect
                                 name="nome"
@@ -80,7 +80,7 @@ const TurmaModal = ({ isOpen, onClose, onSave, turma, allProfessores = [], allLo
                             />
                             <p className="mt-1 text-xs text-text-muted">Escolha uma opção ou digite um curso que ainda não aparece na lista.</p>
                             {errors.nome && <p className="text-danger text-xs mt-1">{errors.nome}</p>}
-                        </div>
+                        </div>}
                         <div>
                             <label htmlFor="local" className="form-label">Igreja ou modalidade</label>
                             <FormSelect

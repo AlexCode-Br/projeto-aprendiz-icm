@@ -153,16 +153,18 @@ export function createClassRoutes(context) {
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const id=Number(courseMatch[1]),body=await readJson(request);
         if (body.weekday || body.start_time || body.horarios !== undefined) return json(response,403,{message:'Os dias e horários são definidos pelo professor da turma.'});
-        const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
+        const existingClass=await db.prepare(`SELECT classes.id,classes.course_id,classes.label,classes.capacity,courses.name AS course_name,locations.name AS location_name
+          FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id
+          WHERE classes.id=? AND classes.school_year_id=?`).get(id,period.id);
+        if(!existingClass)return json(response,404,{message:'Turma não encontrada.'});
+        const requestedCourseName=cleanText(body.nome,100);
+        if(requestedCourseName&&requestedCourseName.localeCompare(existingClass.course_name,'pt-BR',{sensitivity:'base'})!==0)return json(response,400,{message:'O curso ofertado não pode ser alterado depois que a turma é criada.'});
+        const courseName=existingClass.course_name,locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
         const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
         const errors={nome:catalogNameError(courseName,'curso'),local:catalogNameError(locationName,'local ou modalidade'),professor:professorName?'':'Selecione um professor cadastrado.',...validateClassDetails({weekday,start_time:startTime,label:classLabel,capacity})};
         if(hasValidationErrors(errors))return invalid(response,errors);
         const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
         if(!professor)return json(response,400,{message:'Professor não encontrado.'});
-        const existingClass=await db.prepare(`SELECT classes.id,classes.label,classes.capacity,courses.name AS course_name,locations.name AS location_name
-          FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id
-          WHERE classes.id=? AND classes.school_year_id=?`).get(id,period.id);
-        if(!existingClass)return json(response,404,{message:'Turma não encontrada.'});
         const generatedPreviousLabel=`${existingClass.course_name} — ${existingClass.location_name}`;
         const nextLabel=body.label===undefined
           ? (existingClass.label===generatedPreviousLabel?`${courseName} — ${locationName}`:existingClass.label)
@@ -171,9 +173,8 @@ export function createClassRoutes(context) {
         if(nextCapacity!==null){const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(id);if(Number(occupied.total)>nextCapacity)return invalid(response,{capacity:`A capacidade não pode ser menor que os ${occupied.total} aluno(s) já matriculados.`});}
         try{
           await db.transaction(async () => {
-            const courseId = await ensureActiveCatalogItem('courses', courseName);
             const locationId = await ensureActiveCatalogItem('locations', locationName);
-            const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,capacity=? WHERE id=? AND school_year_id=?').run(courseId,professor.id,locationId,nextLabel,nextCapacity,id,period.id);
+            const result=await db.prepare('UPDATE classes SET professor_id=?,location_id=?,label=?,capacity=? WHERE id=? AND school_year_id=?').run(professor.id,locationId,nextLabel,nextCapacity,id,period.id);
             if(!result.changes)throw new Error('class_update_lost');
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
           });
