@@ -351,29 +351,37 @@
     .attendance-table td:last-child button { flex: 1; padding-inline: 0.5rem; font-size: 12px; }
 }
 
-/* A single musical entrance, started only after the login logo has loaded.
-   Transforms preserve the existing layout and stop before the user signs in. */
-.auth-page--login .auth-login-logo[data-ready='true'] {
-    transform-origin: 50% 65%;
-    animation: login-logo-reveal 1.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+/* Login only: all layers share the original artwork throughout the animation. */
+.auth-login-logo[data-ready='true'] .login-logo-original {
+    opacity: 0;
 }
+.login-logo-pen {
+    stroke-dasharray: 1;
+    animation: login-logo-draw var(--duration) linear var(--delay) both;
+}
+.login-logo-staff {
+    stroke-dasharray: 1;
+    animation: login-logo-draw 1.4s ease-in-out both;
+}
+.login-logo-note {
+    animation: login-logo-note 1.6s cubic-bezier(0.22, 1, 0.36, 1) var(--delay) both;
+}
+.login-logo-project { animation: login-logo-original 0.6s ease-out 0.45s both; }
+.login-logo-ink-complete { animation: login-logo-original 0.3s ease-out 3.7s both; }
 
-@keyframes login-logo-reveal {
-    0% {
-        opacity: 0;
-        clip-path: inset(0 100% 0 0);
-        transform: translateY(8px) scale(0.96);
-    }
-    55% {
-        opacity: 1;
-        clip-path: inset(0 0 0 0);
-        transform: translateY(-3px) scale(1.015);
-    }
-    100% {
-        opacity: 1;
-        clip-path: inset(0 0 0 0);
-        transform: none;
-    }
+@keyframes login-logo-draw {
+    from { stroke-dashoffset: 1; }
+    to { stroke-dashoffset: 0; }
+}
+@keyframes login-logo-note {
+    0% { opacity: 0; transform: translateY(-7px); }
+    38% { opacity: 1; transform: translateY(2px); }
+    65% { opacity: 1; transform: translateY(-2px); }
+    100% { opacity: 1; transform: none; }
+}
+@keyframes login-logo-original {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @keyframes fadeInUp {
@@ -446,7 +454,8 @@
 #sidebar-overlay { transition: opacity 0.3s ease-in-out; }
 
 @media (prefers-reduced-motion: reduce) {
-    .auth-page--login .auth-login-logo[data-ready='true'] { animation: none; }
+    .auth-login-logo[data-ready='true'] .login-logo-original { animation: none; opacity: 1; }
+    .auth-login-logo .login-logo-performance { display: none; }
     html { scroll-behavior: auto; }
     *, *::before, *::after {
         animation-duration: 0.01ms !important;

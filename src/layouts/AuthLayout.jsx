@@ -1,6 +1,7 @@
 import React from 'react';
 import useDarkMode from '../hooks/useDarkMode';
 import Logo from '../assets/projeto-aprendiz-logo.png';
+import AnimatedLoginLogo from '../components/AnimatedLoginLogo';
 import { Music2, Users, BookOpen, ShieldCheck, Sun, Moon } from 'lucide-react';
 
 const AuthLayout = ({ children, title, description, footer = true, isLogin = false, showThemeToggle = true, showBrandLabel = true }) => {
@@ -15,7 +16,7 @@ const AuthLayout = ({ children, title, description, footer = true, isLogin = fal
             </aside>}
             <section className={`relative px-6 py-8 sm:px-10 sm:py-12 ${isLogin ? 'auth-login-panel' : ''}`} aria-labelledby="auth-title">
                 {!isLogin && showThemeToggle && <button type="button" onClick={() => setIsDark(!isDark)} className="icon-button absolute right-4 top-4" aria-label={isDark ? 'Usar tema claro' : 'Usar tema escuro'}>{isDark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}</button>}
-                {isLogin && <img src={Logo} width="300" height="149" alt="Projeto Aprendiz" className="auth-logo auth-login-logo w-48 sm:w-56" onLoad={event => { event.currentTarget.dataset.ready = 'true'; }} />}
+                {isLogin && <AnimatedLoginLogo />}
                 {!isLogin && <img src={Logo} width="300" height="149" alt="Projeto Aprendiz" className={`auth-logo lg:hidden ${isDark ? 'brightness-0 invert' : ''}`} />}
                 {!isLogin && showBrandLabel && <p className="mb-5 text-xs font-bold uppercase tracking-[0.16em] text-primary">Projeto Aprendiz</p>}
                 <h1 id="auth-title" className="auth-title">{title}</h1>
