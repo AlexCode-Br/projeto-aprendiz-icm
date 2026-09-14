@@ -351,7 +351,8 @@
     .attendance-table td:last-child button { flex: 1; padding-inline: 0.5rem; font-size: 12px; }
 }
 
-/* Login only: all layers share the original artwork throughout the animation. */
+/* Login only: sequential pen strokes and complete, individually placed notes. */
+.auth-logo.auth-login-logo { width: min(16rem, 100%); margin-bottom: 1.25rem; }
 .auth-login-logo[data-ready='true'] .login-logo-original {
     opacity: 0;
 }
@@ -361,27 +362,30 @@
 }
 .login-logo-staff {
     stroke-dasharray: 1;
-    animation: login-logo-draw 1.4s ease-in-out both;
+    animation: login-logo-draw 0.8s ease-in-out var(--delay) both;
 }
 .login-logo-note {
-    animation: login-logo-note 1.6s cubic-bezier(0.22, 1, 0.36, 1) var(--delay) both;
+    animation: login-logo-note 0.38s cubic-bezier(0.22, 1, 0.36, 1) var(--delay) both;
 }
-.login-logo-project { animation: login-logo-original 0.6s ease-out 0.45s both; }
-.login-logo-ink-complete { animation: login-logo-original 0.3s ease-out 3.7s both; }
+.login-logo-project { animation: login-logo-original 0.4s ease-out 0.7s both; }
+.login-logo-letter-finish { animation: login-logo-original 0.1s linear var(--delay) both; }
 
 @keyframes login-logo-draw {
     from { stroke-dashoffset: 1; }
     to { stroke-dashoffset: 0; }
 }
 @keyframes login-logo-note {
-    0% { opacity: 0; transform: translateY(-7px); }
-    38% { opacity: 1; transform: translateY(2px); }
-    65% { opacity: 1; transform: translateY(-2px); }
+    0% { opacity: 0; transform: translateY(-10px); }
+    70% { opacity: 1; transform: translateY(1px); }
     100% { opacity: 1; transform: none; }
 }
 @keyframes login-logo-original {
     from { opacity: 0; }
     to { opacity: 1; }
+}
+
+@media (max-height: 700px) {
+    .auth-logo.auth-login-logo { width: min(13rem, 100%); margin-bottom: 0.75rem; }
 }
 
 @keyframes fadeInUp {
@@ -454,8 +458,8 @@
 #sidebar-overlay { transition: opacity 0.3s ease-in-out; }
 
 @media (prefers-reduced-motion: reduce) {
-    .auth-login-logo[data-ready='true'] .login-logo-original { animation: none; opacity: 1; }
-    .auth-login-logo .login-logo-performance { display: none; }
+    .auth-login-logo .login-logo-pen, .auth-login-logo .login-logo-staff { animation: none; stroke-dashoffset: 0; }
+    .auth-login-logo .login-logo-note, .auth-login-logo .login-logo-project, .auth-login-logo .login-logo-letter-finish { animation: none; opacity: 1; transform: none; }
     html { scroll-behavior: auto; }
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
