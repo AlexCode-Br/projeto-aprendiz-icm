@@ -421,7 +421,8 @@ export function createStudentRoutes(context) {
       if (request.method === 'GET' && (url.pathname === '/professores/meus-alunos' || url.pathname === '/api/professores/me/alunos')) {
         const session = await authorize(request, response, ['professor']); if (!session) return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
-        const page = Math.max(1, Number(url.searchParams.get('page') || 1));
+        const requestedPage = Number(url.searchParams.get('page') || 1);
+        const page = Number.isSafeInteger(requestedPage) ? Math.max(1, requestedPage) : 1;
         const apiRoute=url.pathname.startsWith('/api/');
         const requestedLimit=Number(url.searchParams.get('limit') || (apiRoute?100:10));
         const limit=Math.min(apiRoute?100:50,Math.max(1,Number.isSafeInteger(requestedLimit)?requestedLimit:(apiRoute?100:10)));
@@ -431,15 +432,53 @@ export function createStudentRoutes(context) {
         const search = `%${String(url.searchParams.get('search') || '').trim()}%`;
         const profile = await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
         if (!profile) return json(response, 403, { message: 'Perfil de professor não configurado.' });
-        const total = (await db.prepare(`SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE students.active=1 AND enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=? AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?)`).get(period.id,profile.id,search,search)).total;
+        const classConditions = ['classes.active=1', 'classes.school_year_id=?', 'classes.professor_id=?'];
+        const classParams = [period.id, profile.id];
+        const course = String(url.searchParams.get('curso') || '').trim();
+        if (course) { classConditions.push('classes.course_id IN (SELECT id FROM courses WHERE name=?)'); classParams.push(course); }
+        const studentConditions = ['students.active=1', "(students.name LIKE ? OR COALESCE(students.email,'') LIKE ? OR COALESCE(students.phone,'') LIKE ?)"];
+        const studentParams = [search, search, search];
+        for (const [key, column, conditions, params] of [
+          ['turma_id', 'classes.id', classConditions, classParams],
+          ['church_id', 'students.church_id', studentConditions, studentParams],
+        ]) {
+          const raw = url.searchParams.get(key);
+          if (!raw) continue;
+          if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw)) || Number(raw) < 1) return json(response, 400, { message: 'Filtro inválido.' });
+          conditions.push(`${column}=?`); params.push(Number(raw));
+        }
+        const group = String(url.searchParams.get('classe') || '').trim();
+        if (group) { studentConditions.push('students.age_group=?'); studentParams.push(group); }
+        const scope = classConditions.join(' AND ');
+        studentConditions.push(`students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND ${scope})`);
+        const where = studentConditions.join(' AND ');
+        const params = [...studentParams, ...classParams];
+        const total = (await db.prepare(`SELECT COUNT(*) AS total FROM students WHERE ${where}`).get(...params)).total;
         // Limit the aggregated class list to this professor as well. The previous
         // query selected the right students but exposed their other active classes.
         const professorStudentSelect=studentSelect.replace(
           'LEFT JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=?',
           'LEFT JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=?',
         );
-        const rows = await db.prepare(`${professorStudentSelect} WHERE students.active=1 AND students.id IN (SELECT enrollments.student_id FROM enrollments JOIN classes ON classes.id=enrollments.class_id WHERE enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=?) AND (students.name LIKE ? OR COALESCE(students.email,'') LIKE ?) GROUP BY students.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(period.id,profile.id,period.id,profile.id,search,search,limit,(page-1)*limit);
-        return json(response, 200, { alunos: rows.map(studentView), total });
+        const rows = await db.prepare(`${professorStudentSelect} WHERE ${where} GROUP BY students.id ORDER BY ${orderBy} LIMIT ? OFFSET ?`).all(period.id,profile.id,...params,limit,(page-1)*limit);
+        const attendance = rows.length ? await db.prepare(`
+          SELECT attendance_records.student_id,COUNT(*) AS registros,
+            SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END) AS presencas
+          FROM attendance_records
+          JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id
+          JOIN classes ON classes.id=attendance_sessions.class_id
+          WHERE ${scope} AND attendance_records.student_id IN (${rows.map(() => '?').join(',')})
+            AND EXISTS (SELECT 1 FROM enrollments WHERE enrollments.student_id=attendance_records.student_id AND enrollments.class_id=classes.id AND enrollments.status='ativa')
+          GROUP BY attendance_records.student_id
+        `).all(...classParams,...rows.map(row => row.id)) : [];
+        const attendanceByStudent = new Map(attendance.map(row => [Number(row.student_id), row]));
+        // Options are scoped independently of the current search so filters remain usable.
+        const turmas = await db.prepare(`SELECT classes.id,courses.name AS nome,locations.name AS local FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE classes.active=1 AND classes.school_year_id=? AND classes.professor_id=? ORDER BY courses.name,locations.name,classes.id`).all(period.id,profile.id);
+        const igrejas = await db.prepare(`SELECT DISTINCT churches.id,churches.name AS nome FROM churches JOIN students ON students.church_id=churches.id JOIN enrollments ON enrollments.student_id=students.id JOIN classes ON classes.id=enrollments.class_id WHERE students.active=1 AND enrollments.status='ativa' AND classes.active=1 AND classes.school_year_id=? AND classes.professor_id=? ORDER BY churches.name`).all(period.id,profile.id);
+        return json(response, 200, { alunos: rows.map(row => {
+          const record = attendanceByStudent.get(Number(row.id));
+          return { ...studentView(row), frequencia: record ? Math.round(100 * Number(record.presencas) / Number(record.registros)) : null };
+        }), total, filtros: { turmas, igrejas } });
       }
     
       if (request.method === 'GET' && url.pathname === '/api/catalogos') {

@@ -5,13 +5,13 @@ import ContactLink from './ContactLink';
 import KebabMenu, { KebabMenuItem } from './KebabMenu';
 import FormCheckbox from './FormCheckbox';
 
-export default function MobileStudentList({ students, loading, error, onView, onEdit, onDelete, selectedIds, onToggleSelection, showAcademicSummary = false, showCourses = false }) {
+export default function MobileStudentList({ students, loading, error, onView, onEdit, onDelete, selectedIds, onToggleSelection, showAcademicSummary = false, showCourses = false, showAttendance = false }) {
     return <section className="space-y-3 sm:hidden" aria-label="Lista de alunos" aria-busy={loading}>
         {loading ? Array.from({ length: 4 }, (_, index) => <div key={index} className="panel p-3"><div className="skeleton h-28 rounded-xl" /></div>)
             : error ? <p role="alert" className="panel p-4 text-sm text-danger">{error}</p>
                 : students.map(student => {
                     const selected = selectedIds?.has(Number(student.id));
-                    return <article key={student.id} className={`panel relative flex min-w-0 items-stretch gap-4 p-4 pr-[5.5rem] ${selected ? 'border-primary ring-1 ring-primary/20' : ''}`} aria-label={student.nome}>
+                    return <article key={student.id} className={`panel relative flex min-w-0 items-stretch gap-4 p-4 ${onEdit || onDelete || onToggleSelection ? 'pr-[5.5rem]' : ''} ${selected ? 'border-primary ring-1 ring-primary/20' : ''}`} aria-label={student.nome}>
                         <button type="button" onClick={() => onView(student)} className="self-center rounded-full transition-transform hover:scale-105 focus-visible:outline-offset-4" aria-label={`Ver dados de ${student.nome}`}>
                             <ProfileAvatar name={student.nome} src={student.foto_url} className="h-[72px] w-[72px]" textClassName="text-2xl" />
                         </button>
@@ -20,7 +20,7 @@ export default function MobileStudentList({ students, loading, error, onView, on
                             <button type="button" onClick={() => onView(student)} className="max-w-full rounded text-left hover:text-primary" aria-label={`Ver dados de ${student.nome}`}>
                                 <span className="block break-words text-base font-semibold leading-5">{student.nome}</span>
                             </button>
-                            {showAcademicSummary ? <div className="mt-2 grid min-w-0 grid-cols-2 gap-x-4 gap-y-1 text-[13px] leading-5">
+                            {showAttendance ? <div className="mt-2 text-sm"><span className="block text-xs text-text-muted">Frequência</span><strong>{student.frequencia == null ? 'Sem chamadas' : `${student.frequencia}%`}</strong></div> : showAcademicSummary ? <div className="mt-2 grid min-w-0 grid-cols-2 gap-x-4 gap-y-1 text-[13px] leading-5">
                                 <div className="min-w-0"><span className="block text-[0.6875rem] font-semibold uppercase tracking-wide text-text-muted">Igreja</span><span className="block break-words text-text-default">{student.igreja || 'Não informada'}</span></div>
                                 <div className="min-w-0"><span className="block text-[0.6875rem] font-semibold uppercase tracking-wide text-text-muted">Classe</span><span className="block break-words text-text-default">{student.classe || 'Não informada'}</span></div>
                             </div> : <div className="mt-1 grid min-w-0 gap-0.5 text-[13px] leading-5 [&_a]:min-h-7 [&_a]:items-center [&_svg]:!h-[18px] [&_svg]:!w-[18px] [&_svg]:shrink-0">
@@ -38,10 +38,10 @@ export default function MobileStudentList({ students, loading, error, onView, on
                                 aria-label={`${selected ? 'Remover' : 'Adicionar'} ${student.nome} da seleção`}
                                 className="items-center p-2"
                             />}
-                            <KebabMenu label={`Ações de ${student.nome}`}>
+                            {(onEdit || onDelete) && <KebabMenu label={`Ações de ${student.nome}`}>
                                 {onEdit && <KebabMenuItem icon={Pencil} tone="primary" onClick={() => onEdit(student)}>Editar cadastro</KebabMenuItem>}
                                 {onDelete && <KebabMenuItem icon={Trash2} tone="danger" onClick={() => onDelete(student)}>Excluir aluno</KebabMenuItem>}
-                            </KebabMenu>
+                            </KebabMenu>}
                         </div>
                     </article>;
                 })}

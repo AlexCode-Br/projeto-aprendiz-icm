@@ -6,7 +6,7 @@ Data: 17/09/2026. Comparação com a área do gestor no código local.
 
 Foram revisadas as oito páginas de professor, os componentes de modais usados por elas, a listagem mobile compartilhada e os contratos das rotas relacionadas. Os achados abaixo são evidências do código; não representam uma homologação completa em aparelhos reais nem uma auditoria de segurança exaustiva. Nenhum cadastro, chamado, mensagem ou frequência de produção foi alterado.
 
-A retirada da animação do login foi implementada separadamente. Os ajustes da área do professor descritos aqui ainda não foram implementados.
+A retirada da animação do login foi implementada separadamente. Atualização de 17/09: os itens 2 e 3 abaixo foram corrigidos em “Meus alunos”, junto à paginação de cinco registros, filtros equivalentes ao gestor e frequência no lugar dos contatos, conforme solicitação posterior. Os demais achados continuam pendentes. A lista foi conferida em desktop e viewport mobile de 390 px, com banco local fictício; testes cobrem filtros, cálculo e isolamento por professor.
 
 ## Problemas funcionais prioritários
 
