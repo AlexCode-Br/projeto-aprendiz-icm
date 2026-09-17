@@ -125,6 +125,8 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `6542f056-b7d5-4964-aa4f-5bc672683bcd`; `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres`, `/api/auth/me` retornou HTTP 401 sem sessão e `www` respondeu HTTP 308 para a raiz.
 - Agenda personalizada do dashboard do professor publicada no commit `750e139`, com remoção do card de alunos recentes, seleção de data e aulas específicas.
 - Versão Cloudflare verificada: `02b7c3ec-ac41-428b-8ee5-d57493e651f8`; `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres` e `/api/auth/me` retornou HTTP 401 sem sessão.
+- Hotfix `aae5493` passou a garantir de forma idempotente a tabela de datas específicas no Worker, corrigindo o erro inicial do dashboard em produção.
+- Versão Cloudflare verificada: `87567d82-4d8d-4366-8c8c-abc7f28887f8`; `/api/health` retornou HTTP 200 com PostgreSQL e duas atualizações consecutivas de `/api/dashboard/professor` foram atendidas sem erro nos logs.
 
 ## Prompt curto para uma nova tarefa
 
