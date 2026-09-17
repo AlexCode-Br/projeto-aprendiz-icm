@@ -1,6 +1,6 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 09 de setembro de 2026 (America/Sao_Paulo).
+Atualizado em 17 de setembro de 2026 (America/Sao_Paulo).
 
 Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de alterar o projeto e atualize-o depois de mudanças relevantes ou de um deploy.
 
@@ -17,6 +17,8 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
 ## Decisões consolidadas
+
+- A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026 (alteração local ainda não publicada).
 
 - A antiga página “Cursos e igrejas” tornou-se “Turmas” e mostra somente as turmas ofertadas.
 - Cada turma combina curso, igreja ou modalidade EAD e professor. `EAD` substitui definitivamente `Remoto`.
@@ -55,6 +57,8 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - As listas de turmas, alunos, professores, informativos e chamados do gestor exibem cinco registros por página, com navegação compacta por setas após a aplicação das buscas e filtros.
 
 ## Organização do código-fonte
+
+- A revisão comparativa da área do professor está em `docs/REVISAO_AREA_PROFESSOR.md`. Os achados e propostas de padronização estão documentados; ainda não foram implementados.
 
 - A arquitetura e a responsabilidade dos diretórios estão em `docs/ARCHITECTURE.md`.
 - A cópia local canônica deve ficar em `C:\Users\alexa\Documents\Codex\2026-08-25\v\projeto-aprendiz`.
