@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createDatabase } from './database.mjs';
 import { attachClassSchedules, initializeClassSchedules } from './class-schedules.mjs';
-import { classScheduleConflicts, classSchedules, nextClassSchedule, nextClassSchedules, sortClassSchedules, validateClassSchedules } from '../shared/class-schedules.mjs';
+import { classScheduleConflicts, classSchedules, classesOnDate, nextClassSchedule, nextClassSchedules, sortClassSchedules, validateClassSchedules } from '../shared/class-schedules.mjs';
 
 test('horários semanais validam dias, horas e duplicações e ordenam a semana', () => {
   assert.equal(validateClassSchedules([]),'');
@@ -29,6 +29,16 @@ test('próxima aula usa todos os horários, fuso local e virada da semana', () =
   assert.equal(nextClassSchedule([{id:1,horarios:[]}]),null);
   assert.deepEqual(nextClassSchedules(courses,new Date('2026-09-02T13:00:00Z'),'America/Sao_Paulo',2).map(item=>item.id),[1,2]);
   assert.equal(nextClassSchedules(courses,new Date('2026-09-02T13:00:00Z'),'America/Sao_Paulo',1)[0].offsetSeconds>=0,true);
+});
+
+test('agenda consulta uma data específica e combina recorrência semanal com exceção', () => {
+  const classes=[
+    {id:1,horarios:[{weekday:'Segunda-feira',start_time:'09:00'}]},
+    {id:2,horarios:[{tipo:'data',date:'2026-09-09',start_time:'14:00'}]},
+  ];
+  assert.deepEqual(classesOnDate(classes,'2026-09-07').map(item=>item.id),[1]);
+  assert.deepEqual(classesOnDate(classes,'2026-09-09').map(item=>item.id),[2]);
+  assert.equal(nextClassSchedules(classes,new Date('2026-09-08T12:00:00Z')).some(item=>item.id===2),true);
 });
 
 test('conflitos consideram turmas diferentes no mesmo dia e horário', () => {

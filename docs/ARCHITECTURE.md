@@ -43,6 +43,7 @@ Navegador
 - As preferências de notificação são compartilhadas entre e-mail e push; ativar ou desativar push é uma escolha independente para cada dispositivo.
 - Arquivos em `public/` são reservados a URLs estáveis; assets importados pelo código ficam em `src/assets/` e recebem hash do Vite.
 - Migrações antigas não são removidas: bancos novos e existentes dependem da sequência completa.
+- Horários de turmas usam `class_schedules` para recorrências semanais e `class_schedule_dates` para aulas em datas específicas; ambos são acessados exclusivamente pela API autorizada do professor.
 - Testes ficam próximos ao backend porque exercitam os mesmos módulos e contratos sem uma segunda estrutura paralela.
 
 ## Compatibilidade de nomes

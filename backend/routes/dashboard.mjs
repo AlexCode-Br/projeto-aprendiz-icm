@@ -1,5 +1,5 @@
 import { attachClassSchedules } from '../class-schedules.mjs';
-import { classScheduleConflicts, nextClassSchedule, nextClassSchedules } from '../../shared/class-schedules.mjs';
+import { classScheduleConflicts, classesOnDate, nextClassSchedule, nextClassSchedules } from '../../shared/class-schedules.mjs';
 
 export function createDashboardRoutes(context) {
   const {
@@ -127,8 +127,10 @@ export function createDashboardRoutes(context) {
         const timeZone=appTimeZone;
         const conflitosHorario=classScheduleConflicts(classes);
         const conflictingClassIds=new Set(conflitosHorario.flatMap(conflict=>conflict.turmas.map(item=>Number(item.id))));
-        const proximasAulas=nextClassSchedules(classes,new Date(),timeZone,6).map(item=>({...item,conflito:conflictingClassIds.has(Number(item.id))}));
-        const proxima=nextClassSchedule(classes,new Date(),timeZone);
+        const selectedDate = url.searchParams.get('date');
+        const validDate = /^\d{4}-\d{2}-\d{2}$/.test(String(selectedDate || '')) ? selectedDate : '';
+        const proximasAulas=(validDate ? classesOnDate(classes,validDate,6) : nextClassSchedules(classes,new Date(),timeZone,6)).map(item=>({...item,conflito:conflictingClassIds.has(Number(item.id))}));
+        const proxima=validDate ? proximasAulas[0] || null : nextClassSchedule(classes,new Date(),timeZone);
         const frequency=await db.prepare("SELECT COUNT(attendance_records.id) AS total,COALESCE(SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS presencas FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE professor_profiles.user_id=? AND classes.school_year_id=?").get(session.user_id,period.id);
         const frequenciaMedia=frequency.total?Math.round(100*frequency.presencas/frequency.total):null;
         const frequencyRows=await db.prepare(`
@@ -163,7 +165,7 @@ export function createDashboardRoutes(context) {
         return json(response,200,{
           stats:{totalAlunos:Number(totalAlunos||0),turmasAtivas:classes.length,informativos:Number(informativos||0),ticketsAbertos:Number(ticketsAbertos||0),frequenciaMedia,conflitosHorario:conflitosHorario.length},
           proximaAula:proxima,proximasAulas,frequenciaPorTurma,conflitosHorario,
-          periodo:schoolYearView(period),
+          periodo:schoolYearView(period),agendaData:validDate||null,
         });
       }
     return json(response, 404, { message: 'Rota não encontrada.' });

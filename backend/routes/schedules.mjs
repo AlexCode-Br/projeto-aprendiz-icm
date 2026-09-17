@@ -26,12 +26,14 @@ export function createScheduleRoutes({ db, json, authorize, selectedSchoolYear, 
         if(!target)return {forbidden:true};
 
         if(horarios.length){
-          const slotConditions=horarios.map(()=>'(class_schedules.weekday_index=? AND class_schedules.start_minutes=?)').join(' OR ');
+          const weekly = horarios.filter(slot => slot.tipo !== 'data');
+          const dated = horarios.filter(slot => slot.tipo === 'data');
+          const slotConditions=weekly.map(()=>'(class_schedules.weekday_index=? AND class_schedules.start_minutes=?)').join(' OR ');
           const slotParams=horarios.flatMap(slot=>{
             const [hour,minute]=slot.start_time.split(':').map(Number);
             return [CLASS_WEEKDAYS.indexOf(slot.weekday),hour*60+minute];
           });
-          const conflict=await db.prepare(`
+          const conflict=weekly.length ? await db.prepare(`
             SELECT classes.id,
               COALESCE(NULLIF(classes.label,''),courses.name || ' — ' || locations.name) AS turma,
               class_schedules.weekday_index,class_schedules.start_minutes
@@ -43,7 +45,7 @@ export function createScheduleRoutes({ db, json, authorize, selectedSchoolYear, 
               AND classes.active=1 AND classes.id<>? AND (${slotConditions})
             ORDER BY class_schedules.weekday_index,class_schedules.start_minutes,classes.id
             LIMIT 1
-          `).get(profile.id,period.id,classId,...slotParams);
+          `).get(profile.id,period.id,classId,...slotParams) : null;
           if(conflict){
             const weekday=CLASS_WEEKDAYS[Number(conflict.weekday_index)];
             const startTime=`${String(Math.floor(Number(conflict.start_minutes)/60)).padStart(2,'0')}:${String(Number(conflict.start_minutes)%60).padStart(2,'0')}`;
@@ -54,9 +56,14 @@ export function createScheduleRoutes({ db, json, authorize, selectedSchoolYear, 
         const updated = await db.prepare('UPDATE classes SET weekday=?,start_time=? WHERE id=? AND school_year_id=? AND active=1 AND professor_id=?').run(horarios[0]?.weekday || null,horarios[0]?.start_time || null,classId,period.id,profile.id);
         if (!updated.changes) return {forbidden:true};
         await db.prepare('DELETE FROM class_schedules WHERE class_id=?').run(classId);
-        for (const slot of horarios) {
+        await db.prepare('DELETE FROM class_schedule_dates WHERE class_id=?').run(classId);
+        for (const slot of horarios.filter(item => item.tipo !== 'data')) {
           const [hour,minute] = slot.start_time.split(':').map(Number);
           await db.prepare('INSERT INTO class_schedules (class_id,weekday_index,start_minutes) VALUES (?,?,?)').run(classId,CLASS_WEEKDAYS.indexOf(slot.weekday),hour*60+minute);
+        }
+        for (const slot of horarios.filter(item => item.tipo === 'data')) {
+          const [hour,minute] = slot.start_time.split(':').map(Number);
+          await db.prepare('INSERT INTO class_schedule_dates (class_id,class_date,start_minutes) VALUES (?,?,?)').run(classId,slot.date,hour*60+minute);
         }
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_schedule_updated:'+classId,ip);
         return {saved:true};
