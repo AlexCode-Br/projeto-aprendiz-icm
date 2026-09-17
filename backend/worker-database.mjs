@@ -177,6 +177,8 @@ class WorkerDatabase {
 // Web Push even when the production migration runner is not available.
 let pushSchemaReady = false;
 let pushSchemaPromise = null;
+let scheduleDatesSchemaReady = false;
+let scheduleDatesSchemaPromise = null;
 
 export function ensurePushSubscriptionsSchema(database) {
   if (pushSchemaReady) return Promise.resolve();
@@ -205,9 +207,29 @@ export function ensurePushSubscriptionsSchema(database) {
   return pushSchemaPromise;
 }
 
+export function ensureClassScheduleDatesSchema(database) {
+  if (scheduleDatesSchemaReady) return Promise.resolve();
+  if (!scheduleDatesSchemaPromise) {
+    scheduleDatesSchemaPromise = database.exec(`
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.class_schedule_dates (
+        class_id INTEGER NOT NULL REFERENCES projeto_aprendiz.classes(id) ON DELETE CASCADE,
+        class_date DATE NOT NULL,
+        start_minutes SMALLINT NOT NULL CHECK(start_minutes BETWEEN 0 AND 1439),
+        PRIMARY KEY(class_id, class_date, start_minutes)
+      );
+      ALTER TABLE projeto_aprendiz.class_schedule_dates ENABLE ROW LEVEL SECURITY;
+      REVOKE ALL ON TABLE projeto_aprendiz.class_schedule_dates FROM PUBLIC, anon, authenticated;
+    `).then(() => { scheduleDatesSchemaReady = true; }).catch(error => {
+      scheduleDatesSchemaPromise = null;
+      throw error;
+    });
+  }
+  return scheduleDatesSchemaPromise;
+}
+
 // Instantiate inside fetch()/scheduled(), never in module scope. Hyperdrive
 // owns the origin connection pool; the driver connection belongs to one request.
 // Its configuration MUST have query caching disabled for auth/read-after-write.
 export function createWorkerDatabase(env, options) { return new WorkerDatabase(env, options); }
 
-export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8, ensurePushSubscriptionsSchema };
+export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8, ensurePushSubscriptionsSchema, ensureClassScheduleDatesSchema };

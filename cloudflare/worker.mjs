@@ -1,5 +1,5 @@
 import { createApplication, isApiPath } from '../backend/application.mjs';
-import { createWorkerDatabase, ensurePushSubscriptionsSchema } from '../backend/worker-database.mjs';
+import { createWorkerDatabase, ensureClassScheduleDatesSchema, ensurePushSubscriptionsSchema } from '../backend/worker-database.mjs';
 import { createHttpSecurity } from '../backend/security.mjs';
 import { createStructuredLogger } from '../backend/logger.mjs';
 import { invokeApi } from './http-bridge.mjs';
@@ -39,6 +39,7 @@ export default {
     try {
       db = createWorkerDatabase(env, { logger });
       await ensurePushSubscriptionsSchema(db);
+      await ensureClassScheduleDatesSchema(db);
       const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER) });
       return await invokeApi(request, application.handler);
     } catch (error) {
