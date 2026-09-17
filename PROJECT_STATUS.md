@@ -123,6 +123,8 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `90a466a9-4037-4e4f-8c58-c7acba3d6ea0`; `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres`, `/api/auth/me` retornou HTTP 401 sem sessão e `www` respondeu HTTP 308 para a raiz.
 - Lista “Meus alunos” do professor atualizada no commit `41a1561`, com frequência, filtros, paginação de cinco registros e contatos preservados no modal.
 - Versão Cloudflare verificada: `6542f056-b7d5-4964-aa4f-5bc672683bcd`; `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres`, `/api/auth/me` retornou HTTP 401 sem sessão e `www` respondeu HTTP 308 para a raiz.
+- Agenda personalizada do dashboard do professor publicada no commit `750e139`, com remoção do card de alunos recentes, seleção de data e aulas específicas.
+- Versão Cloudflare verificada: `02b7c3ec-ac41-428b-8ee5-d57493e651f8`; `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres` e `/api/auth/me` retornou HTTP 401 sem sessão.
 
 ## Prompt curto para uma nova tarefa
 
