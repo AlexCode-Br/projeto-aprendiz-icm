@@ -116,6 +116,8 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `821b512e-c86a-43d2-b368-52fb088ff963`; raiz e `/login` retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão, o bundle atual de Configurações retornou HTTP 200 e `www` redirecionou com HTTP 308 para a raiz.
 - Paginação de cinco registros nas listas de turmas, alunos, professores, informativos e suporte publicada no commit `ca2239a`.
 - Versão Cloudflare verificada: `8982f9c3-0b2d-46cc-bc48-5957bb59dabb`; raiz, `/login` e o bundle principal retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
+- Logo estática restaurada no login e revisão comparativa da área do professor registrada no commit `95d1331`.
+- Versão Cloudflare verificada: `90a466a9-4037-4e4f-8c58-c7acba3d6ea0`; `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres`, `/api/auth/me` retornou HTTP 401 sem sessão e `www` respondeu HTTP 308 para a raiz.
 
 ## Prompt curto para uma nova tarefa
 
