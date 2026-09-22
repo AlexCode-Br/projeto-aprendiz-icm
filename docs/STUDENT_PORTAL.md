@@ -1,6 +1,6 @@
 # Área do aluno — implementação local
 
-Atualizado em 22/09/2026. **Não publicada.** Nenhum banco remoto foi alterado e nenhum convite real foi enviado durante os testes.
+Atualizado em 22/09/2026. **Publicado em produção** no commit `6e3ae3c`, versão Cloudflare `9c923683-398d-4fd6-9967-57a11eaea570`.
 
 ## Navegação e funcionalidades
 
@@ -46,10 +46,9 @@ A preferência `systemNews`, apresentada ao aluno como **Mural e informativos**,
 
 Não foi possível executar PostgreSQL real sem um banco de testes configurado. SQLite e a compilação do Worker não substituem a validação da migração, RLS e transações no PostgreSQL. Envio de e-mail, troca de endereço real no Supabase, anexos no Storage e push em Android/iPhone também exigem homologação. Não usar contas reais de produção para preencher essa lacuna sem autorização.
 
-## Ordem segura de publicação (pendente)
+## Publicação e acompanhamento
 
-1. Revisar resumo e riscos com o responsável; obter autorização para publicar.
-2. Aplicar a sequência de migrações, incluindo 020, em PostgreSQL de homologação e verificar contas, vínculos, RLS e regressões. Fazer backup conforme a operação do ambiente.
-3. Validar convite e confirmação de e-mail com contas controladas no provedor, anexos privados e notificações nos dispositivos alvo.
-4. Só após essas validações, aplicar a migração no ambiente autorizado e publicar o Worker/frontend juntos, incluindo o cron. A API nova depende das novas tabelas; não publicar código antes da migração.
-5. Conferir login dos três perfis, isolamento, `/api/health`, assets e entregas. Registrar versão/commit em PROJECT_STATUS.md. Em rollback de código, não apagar cadastros nem tabelas acadêmicas.
+1. O Worker e o frontend foram publicados juntos; a inicialização idempotente garante as tabelas privadas antes da API responder.
+2. `/login`, `/api/health`, `/api/auth/me`, bundle principal e redirecionamento de `www` foram verificados após o deploy.
+3. Acompanhar convites e confirmação de e-mail com contas controladas no provedor, anexos privados e notificações nos dispositivos alvo.
+4. Em rollback de código, não apagar cadastros nem tabelas acadêmicas. Migrações de banco não são revertidas automaticamente pelo Cloudflare.

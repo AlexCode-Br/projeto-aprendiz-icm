@@ -6,7 +6,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 ## Ponto de retomada
 
-### Trabalho local — área do aluno (não publicado)
+### Área do aluno e mural — publicados
 
 - Implementada a área do aluno com navegação reduzida: Início, Meus cursos e Mural; dados pessoais em Configurações.
 - Os informativos por turma evoluíram para o **Mural da turma**: o professor cria, edita e exclui publicações categorizadas, anexa imagens/PDFs, fixa conteúdo e pode exigir confirmação de leitura. O aluno vê somente o mural das próprias matrículas e confirma explicitamente quando solicitado. A migração `022_course_wall.sql` guarda essa exigência sem abrir acesso direto às tabelas.
@@ -14,16 +14,15 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Aluno pode editar nome, foto e dados pessoais; nunca matrícula, curso ou chamada. E-mail de acesso/contato só muda após senha atual e confirmação enviada ao novo endereço.
 - Contas vinculadas explicitamente por convite do gestor, permissões de API e arquivos restritas, migração `020_student_portal.sql` e rotina agendada de notificações incluídas.
 - O catálogo local passou a incluir as 27 igrejas de Salvador fornecidas pelo site de inscrição, reutilizadas nos formulários de turmas, alunos, professores e configurações do aluno. Localidades existentes foram preservadas, e EAD continua restrito à modalidade de turma.
-- Não houve deploy nem migração no banco remoto. Antes de publicar, validar migração PostgreSQL em homologação e os fluxos reais de Supabase Auth, e-mail, Storage e push. Ver detalhes e riscos em `docs/STUDENT_PORTAL.md`.
-- Os registros de produção abaixo são históricos e não representam publicação desta área.
+- Publicação realizada em 22/09/2026. O Worker inicializa de forma idempotente as tabelas privadas, o contrato do mural e o catálogo necessários à área do aluno. Fluxos reais de convite, troca de e-mail, Storage e push ainda devem ser acompanhados com contas controladas. Ver detalhes em `docs/STUDENT_PORTAL.md`.
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `ca2239a`
+- Último commit da aplicação publicado em produção: `6e3ae3c`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `8982f9c3-0b2d-46cc-bc48-5957bb59dabb`
+- Versão Cloudflare verificada: `9c923683-398d-4fd6-9967-57a11eaea570`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -91,7 +90,7 @@ git diff --check
 git status --short
 ```
 
-Validação local em 22/09/2026: 87 testes, sendo 86 executados com sucesso e uma regressão PostgreSQL opcional ignorada porque `TEST_DATABASE_URL` não está definida. `pnpm lint` e build React passaram. O mural também foi conferido visualmente em largura responsiva. Não houve publicação.
+Validação local em 22/09/2026: 87 testes, sendo 86 executados com sucesso e uma regressão PostgreSQL opcional ignorada porque `TEST_DATABASE_URL` não está definida. `pnpm lint`, build React e empacotamento do Worker passaram. O mural também foi conferido visualmente em largura responsiva.
 
 Fluxo de publicação:
 
@@ -110,6 +109,14 @@ Depois do deploy, confirme:
 - resposta HTTP 200 de `/api/health` e banco `postgres`.
 
 Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permanentes e qualquer pendência real.
+
+### Publicação — 22/09/2026
+
+- Área completa do aluno, catálogo de igrejas, confirmação segura de e-mail e mural das turmas publicados no commit `6e3ae3c`.
+- O mural permite ao professor publicar, editar, excluir, anexar arquivos, fixar conteúdo e solicitar confirmação de leitura; o aluno acessa somente as próprias turmas.
+- Cron de notificações ativado a cada cinco minutos e tabelas privadas inicializadas com RLS e privilégios públicos revogados.
+- Versão Cloudflare verificada: `9c923683-398d-4fd6-9967-57a11eaea570`.
+- Validação pós-publicação: `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres`, `/api/auth/me` retornou HTTP 401 sem sessão, o bundle principal retornou HTTP 200 e `www` redirecionou com HTTP 308 para a raiz.
 
 ### Publicação — 09/09/2026
 
