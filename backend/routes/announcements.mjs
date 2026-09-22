@@ -82,45 +82,36 @@ export function createAnnouncementRoutes(context) {
           }
           const recipientRows = await db.prepare(`SELECT announcement_id,recipient_type,recipient_id FROM announcement_recipients WHERE announcement_id IN (${placeholders}) ORDER BY announcement_id,recipient_type,recipient_id`).all(...ids);
           for (const recipient of recipientRows) {
-            const audience = recipientsByAnnouncement.get(Number(recipient.announcement_id)) || { todos: false, professores: [], cursos: [] };
+            const audience = recipientsByAnnouncement.get(Number(recipient.announcement_id)) || { todos: false, professores: [], cursos: [], turmas: [] };
             if (recipient.recipient_type === 'professor') audience.professores.push(Number(recipient.recipient_id));
             if (recipient.recipient_type === 'curso') audience.cursos.push(Number(recipient.recipient_id));
             recipientsByAnnouncement.set(Number(recipient.announcement_id), audience);
+          }
+          const classRows=await db.prepare(`SELECT announcement_id,class_id FROM student_announcement_classes WHERE announcement_id IN (${placeholders}) ORDER BY announcement_id,class_id`).all(...ids);
+          for(const relation of classRows){
+            const announcementId=Number(relation.announcement_id);
+            const audience=recipientsByAnnouncement.get(announcementId)||{todos:false,professores:[],cursos:[],turmas:[]};
+            audience.turmas.push(Number(relation.class_id));
+            recipientsByAnnouncement.set(announcementId,audience);
           }
         }
         const mapped=rows.map(row=>{
           const schedule=announcementScheduleParts(row.scheduled_at);
           const isScheduled=Date.parse(row.scheduled_at)>Date.now();
-          return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:sanitizeAnnouncementContent(row.content),data_publicacao:row.scheduled_at,agendado_em:row.scheduled_at,data:schedule.date.split('-').reverse().join('/'),hora:schedule.time,status:isScheduled?'Agendado':'Publicado',lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read),anexos:attachmentsByAnnouncement.get(Number(row.id)) || [],destinatarios:recipientsByAnnouncement.get(Number(row.id)) || { todos: true, professores: [], cursos: [] }};
+          return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:sanitizeAnnouncementContent(row.content),data_publicacao:row.scheduled_at,agendado_em:row.scheduled_at,data:schedule.date.split('-').reverse().join('/'),hora:schedule.time,status:isScheduled?'Agendado':'Publicado',lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read),anexos:attachmentsByAnnouncement.get(Number(row.id)) || [],destinatarios:recipientsByAnnouncement.get(Number(row.id)) || { todos: true, professores: [], cursos: [], turmas: [] }};
         });
         return json(response,200,mapped);
       }
       if(request.method==='GET'&&url.pathname==='/api/informativos/destinatarios'){
         const session=await authorize(request,response,['gestor']);if(!session)return;
-        const [professores,cursos,professorCourses]=await Promise.all([
-          db.prepare('SELECT id,name AS nome FROM professor_profiles WHERE active=1 ORDER BY name').all(),
-          db.prepare('SELECT id,name AS nome FROM courses WHERE active=1 ORDER BY name').all(),
-          db.prepare(`
-            SELECT DISTINCT classes.professor_id,classes.course_id
-            FROM classes
-            JOIN professor_profiles ON professor_profiles.id=classes.professor_id AND professor_profiles.active=1
-            JOIN courses ON courses.id=classes.course_id AND courses.active=1
-            WHERE classes.active=1
-              AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)
-          `).all(),
-        ]);
-        const coursesByProfessor=new Map();
-        for(const relation of professorCourses){
-          const professorId=Number(relation.professor_id),courseId=Number(relation.course_id);
-          if(!Number.isInteger(professorId)||!Number.isInteger(courseId))continue;
-          const current=coursesByProfessor.get(professorId)||[];
-          current.push(courseId);
-          coursesByProfessor.set(professorId,current);
-        }
-        return json(response,200,{
-          professores:professores.map(row=>({id:Number(row.id),nome:row.nome,cursos:[...new Set(coursesByProfessor.get(Number(row.id))||[])]})),
-          cursos:cursos.map(row=>({id:Number(row.id),nome:row.nome})),
-        });
+        const turmas=await db.prepare(`SELECT c.id,co.name AS curso,l.name AS local,pp.name AS professor,c.label
+          FROM classes c
+          JOIN professor_profiles pp ON pp.id=c.professor_id AND pp.active=1
+          JOIN courses co ON co.id=c.course_id AND co.active=1
+          JOIN locations l ON l.id=c.location_id AND l.active=1
+          JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
+          WHERE c.active=1 ORDER BY co.name,l.name,pp.name,c.id`).all();
+        return json(response,200,{turmas:turmas.map(row=>({id:Number(row.id),curso:row.curso,local:row.local,professor:row.professor,label:row.label}))});
       }
       const attachmentMatch=url.pathname.match(/^\/api\/informativos\/(\d+)\/anexos\/(\d+)$/);
       if(attachmentMatch&&request.method==='GET'){
@@ -160,6 +151,10 @@ export function createAnnouncementRoutes(context) {
           await db.transaction(async () => {
             result=await db.prepare("INSERT INTO announcements (author_user_id,title,category,content,scheduled_at,published_at,pinned) VALUES (?,?,?,?,?,?,?)").run(session.user_id,title,body.categoria,content,scheduled,scheduled,body.fixarNoTopo?1:0);
             for (const recipient of recipientResult.items) await db.prepare('INSERT INTO announcement_recipients (announcement_id,recipient_type,recipient_id) VALUES (?,?,?)').run(result.lastInsertRowid,recipient.recipient_type,recipient.recipient_id);
+            if(Array.isArray(recipientResult.audience.turmas)){
+              await db.prepare('INSERT INTO student_announcement_audiences(announcement_id,all_students) VALUES (?,0)').run(result.lastInsertRowid);
+              for(const classId of recipientResult.audience.turmas)await db.prepare('INSERT INTO student_announcement_classes(announcement_id,class_id) VALUES (?,?)').run(result.lastInsertRowid,classId);
+            }
           });
           stored=await prepareStoredAttachments(Number(result.lastInsertRowid),attachmentResult.newItems);
           await db.transaction(async()=>{
@@ -204,6 +199,12 @@ export function createAnnouncementRoutes(context) {
             await insertAnnouncementAttachments(announcementId,stored);
             await db.prepare('DELETE FROM announcement_recipients WHERE announcement_id=?').run(announcementId);
             for (const recipient of recipientResult.items) await db.prepare('INSERT INTO announcement_recipients (announcement_id,recipient_type,recipient_id) VALUES (?,?,?)').run(announcementId,recipient.recipient_type,recipient.recipient_id);
+            if(Array.isArray(recipientResult.audience.turmas)){
+              await db.prepare('DELETE FROM student_announcement_classes WHERE announcement_id=?').run(announcementId);
+              await db.prepare('DELETE FROM student_announcement_audiences WHERE announcement_id=?').run(announcementId);
+              await db.prepare('INSERT INTO student_announcement_audiences(announcement_id,all_students) VALUES (?,0)').run(announcementId);
+              for(const classId of recipientResult.audience.turmas)await db.prepare('INSERT INTO student_announcement_classes(announcement_id,class_id) VALUES (?,?)').run(announcementId,classId);
+            }
             await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_updated',ip);
           });
         }catch(error){

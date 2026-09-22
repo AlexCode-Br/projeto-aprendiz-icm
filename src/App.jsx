@@ -111,11 +111,11 @@ const AppRoutes = () => {
                                     <Route path="/aluno/cursos" element={<StudentCourses />} />
                                     <Route path="/aluno/cursos/:id" element={<StudentCourseDetails />} />
                                     <Route path="/aluno/turmas" element={<Navigate to="/aluno/cursos" replace />} />
-                                    <Route path="/aluno/informativos" element={<StudentPortal key="informativos" page="informativos" />} />
+                                    <Route path="/aluno/informativos" element={<Navigate to="/aluno/cursos" replace />} />
                                     <Route path="/aluno/perfil" element={<Navigate to="/configuracoes" replace />} />
                                     <Route path="/aluno/calendario" element={<Navigate to="/aluno/cursos?view=calendario" replace />} />
                                     <Route path="/aluno/frequencia" element={<Navigate to="/aluno/cursos?view=frequencia" replace />} />
-                                    <Route path="/aluno/notificacoes" element={<Navigate to="/aluno/informativos" replace />} />
+                                    <Route path="/aluno/notificacoes" element={<Navigate to="/aluno/cursos" replace />} />
                                 </>}
                                 {commonRoutes}
 

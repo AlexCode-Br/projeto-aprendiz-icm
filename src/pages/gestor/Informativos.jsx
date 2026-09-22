@@ -13,24 +13,21 @@ import AnnouncementAudienceModal from '../../components/AnnouncementAudienceModa
 import useLiveRefresh from '../../hooks/useLiveRefresh';
 import KebabMenu, { KebabMenuItem } from '../../components/KebabMenu';
 import Pagination from '../../components/Pagination';
-import StudentAudienceModal from '../../components/StudentAudienceModal';
 
 const ITEMS_PER_PAGE = 5;
 
 const Informativos = () => {
     const { showToast } = useToast();
     const [informativos, setInformativos] = useState([]);
-    const [studentAudience, setStudentAudience] = useState(null);
     const [professores, setProfessores] = useState([]);
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [isDeleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
     const [isSendConfirmModalOpen, setSendConfirmModalOpen] = useState(false);
-    const [audienceOptions, setAudienceOptions] = useState({ professores: [], cursos: [] });
+    const [audienceOptions, setAudienceOptions] = useState({ turmas: [] });
     const [audienceLoading, setAudienceLoading] = useState(false);
     const [isReadersModalOpen, setReadersModalOpen] = useState(false);
     const [currentInformativo, setCurrentInformativo] = useState(null);
     const [formDataToSave, setFormDataToSave] = useState(null);
-    const [hasProfessors, setHasProfessors] = useState(false);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('Todos');
@@ -49,7 +46,6 @@ const Informativos = () => {
                 : [];
             if (profResponse) {
                 setProfessores(professores);
-                setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
             }
         } catch (error) {
             if (silent) throw error;
@@ -76,10 +72,6 @@ const Informativos = () => {
     }, [informativos, refreshLive]);
 
     const handleOpenFormModal = (info = null) => {
-        if (!info && !hasProfessors) {
-            showToast('Cadastre ao menos um professor antes de criar informativos.', 'warning');
-            return;
-        }
         setFormDataToSave(null);
         setCurrentInformativo(info);
         setFormModalOpen(true);
@@ -98,13 +90,13 @@ const Informativos = () => {
     const handleSaveAndOpenConfirm = (formData) => {
         setFormDataToSave({
             ...formData,
-            destinatarios: formData.destinatarios || currentInformativo?.destinatarios || { todos: true, professores: [], cursos: [] },
+            destinatarios: formData.destinatarios || currentInformativo?.destinatarios || { todos: false, professores: [], cursos: [], turmas: [] },
         });
         setFormModalOpen(false); // Fecha o form
         setSendConfirmModalOpen(true); // Abre a confirmação de envio
         setAudienceLoading(true);
         api.get('/api/informativos/destinatarios')
-            .then(response => setAudienceOptions({ professores: response.data?.professores || [], cursos: response.data?.cursos || [] }))
+            .then(response => setAudienceOptions({ turmas: response.data?.turmas || [] }))
             .catch(error => showToast(error.message || 'Não foi possível carregar os destinatários.', 'error'))
             .finally(() => setAudienceLoading(false));
     };
@@ -195,7 +187,6 @@ const Informativos = () => {
                                 <span className={`text-xs font-bold uppercase px-2 py-1 rounded ${getCategoryClass(info.categoria)}`}>{info.categoria}</span>
                                 <div className="flex items-center gap-1"><span className={`rounded-full px-2 py-1 text-xs font-semibold ${info.status === 'Agendado' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200' : 'bg-success/10 text-success'}`}>{info.status}</span>{info.fixado && <span title="Fixado no topo"><Pin aria-hidden="true" className="text-primary !h-4 !w-4" /></span>}
                                     <div className="md:hidden"><KebabMenu label={`Ações do informativo ${info.titulo}`}>
-                                        <KebabMenuItem icon={Eye} onClick={() => setStudentAudience(info)}>Compartilhar com alunos</KebabMenuItem>
                                         <KebabMenuItem icon={Pencil} tone="primary" onClick={() => handleOpenFormModal(info)}>Editar informativo</KebabMenuItem>
                                         <KebabMenuItem icon={Trash2} tone="danger" onClick={() => handleOpenDeleteConfirm(info)}>Excluir informativo</KebabMenuItem>
                                     </KebabMenu></div>
@@ -231,7 +222,6 @@ const Informativos = () => {
                 draft={formDataToSave}
             />
 
-            {studentAudience && <StudentAudienceModal announcement={studentAudience} onClose={() => setStudentAudience(null)} />}
             <AnnouncementAudienceModal
                 isOpen={isSendConfirmModalOpen}
                 onClose={handleCloseAudience}

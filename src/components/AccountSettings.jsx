@@ -200,7 +200,7 @@ export default function AccountSettings() {
         ['systemNews', 'Comunicados do sistema', 'Receber novidades e atualizações do projeto.'],
     ] : user?.role === 'aluno' ? [
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da própria conta.'],
-        ['systemNews', 'Mural e informativos', 'Receber publicações destinadas a você ou às suas turmas.'],
+        ['systemNews', 'Publicações e informativos', 'Receber publicações destinadas às suas turmas.'],
     ] : [
         ['newStudent', 'Novos alunos', 'Avisar quando um aluno entrar em uma de suas turmas.'],
         ['newTicket', 'Respostas do suporte', 'Avisar quando houver uma resposta em seus chamados.'],

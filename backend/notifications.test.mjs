@@ -40,6 +40,7 @@ test('destino da notificação acompanha o perfil e o tipo do aviso', () => {
   assert.equal(notificationDestination('courseUpdates', 'gestor'), '/gestor/cursos');
   assert.equal(notificationDestination('systemAlerts', 'professor'), '/configuracoes');
   assert.equal(notificationDestination('systemNews', 'gestor'), '/configuracoes');
+  assert.equal(notificationDestination('systemNews', 'aluno'), '/aluno/cursos');
 });
 
 test('uma falha no e-mail não impede a entrega da notificação push', async () => {

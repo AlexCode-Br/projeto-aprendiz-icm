@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { AlertTriangle, CalendarClock, MapPin, MessageSquareText, Users } from 'lucide-react';
 import api from '../../services/api';
 import PageSkeleton from '../../components/PageSkeleton';
@@ -9,6 +10,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { classScheduleConflicts, classSchedules } from '../../../shared/class-schedules.mjs';
 
 export default function ProfessorTurmas() {
+    const location=useLocation();
     const [courses,setCourses] = useState([]);
     const [loading,setLoading] = useState(true);
     const [error,setError] = useState('');
@@ -24,6 +26,11 @@ export default function ProfessorTurmas() {
         finally { setLoading(false); }
     },[]);
     useEffect(()=>{load();},[load]);
+    useEffect(()=>{
+        if(loading||!location.hash.startsWith('#turma-'))return;
+        const frame=window.requestAnimationFrame(()=>document.getElementById(location.hash.slice(1))?.scrollIntoView({behavior:'smooth',block:'center'}));
+        return()=>window.cancelAnimationFrame(frame);
+    },[courses,loading,location.hash]);
     const save = async horarios => {
         const {data}=await api.put(`/api/professores/me/turmas/${editing.id}/horarios`,{horarios});
         setCourses(current=>current.map(course=>course.id===editing.id?{...course,horarios:data.horarios}:course));
@@ -37,7 +44,7 @@ export default function ProfessorTurmas() {
         </div>}
         {error ? <div className="panel empty-state"><p role="alert">{error}</p><button type="button" className="btn btn-secondary" onClick={load}>Tentar novamente</button></div>
             : <div className="grid gap-4 md:grid-cols-2">
-                {courses.map(course=>{const hasConflict=conflictingIds.has(String(course.id));return <article key={course.id} className={`panel flex min-w-0 flex-col overflow-hidden ${hasConflict?'border-warning/70':''}`}>
+                {courses.map(course=>{const hasConflict=conflictingIds.has(String(course.id));return <article id={`turma-${course.id}`} key={course.id} className={`panel flex min-w-0 scroll-mt-24 flex-col overflow-hidden ${hasConflict?'border-warning/70':''}`}>
                     <div className="flex-1 p-5">
                         <div className="flex items-start justify-between gap-3"><h2 className="break-words text-lg font-semibold">{course.nome}</h2>{hasConflict&&<span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">Conflito</span>}</div>
                         <p className="mt-2 flex items-start gap-2 text-sm text-text-muted"><MapPin aria-hidden="true" className="shrink-0" /><span className="break-words">{course.local}</span></p>

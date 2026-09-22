@@ -2,7 +2,7 @@ import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import api from '../services/api';
-import { LayoutDashboard, BookOpen, Users, GraduationCap, ChartNoAxesCombined, Megaphone, MessagesSquare, CalendarCheck2, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, GraduationCap, ChartNoAxesCombined, Megaphone, MessagesSquare, CalendarCheck2, Settings, PanelLeftClose, PanelLeftOpen, ChevronDown } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
@@ -27,6 +27,9 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     const userRole = user?.role || 'gestor';
     const [supportUnread,setSupportUnread]=useState(0);
     const [announcementUnread,setAnnouncementUnread]=useState(0);
+    const [linkedClasses,setLinkedClasses]=useState([]);
+    const [linkedClassesLoading,setLinkedClassesLoading]=useState(false);
+    const [classesExpanded,setClassesExpanded]=useState(()=>location.pathname.startsWith('/aluno/cursos')||location.pathname.startsWith('/professor/turmas'));
 
     const [isCollapsed, setIsCollapsed] = useState(() => {
         return localStorage.getItem('sidebarCollapsed') === 'true';
@@ -43,8 +46,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     },[userRole]);
 
     const refreshAnnouncementUnread=useCallback(async()=>{
-        if(!['professor','aluno'].includes(userRole)){setAnnouncementUnread(0);return;}
-        try { const response=await api.get(userRole==='aluno'?'/api/aluno/nao-lidos':'/api/informativos/nao-lidos');setAnnouncementUnread(Number(response.data.total||0)); }
+        if(userRole!=='professor'){setAnnouncementUnread(0);return;}
+        try { const response=await api.get('/api/informativos/nao-lidos');setAnnouncementUnread(Number(response.data.total||0)); }
         catch { setAnnouncementUnread(0); }
     },[userRole]);
 
@@ -64,13 +67,28 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         return()=>{clearInterval(interval);window.removeEventListener('focus',refreshAnnouncementUnread);window.removeEventListener('announcements:updated',refreshAnnouncementUnread);};
     },[refreshAnnouncementUnread]);
 
+    const refreshLinkedClasses=useCallback(async()=>{
+        if(!['aluno','professor'].includes(userRole)){setLinkedClasses([]);return;}
+        setLinkedClassesLoading(true);
+        try{
+            const response=await api.get(userRole==='aluno'?'/api/aluno/turmas':'/professores/meus-cursos');
+            setLinkedClasses(userRole==='aluno'?(response.data?.turmas||[]):(Array.isArray(response.data)?response.data:[]));
+        }catch{setLinkedClasses([]);}
+        finally{setLinkedClassesLoading(false);}
+    },[userRole]);
+
+    useEffect(()=>{
+        void refreshLinkedClasses();
+        window.addEventListener('classes:updated',refreshLinkedClasses);
+        return()=>window.removeEventListener('classes:updated',refreshLinkedClasses);
+    },[refreshLinkedClasses]);
+
     const navLinks = [
         { path: '/dashboard', icon: <LayoutDashboard aria-hidden="true" />, label: 'Início', role: ['aluno'] },
-        { path: '/cursos', icon: <BookOpen aria-hidden="true" />, label: 'Meus cursos', role: ['aluno'] },
-        { path: '/informativos', icon: <Megaphone aria-hidden="true" />, label: 'Mural', role: ['aluno'], unread: announcementUnread },
+        { path: '/cursos', icon: <BookOpen aria-hidden="true" />, label: 'Meus cursos', role: ['aluno'], cascade: true },
         { path: "/dashboard", icon: <LayoutDashboard aria-hidden="true" />, label: "Dashboard", role: ['gestor', 'professor'] },
         { path: "/cursos", icon: <BookOpen aria-hidden="true" />, label: "Turmas", role: ['gestor'] },
-        { path: "/turmas", icon: <BookOpen aria-hidden="true" />, label: "Minhas turmas", role: ['professor'] },
+        { path: "/turmas", icon: <BookOpen aria-hidden="true" />, label: "Minhas turmas", role: ['professor'], cascade: true },
         { path: "/alunos", icon: <Users aria-hidden="true" />, label: "Alunos", role: ['gestor', 'professor'] },
         { path: "/professores", icon: <GraduationCap aria-hidden="true" />, label: "Professores", role: ['gestor'] },
         { path: "/relatorios", icon: <ChartNoAxesCombined aria-hidden="true" />, label: "Relatórios", role: ['professor'] },
@@ -124,21 +142,40 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden p-3">
                 <p className={`mb-4 mt-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60 ${isCollapsed ? 'lg:sr-only' : ''}`}>{userRole === 'gestor' ? 'Área do gestor' : userRole === 'aluno' ? 'Área do aluno' : 'Área do professor'}</p>
                 <nav aria-label="Seções principais" className="flex-1 space-y-1.5">
-                    {navLinks.filter(link => link.role.includes(userRole)).map(link => (
-                        <NavLink
-                            key={link.label}
-                            to={`/${userRole}${link.path}`}
-                            title={isCollapsed ? link.label : undefined}
-                            className="sidebar-link"
-                            onClick={() => setSidebarOpen(false)}
-                        >
+                    {navLinks.filter(link => link.role.includes(userRole)).map(link => {
+                        const target=`/${userRole}${link.path}`;
+                        if(link.cascade){
+                            const active=location.pathname===target||location.pathname.startsWith(`${target}/`);
+                            return <div key={link.label}>
+                                <button type="button" title={isCollapsed?link.label:undefined} aria-expanded={classesExpanded} aria-controls="linked-classes-menu" className={`sidebar-link w-full ${active?'active':''}`} onClick={()=>{if(isCollapsed){setIsCollapsed(false);setClassesExpanded(true);}else setClassesExpanded(value=>!value);}}>
+                                    <div className="flex shrink-0 items-center justify-center">{link.icon}</div>
+                                    <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isCollapsed?'lg:w-0 lg:opacity-0 lg:-ml-3 w-auto opacity-100':'w-auto opacity-100'}`}>{link.label}</span>
+                                    <ChevronDown aria-hidden="true" className={`ml-auto h-4 w-4 shrink-0 transition-transform ${classesExpanded?'rotate-180':''} ${isCollapsed?'lg:hidden':''}`}/>
+                                </button>
+                                {classesExpanded&&<div id="linked-classes-menu" className={`${isCollapsed?'lg:hidden':''} ml-5 mt-1 space-y-1 border-l border-white/20 pl-3`}>
+                                    <NavLink to={target} end className="block rounded-lg px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white" onClick={()=>setSidebarOpen(false)}>Ver todas</NavLink>
+                                    {linkedClassesLoading&&<p className="px-3 py-2 text-xs text-white/60" role="status">Carregando…</p>}
+                                    {!linkedClassesLoading&&linkedClasses.map(item=>{
+                                        const id=Number(item.id);
+                                        const course=item.curso||item.nome||'Turma';
+                                        const custom=item.label&&item.label!==course&&item.label!==`${course} — ${item.local}`;
+                                        const label=custom?item.label:course;
+                                        const childTarget=userRole==='aluno'?`/aluno/cursos/${id}`:`/professor/turmas#turma-${id}`;
+                                        return <NavLink key={id} to={childTarget} className="block min-w-0 rounded-lg px-3 py-2 text-white/80 hover:bg-white/10 hover:text-white" onClick={()=>setSidebarOpen(false)}>
+                                            <span className="block truncate text-xs font-semibold">{label}</span>
+                                            {item.local&&<span className="block truncate text-[0.68rem] text-white/55">{item.local}</span>}
+                                        </NavLink>;
+                                    })}
+                                    {!linkedClassesLoading&&!linkedClasses.length&&<p className="px-3 py-2 text-xs text-white/60">Nenhuma turma vinculada.</p>}
+                                </div>}
+                            </div>;
+                        }
+                        return <NavLink key={link.label} to={target} title={isCollapsed?link.label:undefined} className="sidebar-link" onClick={()=>setSidebarOpen(false)}>
                             <div className="flex shrink-0 items-center justify-center">{link.icon}</div>
-                            <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isCollapsed ? 'lg:w-0 lg:opacity-0 lg:-ml-3 w-auto opacity-100' : 'w-auto opacity-100'}`}>
-                                {link.label}
-                            </span>
+                            <span className={`whitespace-nowrap transition-all duration-300 overflow-hidden ${isCollapsed?'lg:w-0 lg:opacity-0 lg:-ml-3 w-auto opacity-100':'w-auto opacity-100'}`}>{link.label}</span>
                             {link.unread>0&&<span className={`ml-auto inline-flex min-w-6 items-center justify-center rounded-full bg-black/15 px-1.5 py-0.5 text-xs font-bold text-current ${isCollapsed?'lg:absolute lg:right-1 lg:top-1 lg:min-w-4 lg:px-1 lg:text-[0.6rem]':''}`} aria-label={`${link.unread} item(ns) não lido(s) em ${link.label}`}>{link.unread>99?'99+':link.unread}</span>}
-                        </NavLink>
-                    ))}
+                        </NavLink>;
+                    })}
                 </nav>
 
                 <nav aria-label="Configurações" className="mt-auto pt-4 border-t border-white/10 space-y-1.5">

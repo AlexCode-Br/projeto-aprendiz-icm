@@ -20,7 +20,7 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
         '/aluno/cursos': 'Meus cursos',
         '/aluno/calendario': 'Calendário de aulas',
         '/aluno/frequencia': 'Minha frequência',
-        '/aluno/informativos': 'Mural',
+        '/aluno/informativos': 'Meus cursos',
         '/aluno/notificacoes': 'Notificações',
         '/professor/dashboard': 'Visão geral',
         '/professor/turmas': 'Minhas turmas',

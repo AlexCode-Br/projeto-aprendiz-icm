@@ -158,14 +158,21 @@ export function createStudentPortalRoutes(context) {
     if (request.method==='GET' && ['/api/aluno/informativos','/api/aluno/notificacoes'].includes(url.pathname)) {
       const page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'),10)||1));
       const classId=url.searchParams.get('turma');
+      const origin=url.searchParams.get('origem');
+      if(origin&&!['mural','gestao'].includes(origin))return json(response,400,{message:'Origem de publicação inválida.'});
       if(classId&&!(await ownedClasses(studentId)).some(c=>Number(c.id)===Number(classId)))return json(response,404,{message:'Curso não encontrado.'});
       const courseFilter=classId?' AND EXISTS (SELECT 1 FROM student_announcement_classes sac WHERE sac.announcement_id=a.id AND sac.class_id=?)':'';
+      const originFilter=origin==='mural'
+        ? ' AND EXISTS (SELECT 1 FROM student_course_announcements sca_origin WHERE sca_origin.announcement_id=a.id)'
+        : origin==='gestao'
+          ? ' AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca_origin WHERE sca_origin.announcement_id=a.id)'
+          : '';
       const params=[studentId,...(classId?[Number(classId)]:[])];
-      const count=await db.prepare(`SELECT COUNT(*) AS total FROM announcements a WHERE ${published}${courseFilter}`).get(...params);
+      const count=await db.prepare(`SELECT COUNT(*) AS total FROM announcements a WHERE ${published}${courseFilter}${originFilter}`).get(...params);
       const rows=await db.prepare(`SELECT a.id,a.title,a.content,a.category,a.scheduled_at,a.pinned,
         EXISTS(SELECT 1 FROM announcement_reads ar WHERE ar.announcement_id=a.id AND ar.user_id=?) AS has_read,
         COALESCE((SELECT sca.requires_acknowledgement FROM student_course_announcements sca WHERE sca.announcement_id=a.id),0) AS requires_acknowledgement
-        FROM announcements a WHERE ${published}${courseFilter} ORDER BY a.pinned DESC,a.scheduled_at DESC,a.id DESC LIMIT 5 OFFSET ?`).all(session.user_id,...params,(page-1)*5);
+        FROM announcements a WHERE ${published}${courseFilter}${originFilter} ORDER BY a.pinned DESC,a.scheduled_at DESC,a.id DESC LIMIT 5 OFFSET ?`).all(session.user_id,...params,(page-1)*5);
       const ids=rows.map(r=>r.id), attachments=ids.length ? await db.prepare(`SELECT id,announcement_id,filename,mime_type,size_bytes FROM announcement_attachments WHERE announcement_id IN (${ids.map(()=>'?').join(',')}) ORDER BY id`).all(...ids) : [];
       return json(response,200,{total:Number(count.total),items:rows.map(r=>({id:Number(r.id),titulo:r.title,conteudo:sanitizeAnnouncementContent(r.content),categoria:r.category,data:r.scheduled_at,lido:Boolean(r.has_read),confirmado:Boolean(r.has_read),fixado:Boolean(r.pinned),requerConfirmacao:Boolean(r.requires_acknowledgement),
         anexos:attachments.filter(a=>Number(a.announcement_id)===Number(r.id)).map(a=>({id:Number(a.id),nome:a.filename,tipo:a.mime_type,tamanho:Number(a.size_bytes),url:`/api/aluno/informativos/${r.id}/anexos/${a.id}`}))}))});

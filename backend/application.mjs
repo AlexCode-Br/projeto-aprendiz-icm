@@ -558,6 +558,23 @@ export function createApplication({
   }
 
   async function normalizeAnnouncementRecipients(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'turmas')) {
+      const turmas = recipientIds(value.turmas);
+      if (!turmas.length) return { error: 'Selecione ao menos uma turma.' };
+      if (turmas.length > ANNOUNCEMENT_RECIPIENT_MAX_COUNT) return { error: `Selecione no máximo ${ANNOUNCEMENT_RECIPIENT_MAX_COUNT} turmas.` };
+      const classRows = await db.prepare(`SELECT c.id,c.professor_id FROM classes c
+        JOIN professor_profiles pp ON pp.id=c.professor_id AND pp.active=1
+        JOIN courses co ON co.id=c.course_id AND co.active=1
+        JOIN locations l ON l.id=c.location_id AND l.active=1
+        JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
+        WHERE c.id IN (${turmas.map(() => '?').join(',')}) AND c.active=1`).all(...turmas);
+      if (classRows.length !== turmas.length) return { error: 'Uma das turmas selecionadas não está mais ativa.' };
+      const professores = [...new Set(classRows.map(row => Number(row.professor_id)))];
+      return {
+        items: professores.map(id => ({ recipient_type: 'professor', recipient_id: id })),
+        audience: { todos: false, professores: [], cursos: [], turmas },
+      };
+    }
     if (value == null || (typeof value === 'object' && !Array.isArray(value) && value.todos === true)) {
       return { items: [], audience: { todos: true, professores: [], cursos: [] } };
     }

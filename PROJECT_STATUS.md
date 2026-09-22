@@ -8,9 +8,9 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 ### Área do aluno e mural — publicados
 
-- Implementada a área do aluno com navegação reduzida: Início, Meus cursos e Mural; dados pessoais em Configurações.
+- Implementada a área do aluno com navegação reduzida: Início e Meus cursos; dados pessoais em Configurações. O Mural permanece acessível somente dentro do curso correspondente.
 - Os informativos por turma evoluíram para o **Mural da turma**: o professor cria, edita e exclui publicações categorizadas, anexa imagens/PDFs, fixa conteúdo e pode exigir confirmação de leitura. O aluno vê somente o mural das próprias matrículas e confirma explicitamente quando solicitado. A migração `022_course_wall.sql` guarda essa exigência sem abrir acesso direto às tabelas.
-- Meus cursos lista matrículas e abre detalhes com informativos do professor/gestão, calendário e frequência exclusivamente do aluno. Professor publica avisos na ação de sua turma; gestor define o público de alunos em Informativos.
+- Meus cursos lista matrículas e abre detalhes com abas separadas para Mural do professor e Informativos da gestão, além de calendário e frequência exclusivamente do aluno. Professor publica avisos na ação de sua turma; gestor define as turmas destinatárias em Informativos.
 - Aluno pode editar nome, foto e dados pessoais; nunca matrícula, curso ou chamada. E-mail de acesso/contato só muda após senha atual e confirmação enviada ao novo endereço.
 - Contas vinculadas explicitamente por convite do gestor, permissões de API e arquivos restritas, migração `020_student_portal.sql` e rotina agendada de notificações incluídas.
 - O catálogo local passou a incluir as 27 igrejas de Salvador fornecidas pelo site de inscrição, reutilizadas nos formulários de turmas, alunos, professores e configurações do aluno. Localidades existentes foram preservadas, e EAD continua restrito à modalidade de turma.
@@ -31,6 +31,8 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - “Meus alunos” do professor exibe frequência no lugar dos contatos, cinco alunos por página e filtros de curso, turma, igreja do aluno e classe. Contatos permanecem em “Dados do aluno”. A frequência considera registros das matrículas ativas nas turmas do próprio professor e período letivo, respeita os filtros de curso/turma e inclui justificativas; ausência de registros aparece como “Sem chamadas”. Alteração validada localmente, ainda não publicada.
 - O dashboard do professor não exibe mais “Últimos alunos adicionados”. “Próximas aulas” permite consultar qualquer data, mantendo horários semanais e datas específicas por turma; datas específicas são armazenadas separadamente para não alterar a recorrência semanal.
 - “Informativos e avisos” exibe exclusivamente publicações do gestor e não mistura conteúdo do Mural da turma. No mural, a listagem das publicações fica separada do formulário de criação/edição, e o professor responsável vê nome e horário dos alunos da própria turma que visualizaram cada item. Alteração publicada em 22/09/2026.
+- A área do aluno não possui uma página independente de Mural: as publicações do professor e os informativos do gestor aparecem em abas distintas dentro de cada curso matriculado. Ao criar ou editar um informativo, o gestor escolhe somente uma ou mais turmas ofertadas; o sistema deriva o professor responsável e o público de alunos sem permitir seleção individual de professores. Alteração local ainda não publicada.
+- A sidebar exibe em cascata somente as turmas do professor autenticado sob “Minhas turmas” e somente os cursos matriculados do aluno sob “Meus cursos”. Os atalhos do aluno abrem os detalhes do curso; os do professor posicionam a respectiva turma na tela de gerenciamento. Alteração local ainda não publicada.
 
 - A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026 (alteração local ainda não publicada).
 

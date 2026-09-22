@@ -4,19 +4,19 @@ import api from '../../services/api';
 import PageSkeleton from '../../components/PageSkeleton';
 import StudentPortal from './StudentPortal';
 
-const views = [['informativos', 'Mural'], ['calendario', 'Aulas'], ['frequencia', 'Frequência']];
+const views = [['mural', 'Mural da turma'], ['informativos', 'Informativos'], ['calendario', 'Aulas'], ['frequencia', 'Frequência']];
 
 export default function StudentCourseDetails() {
   const { id } = useParams();
   const [course, setCourse] = useState(null);
   const [error, setError] = useState('');
-  const [view, setView] = useState('informativos');
+  const [view, setView] = useState('mural');
 
   useEffect(() => {
     let active = true;
     setCourse(null);
     setError('');
-    setView('informativos');
+    setView('mural');
     api.get(`/api/aluno/cursos/${id}`)
       .then(({ data }) => { if (active) setCourse(data); })
       .catch(e => { if (active) setError(e.message); });

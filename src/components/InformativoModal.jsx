@@ -13,7 +13,7 @@ const initialFormState = {
     conteudo: '',
     fixarNoTopo: false,
     anexos: [],
-    destinatarios: { todos: true, professores: [], cursos: [] },
+    destinatarios: { todos: false, professores: [], cursos: [], turmas: [] },
 };
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -82,7 +82,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                 ...initialFormState,
                 ...draft,
                 anexos: Array.isArray(draft.anexos) ? draft.anexos : [],
-                destinatarios: draft.destinatarios || { todos: true, professores: [], cursos: [] },
+                destinatarios: draft.destinatarios || { todos: false, professores: [], cursos: [], turmas: [] },
             };
             setFormData(nextForm);
             if (editorRef.current) editorRef.current.innerHTML = nextForm.conteudo;
@@ -95,7 +95,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                 conteudo: informativo.conteudo || '',
                 fixarNoTopo: informativo.fixado || false,
                 anexos: Array.isArray(informativo.anexos) ? informativo.anexos : [],
-                destinatarios: informativo.destinatarios || { todos: true, professores: [], cursos: [] },
+                destinatarios: informativo.destinatarios || { todos: false, professores: [], cursos: [], turmas: [] },
             };
             setFormData(nextForm);
             if (editorRef.current) editorRef.current.innerHTML = nextForm.conteudo;
