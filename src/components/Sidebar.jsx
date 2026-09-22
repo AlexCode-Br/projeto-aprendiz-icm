@@ -153,14 +153,13 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                                     <ChevronDown aria-hidden="true" className={`ml-auto h-4 w-4 shrink-0 transition-transform ${classesExpanded?'rotate-180':''} ${isCollapsed?'lg:hidden':''}`}/>
                                 </button>
                                 {classesExpanded&&<div id="linked-classes-menu" className={`${isCollapsed?'lg:hidden':''} ml-5 mt-1 space-y-1 border-l border-white/20 pl-3`}>
-                                    <NavLink to={target} end className="block rounded-lg px-3 py-2 text-xs font-semibold text-white/85 hover:bg-white/10 hover:text-white" onClick={()=>setSidebarOpen(false)}>Ver todas</NavLink>
                                     {linkedClassesLoading&&<p className="px-3 py-2 text-xs text-white/60" role="status">Carregando…</p>}
                                     {!linkedClassesLoading&&linkedClasses.map(item=>{
                                         const id=Number(item.id);
                                         const course=item.curso||item.nome||'Turma';
                                         const custom=item.label&&item.label!==course&&item.label!==`${course} — ${item.local}`;
                                         const label=custom?item.label:course;
-                                        const childTarget=userRole==='aluno'?`/aluno/cursos/${id}`:`/professor/turmas#turma-${id}`;
+                                        const childTarget=userRole==='aluno'?`/aluno/cursos/${id}`:`/professor/turmas?turma=${id}`;
                                         return <NavLink key={id} to={childTarget} className="block min-w-0 rounded-lg px-3 py-2 text-white/80 hover:bg-white/10 hover:text-white" onClick={()=>setSidebarOpen(false)}>
                                             <span className="block truncate text-xs font-semibold">{label}</span>
                                             {item.local&&<span className="block truncate text-[0.68rem] text-white/55">{item.local}</span>}
