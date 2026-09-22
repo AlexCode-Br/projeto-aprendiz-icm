@@ -18,11 +18,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `f12eaa3`
+- Último commit da aplicação publicado em produção: `0c70808`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `a0969403-7e98-474b-9c06-020284518db1`
+- Versão Cloudflare verificada: `3622f94f-e079-437a-a15d-91ee92ea2fa4`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -33,7 +33,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - “Informativos e avisos” exibe exclusivamente publicações do gestor e não mistura conteúdo do Mural da turma. No mural, a listagem das publicações fica separada do formulário de criação/edição, e o professor responsável vê nome e horário dos alunos da própria turma que visualizaram cada item. Alteração publicada em 22/09/2026.
 - A área do aluno não possui uma página independente de Mural: as publicações do professor e os informativos do gestor aparecem em abas distintas dentro de cada curso matriculado. Ao criar ou editar um informativo, o gestor escolhe somente uma ou mais turmas ofertadas; o sistema deriva o professor responsável e o público de alunos sem permitir seleção individual de professores. Alteração publicada em 22/09/2026.
 - A sidebar exibe em cascata somente as turmas do professor autenticado sob “Minhas turmas” e somente os cursos matriculados do aluno sob “Meus cursos”. Os atalhos do aluno abrem os detalhes do curso; os do professor posicionam a respectiva turma na tela de gerenciamento. Alteração publicada em 22/09/2026.
-- Refinamento local da cascata: a opção genérica “Ver todas” foi removida e cada item abre exclusivamente todas as informações da turma ou curso selecionado. Alteração ainda não publicada.
+- A opção genérica “Ver todas” foi removida das cascatas e cada item abre exclusivamente todas as informações da turma ou curso selecionado. Alteração publicada em 22/09/2026.
 
 - A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026 (alteração local ainda não publicada).
 
@@ -116,6 +116,8 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 
 ### Publicação — 22/09/2026
 
+- Cascatas simplificadas e visualização exclusiva da turma selecionada publicadas no commit `0c70808`.
+- Versão Cloudflare verificada: `3622f94f-e079-437a-a15d-91ee92ea2fa4`; `/login`, bundle principal e bundle de Minhas turmas retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
 - Informativos da gestão integrados às turmas do aluno, seleção administrativa restrita a turmas e menus em cascata publicados no commit `f12eaa3`.
 - Versão Cloudflare verificada: `a0969403-7e98-474b-9c06-020284518db1`; `/login` e o bundle principal retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
 - Separação entre Informativos e Mural da turma, formulário independente e identificação dos alunos que visualizaram cada publicação entregues no commit `27f5d8a`.
