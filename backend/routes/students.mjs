@@ -1,3 +1,5 @@
+import { churchName } from '../../shared/catalog-options.mjs';
+
 export function createStudentRoutes(context) {
   const {
     db,
@@ -20,6 +22,8 @@ export function createStudentRoutes(context) {
     studentClassIds,
     studentCourseNames,
     activeClassesForStudent,
+    issueStudentInvite,
+    issueStudentEmailChange,
   } = context;
 
   const prepareChurch = async value => {
@@ -30,7 +34,7 @@ export function createStudentRoutes(context) {
         ? {id:Number(existing.id),name:existing.name,needsSave:false,error:''}
         : {id:null,name:'',needsSave:false,error:'Selecione uma igreja disponível.'};
     }
-    const name=cleanText(value,100),error=catalogNameError(name,'igreja');
+    const name=churchName(cleanText(value,100)),error=catalogNameError(name,'igreja');
     if(error)return {id:null,name,needsSave:false,error};
     const existing=await db.prepare('SELECT id,name,active FROM churches WHERE LOWER(name)=LOWER(?)').get(name);
     return existing?.active===1
@@ -150,11 +154,11 @@ export function createStudentRoutes(context) {
       if(request.method==='GET'&&url.pathname==='/api/churches'){
         if(!await authorize(request,response,['gestor','professor']))return;
         const rows=await db.prepare('SELECT id,name AS nome,active FROM churches WHERE active=1 ORDER BY name').all();
-        return json(response,200,rows.map(row=>({id:Number(row.id),nome:row.nome,ativo:row.active===1})));
+        return json(response,200,rows.map(row=>({id:Number(row.id),nome:churchName(row.nome),ativo:row.active===1})));
       }
       if(request.method==='POST'&&url.pathname==='/api/churches'){
         const session=await authorize(request,response,['gestor']);if(!session)return;
-        const body=await readJson(request),name=cleanText(body.nome,100),errorMessage=catalogNameError(name,'igreja');
+        const body=await readJson(request),name=churchName(cleanText(body.nome,100)),errorMessage=catalogNameError(name,'igreja');
         if(errorMessage)return invalid(response,{nome:errorMessage});
         const existing=await db.prepare('SELECT id,active FROM churches WHERE LOWER(name)=LOWER(?)').get(name);
         if(existing?.active===1)return json(response,409,{message:'Esta igreja já está cadastrada.'});
@@ -170,7 +174,7 @@ export function createStudentRoutes(context) {
       const churchMatch=url.pathname.match(/^\/api\/churches\/(\d+)$/);
       if(churchMatch&&request.method==='PUT'){
         const session=await authorize(request,response,['gestor']);if(!session)return;
-        const id=Number(churchMatch[1]),body=await readJson(request),name=cleanText(body.nome,100),errorMessage=catalogNameError(name,'igreja');
+        const id=Number(churchMatch[1]),body=await readJson(request),name=churchName(cleanText(body.nome,100)),errorMessage=catalogNameError(name,'igreja');
         if(errorMessage)return invalid(response,{nome:errorMessage});
         try{
           const result=await db.prepare('UPDATE churches SET name=? WHERE id=? AND active=1').run(name,id);
@@ -320,6 +324,7 @@ export function createStudentRoutes(context) {
         if(churchChoice.error)errors.local=churchChoice.error;
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
+        if(await db.prepare('SELECT id FROM users WHERE LOWER(email)=LOWER(?)').get(email))return json(response,409,{message:'Este e-mail já pertence a uma conta do sistema.'});
         let classRows = [];
         try {
           const studentId=await db.transaction(async()=>{
@@ -341,7 +346,10 @@ export function createStudentRoutes(context) {
           const classSummary=classRows.map(item=>item.course_name).join(', ');
           await notificationService.notifyManagers('newStudent','Novo aluno cadastrado',`${name} foi cadastrado${classSummary?` nas turmas de ${classSummary}`:''}.`,`student-created/${studentId}`);
           await notifyProfessorsAboutEnrollmentChanges(studentId,name,{ added: classRows },'student-created');
-          return json(response, 201, { id: studentId });
+          const invitation=await issueStudentInvite({studentId,createdBy:session.user_id,ip,auditAction:'student_invited_automatically'});
+          return json(response, 201, { id: studentId, invitation: invitation.inviteSent
+            ? {sent:true,message:'Convite de acesso enviado automaticamente.',sentAt:invitation.sentAt,expiresAt:invitation.expiresAt}
+            : {sent:false,message:invitation.message||'Aluno cadastrado, mas o convite de acesso não pôde ser enviado.'} });
         } catch (error) {
           if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });
           if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response, 409, { message: 'Já existe um aluno com este e-mail.' });
@@ -367,8 +375,16 @@ export function createStudentRoutes(context) {
         if(churchChoice.error)errors.local=churchChoice.error;
         if(rawClassIds.some(value => !Number.isInteger(Number(value)) || Number(value) <= 0))errors.curso='Selecione somente turmas válidas.';
         if(hasValidationErrors(errors))return invalid(response,errors);
-        const currentStudent=await db.prepare('SELECT id,guardian_consent_at FROM students WHERE id=? AND active=1').get(id);
+        const currentStudent=await db.prepare(`SELECT s.id,s.email,s.guardian_consent_at,sa.user_id,u.active AS account_active
+          FROM students s LEFT JOIN student_accounts sa ON sa.student_id=s.id LEFT JOIN users u ON u.id=sa.user_id
+          WHERE s.id=? AND s.active=1`).get(id);
         if(!currentStudent)return json(response,404,{message:'Aluno ativo não encontrado.'});
+        const emailChanged=cleanEmail(currentStudent.email)!==email;
+        if(emailChanged){
+          const duplicate=await db.prepare(`SELECT id FROM users WHERE LOWER(email)=LOWER(?) AND id<>COALESCE(?,0)
+            UNION SELECT id FROM students WHERE LOWER(email)=LOWER(?) AND id<>?`).get(email,currentStudent.user_id,email,id);
+          if(duplicate)return json(response,409,{message:'Já existe uma conta ou aluno com este e-mail.'});
+        }
         try {
           const enrollmentChanges=await db.transaction(async()=>{
             const { classes: classRows, error: classError } = await activeClassesForStudent(classIds, courseNames, period.id,id);
@@ -379,8 +395,9 @@ export function createStudentRoutes(context) {
             }
             const guardianConsentAt=guardianConsent?(currentStudent.guardian_consent_at||new Date().toISOString()):currentStudent.guardian_consent_at;
             const church=await savePreparedChurch(churchChoice,session,ip);
+            const savedEmail=emailChanged&&currentStudent.account_active===1?currentStudent.email:email;
             await db.prepare(`UPDATE students SET name=?,email=?,phone=?,guardian_name=?,guardian_phone=?,guardian_consent_at=?,church_id=?,age_group=?,has_instrument=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1`)
-              .run(name,email||null,phone,guardianName||null,guardianPhone||null,guardianConsentAt,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
+              .run(name,savedEmail,phone,guardianName||null,guardianPhone||null,guardianConsentAt,church.id,body.classe,body.instrumento==='Sim'?1:0,id);
             const enrollmentLock=db.dialect==='postgres'?' FOR UPDATE':'';
             const currentEnrollments=await db.prepare("SELECT enrollments.id,enrollments.class_id,classes.course_id,classes.professor_id,classes.label,courses.name AS course_name,locations.name AS location_name FROM enrollments JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id WHERE enrollments.student_id=? AND enrollments.status='ativa' AND classes.school_year_id=?"+enrollmentLock).all(id,period.id);
             const currentClassIds=new Set(currentEnrollments.map(enrollment=>Number(enrollment.class_id)));
@@ -403,7 +420,14 @@ export function createStudentRoutes(context) {
           if(enrollmentChanges.added.length || enrollmentChanges.removed.length) {
             await notifyProfessorsAboutEnrollmentChanges(id,name,enrollmentChanges,`student-updated/${Date.now()}`);
           }
-          return json(response, 200, { success: true });
+          let emailConfirmation=null;
+          if(emailChanged&&currentStudent.account_active===1){
+            emailConfirmation=await issueStudentEmailChange({studentId:id,newEmail:email,requestedBy:session.user_id,ip,auditAction:'student_email_change_requested_by_manager'});
+          }else if(emailChanged&&!currentStudent.user_id){
+            const invitation=await issueStudentInvite({studentId:id,createdBy:session.user_id,ip,auditAction:'student_reinvited_after_email_change'});
+            emailConfirmation={...invitation,kind:'invitation',sent:invitation.inviteSent,message:invitation.inviteSent?'Convite enviado ao novo e-mail. O endereço será confirmado na ativação da conta.':invitation.message};
+          }
+          return json(response, 200, { success: true, emailConfirmation });
         } catch (error) {
           if (error.code === 'CLASS_SELECTION_INVALID') return invalid(response, { curso: error.message });
           if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response, 409, { message: 'Já existe um aluno com este e-mail.' });

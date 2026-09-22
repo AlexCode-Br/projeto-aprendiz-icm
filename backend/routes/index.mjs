@@ -1,3 +1,7 @@
+import { createStudentAccessRoutes } from './student-access.mjs';
+import { createStudentEmailRoutes } from './student-email.mjs';
+import { createCourseAnnouncementRoutes } from './course-announcements.mjs';
+import { createStudentPortalRoutes } from './student-portal.mjs';
 import { createAuthRoutes } from './auth.mjs';
 import { createScheduleRoutes } from './schedules.mjs';
 import { createAnnouncementRoutes } from './announcements.mjs';
@@ -50,6 +54,10 @@ export function createApiHandler(context) {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   });
+  const studentAccessRoutes = createStudentAccessRoutes(context);
+  const studentEmailRoutes = createStudentEmailRoutes(context);
+  const courseAnnouncementRoutes = createCourseAnnouncementRoutes(context);
+  const studentPortalRoutes = createStudentPortalRoutes(context);
   const authRoutes = createAuthRoutes(context);
   const scheduleRoutes = createScheduleRoutes(context);
   const announcementRoutes = createAnnouncementRoutes(context);
@@ -75,35 +83,41 @@ export function createApiHandler(context) {
       return json(response, 200, { status: 'ok', database: db.dialect });
     }
   
+    if (url.pathname.startsWith('/api/student-email/')) return studentEmailRoutes(request,response,url,ip);
+    if (url.pathname.startsWith('/api/student-access/') || url.pathname.startsWith('/api/student-invitations/')) return studentAccessRoutes(request,response,url,ip);
+    if (url.pathname.startsWith('/api/aluno/') || url.pathname.startsWith('/api/student-audiences/')) return studentPortalRoutes(request,response,url,ip);
+
     if (url.pathname.startsWith('/api/auth/') || url.pathname.startsWith('/api/invitations/')) {
       return authRoutes(request, response, url, ip);
     }
   
     if(request.method==='GET'&&url.pathname==='/api/account'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const preferences=await notificationService.preferencesFor(session.user_id);
       let photoOwnerType='user',photoOwnerId=Number(session.user_id);
       if(session.role==='professor'){
         const profile=await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
         photoOwnerType='professor';photoOwnerId=Number(profile?.id||0);
       }
+      if(session.role==='aluno'){photoOwnerType='student';photoOwnerId=session.student_id;}
       const photo=photoOwnerId?await db.prepare('SELECT updated_at FROM profile_photos WHERE owner_type=? AND owner_id=?').get(photoOwnerType,photoOwnerId):null;
       return json(response,200,{user:publicUser({id:session.user_id,...session}),preferences,photoUrl:photo?`/api/profile-photo?v=${encodeURIComponent(photo.updated_at)}`:''});
     }
     if(request.method==='PUT'&&url.pathname==='/api/account/profile'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const body=await readJson(request),name=cleanText(body.nome,100);
       const errors={nome:personNameError(name,'nome completo')};
       if(hasValidationErrors(errors))return invalid(response,errors);
       await db.transaction(async () => {
         await db.prepare('UPDATE users SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(name,session.user_id);
+        if(session.role==='aluno')await db.prepare('UPDATE students SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(name,session.student_id);
         if(session.role==='professor')await db.prepare('UPDATE professor_profiles SET name=? WHERE user_id=?').run(name,session.user_id);
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'profile_updated',ip);
       });
       return json(response,200,{user:{id:session.user_id,nome:name,email:session.email,role:session.role}});
     }
     if(request.method==='PUT'&&url.pathname==='/api/account/password'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       if(usesSupabaseAuth)return json(response,409,{message:'A senha desta conta é gerenciada pelo Supabase.'});
       const body=await readJson(request),user=await db.prepare('SELECT * FROM users WHERE id=?').get(session.user_id);
       if(!(await verifyPassword(body.currentPassword,user.password_hash)))return json(response,400,{message:'A senha atual está incorreta.'});
@@ -118,26 +132,26 @@ export function createApiHandler(context) {
       return json(response,200,{message:'Senha alterada com sucesso.'});
     }
     if(request.method==='PUT'&&url.pathname==='/api/account/preferences'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const body=await readJson(request),preferences=normalizeNotificationPreferences(body.preferences);
       await db.prepare(`INSERT INTO user_settings (user_id,preferences_json) VALUES (?,?) ON CONFLICT(user_id) DO UPDATE SET preferences_json=excluded.preferences_json,updated_at=CURRENT_TIMESTAMP`).run(session.user_id,JSON.stringify(preferences));
       return json(response,200,{preferences});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/preferences/test'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       try{
         await context.sendEmail(session.email,'Teste de notificações — Projeto Aprendiz',`Olá, ${session.name}.\n\nAs notificações por e-mail da sua conta estão funcionando corretamente.\n\nProjeto Aprendiz`,`notification-test/${session.user_id}/${Date.now()}`);
         return json(response,200,{message:'E-mail de teste enviado com sucesso.'});
       }catch(error){logger.error('notification_test_failed',error,{userId:session.user_id});return json(response,502,{message:'Não foi possível enviar o e-mail de teste. Revise a configuração do remetente.'});}
     }
     if(request.method==='GET'&&url.pathname==='/api/account/push'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const configuration=await webPushService.configuration();
       const devices=await db.prepare('SELECT id,user_agent,created_at,updated_at FROM push_subscriptions WHERE user_id=? ORDER BY updated_at DESC,id DESC').all(session.user_id);
       return json(response,200,{...configuration,subscriptions:devices.length,devices:devices.map(pushDeviceView)});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/push/subscribe'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const configuration=await webPushService.configuration();
       if(!configuration.configured)return json(response,503,{message:'As notificações no dispositivo ainda não estão configuradas no servidor.'});
       const body=await readJson(request),subscription=normalizePushSubscription(body.subscription);
@@ -154,7 +168,7 @@ export function createApiHandler(context) {
       return json(response,200,{success:true,message:'Notificações ativadas neste dispositivo.',device:pushDeviceView(device)});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/push/unsubscribe'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const body=await readJson(request),endpoint=String(body.endpoint||'').trim();
       if(!endpoint||endpoint.length>2048)return invalid(response,{subscription:'Assinatura de notificações inválida.'});
       await db.prepare('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?').run(session.user_id,endpoint);
@@ -163,7 +177,7 @@ export function createApiHandler(context) {
     }
     const pushDeviceMatch=url.pathname.match(/^\/api\/account\/push\/devices\/(\d+)$/);
     if(request.method==='DELETE'&&pushDeviceMatch){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const deviceId=Number(pushDeviceMatch[1]);
       const device=await db.prepare('SELECT id FROM push_subscriptions WHERE id=? AND user_id=?').get(deviceId,session.user_id);
       if(!device)return json(response,404,{message:'Este dispositivo não está mais conectado.'});
@@ -172,13 +186,13 @@ export function createApiHandler(context) {
       return json(response,200,{success:true,message:'Dispositivo removido das notificações.'});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/push/test'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const result=await webPushService.sendToUser(session.user_id,{title:'Teste de notificações — Projeto Aprendiz',body:'As notificações deste dispositivo estão funcionando corretamente.',tag:`push-test/${session.user_id}/${Date.now()}`,url:'/configuracoes'});
       if(!result.sent)return json(response,result.reason==='not_configured'?503:409,{message:result.reason==='not_subscribed'?'Ative as notificações neste dispositivo antes de testar.':'Não foi possível entregar a notificação de teste neste dispositivo.'});
       return json(response,200,{message:`Notificação enviada para ${result.delivered} ${result.delivered===1?'dispositivo':'dispositivos'}.`});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/password-changed'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       if(!usesSupabaseAuth)return json(response,404,{message:'Rota não disponível.'});
       const authenticatedUser=await userFromSupabaseToken(request);
       if(!authenticatedUser||Number(authenticatedUser.id)!==Number(session.user_id))return json(response,401,{message:'Confirme novamente sua identidade para concluir a alteração.'});
@@ -190,7 +204,7 @@ export function createApiHandler(context) {
       return json(response,200,{success:true});
     }
     if(request.method==='POST'&&url.pathname==='/api/account/delete'){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const body=await readJson(request);
       if(cleanEmail(body.confirmation)!==cleanEmail(session.email))return invalid(response,{confirmation:'Digite o e-mail completo da conta para confirmar.'});
       if(usesSupabaseAuth&&!requireSupabaseAdmin(response))return;
@@ -208,6 +222,7 @@ export function createApiHandler(context) {
         await db.prepare('DELETE FROM user_settings WHERE user_id=?').run(session.user_id);
         await db.prepare('DELETE FROM password_resets WHERE user_id=?').run(session.user_id);
         await db.prepare('DELETE FROM profile_photos WHERE owner_type=? AND owner_id=?').run(ownerType,ownerId);
+        if(session.role==='aluno')await db.prepare('DELETE FROM student_accounts WHERE user_id=?').run(session.user_id);
         if(professor)await db.prepare("UPDATE professor_profiles SET user_id=NULL,name='Professor removido #' || id,email='professor-removido-' || id || '@deleted.invalid',phone=NULL,home_location_id=NULL,active=0 WHERE id=?").run(professor.id);
         await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'account_deleted',ip);
         await db.prepare("UPDATE users SET auth_user_id=NULL,name='Conta excluída',email='conta-removida-' || id || '@deleted.invalid',password_hash=?,active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(replacementPassword,session.user_id);
@@ -218,15 +233,17 @@ export function createApiHandler(context) {
         const {error}=await supabaseAdmin.auth.admin.deleteUser(account.auth_user_id);
         if(error)logger.error('account_auth_deletion_failed',error,{userId:session.user_id});
       }
-      return json(response,200,{success:true,message:'Sua conta foi excluída e seus dados pessoais foram removidos.'},{'Set-Cookie':cookie('pa_session','',0)});
+      return json(response,200,{success:true,message:session.role==='aluno'?'Acesso excluído. O cadastro acadêmico permanece sob responsabilidade da gestão.':'Sua conta foi excluída e seus dados pessoais foram removidos.'},{'Set-Cookie':cookie('pa_session','',0)});
     }
 
     const accountPhoto=url.pathname==='/api/profile-photo';
     const professorPhoto=url.pathname.match(/^\/api\/professores\/(\d+)\/foto$/);
     const studentPhoto=url.pathname.match(/^\/api\/alunos\/(\d+)\/foto$/);
     if(accountPhoto||professorPhoto||studentPhoto){
-      const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       let ownerType='user',ownerId=Number(session.user_id);
+      if(session.role==='aluno'&&!accountPhoto)return json(response,403,{message:'Acesse apenas sua própria foto pelo perfil.'});
+      if(accountPhoto&&session.role==='aluno'){ownerType='student';ownerId=session.student_id;}
       if(accountPhoto&&session.role==='professor'){
         const profile=await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
         if(!profile)return json(response,404,{message:'Perfil de professor não encontrado.'});
@@ -338,6 +355,7 @@ export function createApiHandler(context) {
       return studentRoutes(request, response, url, ip);
     }
   
+    if (/^\/api\/professores\/me\/turmas\/\d+\/(?:mural|informativos)(?:\/\d+)?$/.test(url.pathname)) return courseAnnouncementRoutes(request,response,url,ip);
     if (url.pathname.startsWith('/api/professores/me/turmas/')) return scheduleRoutes(request,response,url,ip);
 
     if (url.pathname === '/cursos' || url.pathname.startsWith('/cursos/') || url.pathname.startsWith('/api/catalogos/')) {

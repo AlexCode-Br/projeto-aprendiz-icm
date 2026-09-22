@@ -3,15 +3,22 @@ export const COURSE_SUGGESTIONS = Object.freeze([
   'Bateria', 'Canto Coral', 'Contrabaixo', 'Flauta Transversal', 'Saxofone',
   'Teclado', 'Teoria Musical', 'Violino', 'Violão I', 'Violão II',
 ]);
+export const SALVADOR_CHURCHES = Object.freeze([
+  'Alto da Terezinha', 'Alto de Coutos', 'Bairro Novo', 'Boca do Rio', 'Brotas',
+  'Campinas de Pirajá', 'Cidade Baixa', 'Cidade Nova', 'Fazenda Coutos', 'Fazenda Grande',
+  'Garcia', 'Guarani', 'IAPI', 'Itaigara', 'Itapuã I', 'Itapuã II', 'Itapuã III',
+  'Jardim Terra Nova', 'Jardim Valéria', 'Lobato', 'Luiz Anselmo', 'Mirantes de Periperi',
+  'Pero Vaz', 'Pituba', 'São Cristóvão', 'São Marcos', 'Vista Alegre',
+]);
 export const CHURCH_SUGGESTIONS = Object.freeze([
-  'Alto de Coutos', 'Boca do Rio', 'Brotas', 'Guarani', 'Lauro de Freitas', 'Pituba', 'EAD',
+  ...SALVADOR_CHURCHES, 'Lauro de Freitas', 'EAD',
 ]);
 export const STUDENT_CHURCH_SUGGESTIONS = Object.freeze([
-  'Alto de Coutos', 'Boca do Rio', 'Brotas', 'Guarani', 'Jardim Valéria',
-  'Lauro de Freitas', 'Mirantes de Periperi', 'Pituba',
+  ...SALVADOR_CHURCHES, 'Lauro de Freitas',
 ]);
 
 export const catalogKey = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+export const churchName = value => String(value ?? '').replace(/^\s*ICM(?:\s+|-)+/i, '').trim().replace(/\s+/g, ' ');
 
 export function catalogSuggestions(type, existing = []) {
   const registered = new Set(existing.map(item => catalogKey(item.nome)));

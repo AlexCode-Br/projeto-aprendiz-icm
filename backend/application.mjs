@@ -23,6 +23,7 @@ import { createProfilePhotoStorage, normalizeProfilePhoto } from './profile-phot
 import { createNotificationService, normalizeNotificationPreferences } from './notifications.mjs';
 import { createWebPushService } from './web-push.mjs';
 import { createLazyClient } from './lazy-client.mjs';
+import { deliverStudentNotices } from './student-notifications.mjs';
 import {
   catalogNameError,
   cleanText,
@@ -128,6 +129,74 @@ export function createApplication({
     }
   }
 
+  async function issueStudentInvite({ studentId, createdBy, ip, auditAction = 'student_invited' }) {
+    const student = await db.prepare(`SELECT s.id,s.name,s.email,sa.user_id
+      FROM students s LEFT JOIN student_accounts sa ON sa.student_id=s.id
+      WHERE s.id=? AND s.active=1 AND s.anonymized_at IS NULL`).get(studentId);
+    if (!student) return { inviteSent: false, code: 'STUDENT_NOT_FOUND', message: 'Aluno não encontrado.' };
+    if (student.user_id) return { inviteSent: false, code: 'ACCOUNT_ACTIVE', message: 'Este aluno já possui uma conta. Utilize a recuperação de senha.' };
+    if (!student.email || emailError(student.email)) {
+      return { inviteSent: false, code: 'INVALID_EMAIL', message: 'Cadastre um e-mail válido e exclusivo do aluno antes de enviar o convite.' };
+    }
+    if (await db.prepare('SELECT id FROM users WHERE LOWER(email)=LOWER(?)').get(student.email)) {
+      return { inviteSent: false, code: 'EMAIL_IN_USE', message: 'Este e-mail já pertence a uma conta. Não é possível vincular contas de outra pessoa ou função.' };
+    }
+
+    const token = randomBytes(32).toString('base64url');
+    const tokenHash = sha256(token);
+    const createdAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60_000).toISOString();
+    await db.transaction(async () => {
+      await db.prepare('DELETE FROM student_invites WHERE student_id=? AND accepted_at IS NULL').run(student.id);
+      await db.prepare('INSERT INTO student_invites (token_hash,student_id,email,expires_at,created_by,created_at) VALUES (?,?,?,?,?,?)')
+        .run(tokenHash,student.id,student.email,expiresAt,createdBy,createdAt);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy,`${auditAction}:${student.id}`,ip);
+    });
+
+    try {
+      await sendEmail(
+        student.email,
+        'Seu acesso de aluno — Projeto Aprendiz',
+        `Olá, ${student.name}.\n\nO gestor convidou você para acompanhar suas turmas e aulas. Crie sua senha em até 48 horas:\n\n${baseUrl}/accept-invite?tipo=aluno&token=${encodeURIComponent(token)}\n\nSe não reconhece este convite, ignore a mensagem.`,
+        `student-invite/${tokenHash}`,
+      );
+      return { inviteSent: true, expiresAt, sentAt: createdAt };
+    } catch (error) {
+      await db.prepare('DELETE FROM student_invites WHERE token_hash=?').run(tokenHash);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy,`student_invite_email_failed:${student.id}`,ip);
+      logger.error('student_invite_delivery_failed',error,{studentId:student.id});
+      return { inviteSent: false, code: 'DELIVERY_FAILED', message: 'Não foi possível enviar o convite. Tente novamente.' };
+    }
+  }
+
+  async function issueStudentEmailChange({ studentId = 0, userId = 0, newEmail, requestedBy, ip, auditAction = 'student_email_change_requested' }) {
+    const account = await db.prepare(`SELECT s.id AS student_id,s.email AS student_email,u.id AS user_id,u.email AS old_email
+      FROM student_accounts sa JOIN students s ON s.id=sa.student_id AND s.active=1 AND s.anonymized_at IS NULL
+      JOIN users u ON u.id=sa.user_id AND u.role='aluno' AND u.active=1
+      WHERE (? > 0 AND s.id=?) OR (? > 0 AND u.id=?)`).get(studentId,studentId,userId,userId);
+    if (!account) return { sent:false, code:'ACCOUNT_NOT_FOUND', message:'O aluno ainda não possui uma conta ativa.' };
+    const email=cleanEmail(newEmail);
+    if(emailError(email))return {sent:false,code:'INVALID_EMAIL',message:'Informe um novo e-mail válido.'};
+    if(email===cleanEmail(account.old_email))return {sent:false,code:'SAME_EMAIL',message:'Este já é o e-mail da conta.'};
+    const duplicate=await db.prepare(`SELECT id FROM users WHERE LOWER(email)=LOWER(?) AND id<>?
+      UNION SELECT id FROM students WHERE LOWER(email)=LOWER(?) AND id<>?`).get(email,account.user_id,email,account.student_id);
+    if(duplicate)return {sent:false,code:'EMAIL_IN_USE',message:'Não é possível utilizar este e-mail.'};
+    const token=randomBytes(32).toString('base64url'),hash=sha256(token),expiresAt=new Date(Date.now()+30*60000).toISOString();
+    await db.transaction(async()=>{
+      await db.prepare('DELETE FROM student_email_changes WHERE user_id=? AND used_at IS NULL').run(account.user_id);
+      await db.prepare('INSERT INTO student_email_changes(token_hash,user_id,old_email,new_email,expires_at) VALUES (?,?,?,?,?)').run(hash,account.user_id,account.old_email,email,expiresAt);
+      await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(requestedBy,`${auditAction}:${account.student_id}`,ip);
+    });
+    try{
+      await sendEmail(email,'Confirme seu novo e-mail — Projeto Aprendiz',`Foi solicitada a alteração do e-mail de acesso e contato da sua conta. Confirme em até 30 minutos:\n\n${baseUrl}/confirm-email?token=${encodeURIComponent(token)}\n\nSe não reconhece esta alteração, ignore esta mensagem. O endereço atual continuará válido.`,`student-email/${hash}`);
+    }catch(error){
+      await db.prepare('DELETE FROM student_email_changes WHERE token_hash=?').run(hash);
+      logger.error('student_email_confirmation_failed',error,{userId:account.user_id});
+      return {sent:false,code:'DELIVERY_FAILED',message:'Não foi possível enviar a confirmação. O e-mail atual foi mantido.'};
+    }
+    return {sent:true,expiresAt,message:'Enviamos um link ao novo e-mail. O endereço atual permanece válido até a confirmação.'};
+  }
+
   const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60_000;
   const AUTH_RATE_LIMIT_MESSAGE = 'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.';
 
@@ -169,11 +238,19 @@ export function createApplication({
   async function currentSession(request) {
     const raw = cookies(request).pa_session;
     if (!raw) return null;
-    return await db.prepare(`
+    const session = await db.prepare(`
       SELECT sessions.*, users.id AS user_id, users.name, users.email, users.role, users.active
       FROM sessions JOIN users ON users.id = sessions.user_id
       WHERE sessions.token_hash = ? AND sessions.expires_at > ?
     `).get(sha256(raw), new Date().toISOString()) || null;
+    if (session?.role === 'aluno') {
+      const owner = await db.prepare(`SELECT students.id FROM student_accounts
+        JOIN students ON students.id=student_accounts.student_id
+        WHERE student_accounts.user_id=? AND students.active=1 AND students.anonymized_at IS NULL`).get(session.user_id);
+      if (!owner) return null;
+      session.student_id = Number(owner.id);
+    }
+    return session;
   }
 
   async function createAppSession(user, ip, remember = false) {
@@ -649,8 +726,17 @@ export function createApplication({
     sha256,
     isProduction,
     issueProfessorInvite,
+    issueStudentInvite,
+    issueStudentEmailChange,
     strongPassword,
     requireSupabaseAdmin,
+    verifyStudentPassword: async (userId,password) => {
+      const user=await db.prepare("SELECT email,password_hash,auth_user_id FROM users WHERE id=? AND role='aluno' AND active=1").get(userId);
+      if(!user)return false;
+      if(!usesSupabaseAuth)return verifyPassword(password,user.password_hash);
+      const {data,error}=await supabaseAuth.auth.signInWithPassword({email:user.email,password});
+      return !error && data?.user?.id===user.auth_user_id;
+    },
     supabaseAdmin,
     hashPassword,
     randomBytes,
@@ -736,5 +822,6 @@ export function createApplication({
     }
   }
 
-  return { handler, isApiPath, securityHeaders, json, handleError };
+  return { handler, isApiPath, securityHeaders, json, handleError,
+    deliverStudentNotices: () => deliverStudentNotices({db,notificationService,announcementScheduledCondition,logger}) };
 }

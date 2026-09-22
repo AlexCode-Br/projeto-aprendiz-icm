@@ -1,5 +1,5 @@
 import { createApplication, isApiPath } from '../backend/application.mjs';
-import { createWorkerDatabase, ensureClassScheduleDatesSchema, ensurePushSubscriptionsSchema } from '../backend/worker-database.mjs';
+import { createWorkerDatabase, ensureClassScheduleDatesSchema, ensurePushSubscriptionsSchema, ensureStudentPortalSchema } from '../backend/worker-database.mjs';
 import { createHttpSecurity } from '../backend/security.mjs';
 import { createStructuredLogger } from '../backend/logger.mjs';
 import { invokeApi } from './http-bridge.mjs';
@@ -9,6 +9,17 @@ export { AuthRateLimiter } from './rate-limiter.mjs';
 const logger = createStructuredLogger({ write: line => console.error(line), includeStack: false });
 
 export default {
+  async scheduled(_event, env, ctx) {
+    if (env.READ_ONLY_PREVIEW === 'true') return;
+    ctx.waitUntil((async()=>{
+      const db=createWorkerDatabase(env,{logger});
+      try {
+        await ensureStudentPortalSchema(db);
+        await createApplication({db,env,logger}).deliverStudentNotices();
+      }
+      finally { await db.close(); }
+    })());
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.hostname === 'www.aprendizicm.com.br') {
@@ -40,6 +51,7 @@ export default {
       db = createWorkerDatabase(env, { logger });
       await ensurePushSubscriptionsSchema(db);
       await ensureClassScheduleDatesSchema(db);
+      await ensureStudentPortalSchema(db);
       const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER) });
       return await invokeApi(request, application.handler);
     } catch (error) {

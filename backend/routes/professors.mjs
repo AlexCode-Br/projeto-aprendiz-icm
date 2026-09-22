@@ -1,3 +1,5 @@
+import { churchName } from '../../shared/catalog-options.mjs';
+
 export function createProfessorRoutes(context) {
   const {
     db,
@@ -22,7 +24,7 @@ export function createProfessorRoutes(context) {
   } = context;
 
   const prepareProfileLocation = async value => {
-    const name=cleanText(value,100),key=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const name=churchName(cleanText(value,100)),key=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const error=catalogNameError(name,'igreja');
     if(error)return {id:null,name,error,needsSave:false};
     if(['ead','remoto'].includes(key))return {id:null,name,error:'Selecione uma igreja física.',needsSave:false};

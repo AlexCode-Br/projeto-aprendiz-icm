@@ -352,8 +352,11 @@
 }
 
 .auth-logo.auth-login-logo { width: min(16rem, 100%); margin-bottom: 1.25rem; }
+.auth-logo.auth-login-logo--compact { width: min(12rem, 58vw); margin-bottom: 0.5rem; }
+.auth-title.auth-title--compact { font-size: 1.5rem; line-height: 2rem; }
 @media (max-height: 700px) {
     .auth-logo.auth-login-logo { width: min(13rem, 100%); margin-bottom: 0.75rem; }
+    .auth-logo.auth-login-logo--compact { width: min(10.5rem, 50vw); margin-bottom: 0.375rem; }
 }
 
 @keyframes fadeInUp {

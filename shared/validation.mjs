@@ -71,7 +71,7 @@ export function validateProfessor(values) {
 export function validateStudent(values) {
   const errors = {};
   const nameMessage = personNameError(values.nome, 'nome completo');
-  const emailMessage = normalizeEmail(values.contato) ? emailError(values.contato) : '';
+  const emailMessage = emailError(values.contato);
   const phoneMessage = phoneError(values.telefone);
   if (nameMessage) errors.nome = nameMessage;
   if (emailMessage) errors.contato = emailMessage;

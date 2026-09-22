@@ -64,7 +64,7 @@ const ProfessorDashboard = () => {
 
     if (loading) return <div role="status" aria-label="Carregando painel">
         <div className="skeleton h-9 w-72 max-w-full"/><div className="skeleton mt-3 h-4 w-96 max-w-full"/>
-        <div className="mb-8 mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-6">{[0,1,2,3].map(index=><div key={index} className="skeleton min-h-36 rounded-xl"/>)}</div>
+        <div className="mb-8 mt-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 xl:gap-6">{[0,1,2,3].map(index=><div key={index} className="skeleton min-h-36 rounded-xl"/>)}</div>
         <div className="grid gap-8 lg:grid-cols-2"><div className="skeleton h-72 rounded-xl"/><div className="skeleton h-72 rounded-xl"/></div>
     </div>;
     if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={()=>fetchData()} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
@@ -73,7 +73,7 @@ const ProfessorDashboard = () => {
         <h1 className="page-title mb-2">Olá, {user?.nome?.split(' ')[0] || 'professor'}!</h1>
         <p className="page-description mb-8">Acompanhe suas turmas, próximos horários e a frequência registrada em cada uma.</p>
 
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 xl:gap-6">
+        <div className="mb-8 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4 xl:gap-6">
             <StatCard icon={<Users/>} title="Meus alunos" value={summary.stats.totalAlunos} colorClass="primary" to="/professor/alunos"/>
             <StatCard icon={<GraduationCap/>} title="Minhas turmas" value={summary.stats.turmasAtivas} detail={summary.stats.conflitosHorario?`${summary.stats.conflitosHorario} conflito(s) para revisar`:'Horários organizados'} colorClass={summary.stats.conflitosHorario?'warning':'primary'} to="/professor/turmas"/>
             <StatCard icon={<Megaphone/>} title="Avisos e informativos" value={summary.stats.informativos} colorClass="neutral" to="/professor/informativos"/>

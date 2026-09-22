@@ -37,13 +37,14 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     }, [isCollapsed]);
 
     const refreshSupportUnread=useCallback(async()=>{
+        if(userRole==='aluno'){setSupportUnread(0);return;}
         try { const response=await api.get('/api/suporte/nao-lidos');setSupportUnread(Number(response.data.total||0)); }
         catch { setSupportUnread(0); }
-    },[]);
+    },[userRole]);
 
     const refreshAnnouncementUnread=useCallback(async()=>{
-        if(userRole!=='professor'){setAnnouncementUnread(0);return;}
-        try { const response=await api.get('/api/informativos/nao-lidos');setAnnouncementUnread(Number(response.data.total||0)); }
+        if(!['professor','aluno'].includes(userRole)){setAnnouncementUnread(0);return;}
+        try { const response=await api.get(userRole==='aluno'?'/api/aluno/nao-lidos':'/api/informativos/nao-lidos');setAnnouncementUnread(Number(response.data.total||0)); }
         catch { setAnnouncementUnread(0); }
     },[userRole]);
 
@@ -64,6 +65,9 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     },[refreshAnnouncementUnread]);
 
     const navLinks = [
+        { path: '/dashboard', icon: <LayoutDashboard aria-hidden="true" />, label: 'Início', role: ['aluno'] },
+        { path: '/cursos', icon: <BookOpen aria-hidden="true" />, label: 'Meus cursos', role: ['aluno'] },
+        { path: '/informativos', icon: <Megaphone aria-hidden="true" />, label: 'Mural', role: ['aluno'], unread: announcementUnread },
         { path: "/dashboard", icon: <LayoutDashboard aria-hidden="true" />, label: "Dashboard", role: ['gestor', 'professor'] },
         { path: "/cursos", icon: <BookOpen aria-hidden="true" />, label: "Turmas", role: ['gestor'] },
         { path: "/turmas", icon: <BookOpen aria-hidden="true" />, label: "Minhas turmas", role: ['professor'] },
@@ -118,7 +122,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             </div>
 
             <div className="flex flex-1 flex-col overflow-y-auto overflow-x-hidden p-3">
-                <p className={`mb-4 mt-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60 ${isCollapsed ? 'lg:sr-only' : ''}`}>{userRole === 'gestor' ? 'Área do gestor' : 'Área do professor'}</p>
+                <p className={`mb-4 mt-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/60 ${isCollapsed ? 'lg:sr-only' : ''}`}>{userRole === 'gestor' ? 'Área do gestor' : userRole === 'aluno' ? 'Área do aluno' : 'Área do professor'}</p>
                 <nav aria-label="Seções principais" className="flex-1 space-y-1.5">
                     {navLinks.filter(link => link.role.includes(userRole)).map(link => (
                         <NavLink

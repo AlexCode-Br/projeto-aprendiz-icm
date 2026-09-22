@@ -1,10 +1,21 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 17 de setembro de 2026 (America/Sao_Paulo).
+Atualizado em 22 de setembro de 2026 (America/Sao_Paulo).
 
 Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de alterar o projeto e atualize-o depois de mudanças relevantes ou de um deploy.
 
 ## Ponto de retomada
+
+### Trabalho local — área do aluno (não publicado)
+
+- Implementada a área do aluno com navegação reduzida: Início, Meus cursos e Mural; dados pessoais em Configurações.
+- Os informativos por turma evoluíram para o **Mural da turma**: o professor cria, edita e exclui publicações categorizadas, anexa imagens/PDFs, fixa conteúdo e pode exigir confirmação de leitura. O aluno vê somente o mural das próprias matrículas e confirma explicitamente quando solicitado. A migração `022_course_wall.sql` guarda essa exigência sem abrir acesso direto às tabelas.
+- Meus cursos lista matrículas e abre detalhes com informativos do professor/gestão, calendário e frequência exclusivamente do aluno. Professor publica avisos na ação de sua turma; gestor define o público de alunos em Informativos.
+- Aluno pode editar nome, foto e dados pessoais; nunca matrícula, curso ou chamada. E-mail de acesso/contato só muda após senha atual e confirmação enviada ao novo endereço.
+- Contas vinculadas explicitamente por convite do gestor, permissões de API e arquivos restritas, migração `020_student_portal.sql` e rotina agendada de notificações incluídas.
+- O catálogo local passou a incluir as 27 igrejas de Salvador fornecidas pelo site de inscrição, reutilizadas nos formulários de turmas, alunos, professores e configurações do aluno. Localidades existentes foram preservadas, e EAD continua restrito à modalidade de turma.
+- Não houve deploy nem migração no banco remoto. Antes de publicar, validar migração PostgreSQL em homologação e os fluxos reais de Supabase Auth, e-mail, Storage e push. Ver detalhes e riscos em `docs/STUDENT_PORTAL.md`.
+- Os registros de produção abaixo são históricos e não representam publicação desta área.
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
@@ -27,7 +38,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Cada turma combina curso, igreja ou modalidade EAD e professor. `EAD` substitui definitivamente `Remoto`.
 - O curso ofertado é definido na criação da turma e não pode ser alterado depois; na edição, o gestor modifica somente igreja/localidade e professor.
 - Excluir uma turma remove seus vínculos, mas nunca exclui o cadastro do aluno.
-- Igrejas de alunos e professores usam sugestões completas e também aceitam valores personalizados; EAD não é igreja principal.
+- Igrejas de alunos e professores usam sugestões completas e também aceitam valores personalizados; EAD não é igreja principal. A sigla denominacional `ICM` não integra o nome do local e é removida de dados antigos e de novas entradas.
 - Horários aceitam múltiplos dias e horários semanais e detectam conflitos entre turmas do mesmo professor.
 - A frequência pertence à turma e ao aluno; relatórios PDF e CSV funcionam como folha de chamada por data e período.
 - Cards mobile de alunos, professores e turmas usam layout compacto e menu vertical de três pontos quando há ações.
@@ -80,7 +91,7 @@ git diff --check
 git status --short
 ```
 
-O conjunto atual possui 80 testes: 79 executados com sucesso e uma regressão PostgreSQL opcional, ignorada quando `TEST_DATABASE_URL` não está definida.
+Validação local em 22/09/2026: 87 testes, sendo 86 executados com sucesso e uma regressão PostgreSQL opcional ignorada porque `TEST_DATABASE_URL` não está definida. `pnpm lint` e build React passaram. O mural também foi conferido visualmente em largura responsiva. Não houve publicação.
 
 Fluxo de publicação:
 

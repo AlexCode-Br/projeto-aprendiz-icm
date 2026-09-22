@@ -1,7 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { initializeClassSchedules } from './class-schedules.mjs';
+import { initializeStudentSchema } from './student-schema.mjs';
 import { hashPassword, strongPassword } from './security.mjs';
 import { normalizeEmail } from '../shared/validation.mjs';
+import { CHURCH_SUGGESTIONS, catalogKey, churchName } from '../shared/catalog-options.mjs';
 
 // Local/Node bootstrap only. Workers use the existing migrated production database.
 export async function initializeNodeApplication({ db, env = process.env }) {
@@ -17,7 +19,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('gestor','professor')),
+      role TEXT NOT NULL CHECK(role IN ('gestor','professor','aluno')),
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -475,10 +477,42 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     if(!dropoutColumns.some(column=>column.name==='reason_category'))await db.exec("ALTER TABLE dropout_events ADD COLUMN reason_category TEXT NOT NULL DEFAULT 'outro' CHECK(reason_category IN ('mudanca','desinteresse','horario','saude','familia','outro')); UPDATE dropout_events SET reason_category=CASE WHEN LOWER(reason) LIKE '%horário%' OR LOWER(reason) LIKE '%horario%' THEN 'horario' WHEN LOWER(reason) LIKE '%pessoais%' OR LOWER(reason) LIKE '%familia%' THEN 'familia' ELSE 'outro' END;");
   }
 
+  if (db.dialect === 'sqlite') {
+    const churchRows = await db.prepare('SELECT id,name FROM churches ORDER BY id').all();
+    const groups = new Map();
+    for (const row of churchRows) {
+      const displayName = churchName(row.name);
+      const key = catalogKey(displayName);
+      if (!key) continue;
+      const items = groups.get(key) || [];
+      items.push({ ...row, displayName, prefixed: /^\s*ICM(?:\s+|-)+/i.test(row.name) });
+      groups.set(key, items);
+    }
+    await db.transaction(async () => {
+      for (const items of groups.values()) {
+        items.sort((a, b) => Number(a.prefixed) - Number(b.prefixed) || Number(a.id) - Number(b.id));
+        const [target, ...duplicates] = items;
+        for (const duplicate of duplicates) {
+          await db.prepare('UPDATE students SET church_id=? WHERE church_id=?').run(target.id, duplicate.id);
+          await db.prepare('DELETE FROM churches WHERE id=?').run(duplicate.id);
+        }
+        if (target.name !== target.displayName) {
+          await db.prepare('UPDATE churches SET name=? WHERE id=?').run(target.displayName, target.id);
+        }
+      }
+    });
+  }
+
   async function seedUser(name, email, password, role) {
     if (await db.prepare('SELECT id FROM users WHERE email = ?').get(email)) return;
     await db.prepare('INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,?)')
       .run(name, email, await hashPassword(password || randomBytes(48).toString('base64url')), role);
+  }
+
+  // Keep the canonical church/locality directory available even without demo data.
+  for(const name of CHURCH_SUGGESTIONS){
+    await db.prepare('INSERT INTO locations (name,active) SELECT ?,1 WHERE NOT EXISTS (SELECT 1 FROM locations WHERE LOWER(name)=LOWER(?))').run(name,name);
+    await db.prepare('UPDATE locations SET active=1 WHERE LOWER(name)=LOWER(?)').run(name);
   }
 
   const seedDemoData = env.SEED_DEMO_DATA === 'true' || !isProduction;
@@ -496,9 +530,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
   async function seedAcademicData() {
     const schoolYear = await db.prepare('SELECT id FROM school_years WHERE active=1 ORDER BY id DESC LIMIT 1').get();
     if (!schoolYear) throw new Error('Nenhum período letivo ativo foi configurado.');
-    const locationNames = ['Pituba', 'Brotas', 'Lauro de Freitas', 'Guarani', 'Boca do Rio', 'Alto de Coutos', 'EAD'];
     const courseNames = ['Violão I', 'Teclado', 'Bateria', 'Canto Coral', 'Violino', 'Flauta Transversal', 'Saxofone', 'Contrabaixo', 'Violão II', 'Teoria Musical'];
-    for (const name of locationNames) await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(name);
     for (const name of courseNames) await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(name);
 
     const professorUser = await db.prepare('SELECT id FROM users WHERE email = ?').get('professor@projetoaprendiz.local');
@@ -530,18 +562,18 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     }
 
     const studentRows = [
-      ['João Pereira','joao.pereira@email.com','(71) 98821-1040','ICM Pituba','Jovem',1,'Violão I','Pituba'],
-      ['Maria Clara','maria.clara@email.com','(71) 97732-2151','ICM Brotas','Adolescente',0,'Teclado','Brotas'],
-      ['Pedro Almeida','pedro.almeida@email.com','(71) 96643-3262','ICM Lauro','Jovem',1,'Bateria','Lauro de Freitas'],
-      ['Ana Beatriz','ana.beatriz@email.com','(71) 95554-4373','ICM Pituba','Jovem',0,'Canto Coral','Pituba'],
-      ['Lucas Guimarães','lucas.guimaraes@email.com','(71) 94465-5484','ICM Brotas','Adolescente',1,'Violino','Brotas'],
-      ['Gabriela Santos','gabriela.santos@email.com','(71) 93376-6595','ICM Boca do Rio','Jovem',1,'Flauta Transversal','Boca do Rio'],
-      ['Rafael Souza','rafael.souza@email.com','(71) 92287-7606','ICM Alto de Coutos','Varão',1,'Contrabaixo','Alto de Coutos'],
-      ['Juliana Costa','juliana.costa@email.com','(71) 91198-8717','ICM Pituba','Senhora',0,'Teoria Musical','EAD'],
-      ['Ricardo Alves','ricardo.alves@email.com','(71) 90019-9828','ICM Pituba','Varão',1,'Violão II','Pituba'],
-      ['Camila Rocha','camila.rocha@email.com','(71) 98920-0939','ICM Brotas','Jovem',1,'Saxofone','Brotas'],
-      ['Bruno Lima','bruno.lima@email.com','(71) 97831-1050','ICM Pituba','Adolescente',0,'Violão I','Pituba'],
-      ['Larissa Melo','larissa.melo@email.com','(71) 96742-2161','ICM Brotas','Jovem',0,'Teclado','Brotas'],
+      ['João Pereira','joao.pereira@email.com','(71) 98821-1040','Pituba','Jovem',1,'Violão I','Pituba'],
+      ['Maria Clara','maria.clara@email.com','(71) 97732-2151','Brotas','Adolescente',0,'Teclado','Brotas'],
+      ['Pedro Almeida','pedro.almeida@email.com','(71) 96643-3262','Lauro','Jovem',1,'Bateria','Lauro de Freitas'],
+      ['Ana Beatriz','ana.beatriz@email.com','(71) 95554-4373','Pituba','Jovem',0,'Canto Coral','Pituba'],
+      ['Lucas Guimarães','lucas.guimaraes@email.com','(71) 94465-5484','Brotas','Adolescente',1,'Violino','Brotas'],
+      ['Gabriela Santos','gabriela.santos@email.com','(71) 93376-6595','Boca do Rio','Jovem',1,'Flauta Transversal','Boca do Rio'],
+      ['Rafael Souza','rafael.souza@email.com','(71) 92287-7606','Alto de Coutos','Varão',1,'Contrabaixo','Alto de Coutos'],
+      ['Juliana Costa','juliana.costa@email.com','(71) 91198-8717','Pituba','Senhora',0,'Teoria Musical','EAD'],
+      ['Ricardo Alves','ricardo.alves@email.com','(71) 90019-9828','Pituba','Varão',1,'Violão II','Pituba'],
+      ['Camila Rocha','camila.rocha@email.com','(71) 98920-0939','Brotas','Jovem',1,'Saxofone','Brotas'],
+      ['Bruno Lima','bruno.lima@email.com','(71) 97831-1050','Pituba','Adolescente',0,'Violão I','Pituba'],
+      ['Larissa Melo','larissa.melo@email.com','(71) 96742-2161','Brotas','Jovem',0,'Teclado','Brotas'],
     ];
     for (const [name,email,phone,church,ageGroup,instrument,course,location] of studentRows) {
       await db.prepare('INSERT OR IGNORE INTO churches (name) VALUES (?)').run(church);
@@ -602,5 +634,6 @@ export async function initializeNodeApplication({ db, env = process.env }) {
   await db.prepare('DELETE FROM password_resets WHERE expires_at <= ? OR used_at IS NOT NULL').run(new Date().toISOString());
 
   await initializeClassSchedules(db);
+  await initializeStudentSchema(db);
 
 }

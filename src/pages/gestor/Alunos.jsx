@@ -144,11 +144,15 @@ const Alunos = () => {
     const handleSaveAluno = async (formData, alunoId, photoChange) => {
         try {
             let savedId = alunoId;
+            let invitation = null;
+            let emailConfirmation = null;
             if (alunoId) {
-                await api.put(`/alunos/${alunoId}`, formData);
+                const response = await api.put(`/alunos/${alunoId}`, formData);
+                emailConfirmation = response.data.emailConfirmation;
             } else {
                 const response = await api.post('/alunos', formData);
                 savedId = response.data.id;
+                invitation = response.data.invitation;
             }
             let photoFailed = false;
             try {
@@ -157,7 +161,15 @@ const Alunos = () => {
             } catch {
                 photoFailed = true;
             }
-            showToast(photoFailed ? 'Aluno salvo, mas não foi possível atualizar a foto.' : alunoId ? 'Aluno atualizado com sucesso!' : 'Aluno adicionado com sucesso!', photoFailed ? 'warning' : 'success', photoFailed ? 6000 : undefined);
+            const warning = photoFailed || (!alunoId && invitation?.sent === false) || (alunoId && emailConfirmation?.sent === false);
+            const message = photoFailed
+                ? 'Aluno salvo, mas não foi possível atualizar a foto.'
+                : alunoId && emailConfirmation?.sent === true ? emailConfirmation.message
+                    : alunoId && emailConfirmation?.sent === false ? `Aluno atualizado, mas ${emailConfirmation.message}`
+                    : alunoId ? 'Aluno atualizado com sucesso!'
+                    : invitation?.sent === false ? `Aluno adicionado, mas o convite não foi enviado. ${invitation.message}`
+                        : 'Aluno adicionado e convite de acesso enviado!';
+            showToast(message, warning ? 'warning' : 'success', warning ? 7000 : undefined);
             handleCloseModals();
             await Promise.all([fetchAlunos(), fetchAcademicOptions()]);
         } catch (error) {
@@ -375,7 +387,7 @@ const Alunos = () => {
                 confirmLabel="Anonimizar e excluir selecionados"
                 loading={bulkSaving}
             />
-            <StudentDetailsModal isOpen={Boolean(detailsAluno)} onClose={() => setDetailsAluno(null)} student={detailsAluno} />
+            <StudentDetailsModal manageAccess isOpen={Boolean(detailsAluno)} onClose={() => setDetailsAluno(null)} student={detailsAluno} />
         </div>
     );
 };

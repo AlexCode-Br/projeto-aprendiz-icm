@@ -2,7 +2,7 @@ import React from 'react';
 import Modal from './Modal';
 import AnnouncementAttachments from './AnnouncementAttachments';
 
-const AnnouncementDetailModal = ({ isOpen, onClose, announcement }) => {
+const AnnouncementDetailModal = ({ isOpen, onClose, announcement, footer = null }) => {
     if (!announcement) return null;
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={announcement.titulo} maxWidth="max-w-3xl">
@@ -16,6 +16,7 @@ const AnnouncementDetailModal = ({ isOpen, onClose, announcement }) => {
                 <div className="announcement-content my-5 max-w-none leading-relaxed text-text-default" dangerouslySetInnerHTML={{ __html: announcement.conteudo }} />
                 <AnnouncementAttachments attachments={announcement.anexos} />
             </article>
+            {footer && <div className="mt-5 border-t border-border pt-4">{footer}</div>}
         </Modal>
     );
 };

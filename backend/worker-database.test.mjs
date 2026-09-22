@@ -31,6 +31,10 @@ test('Worker preserves SQL adapter semantics and numeric/text/date normalization
 });
 
 test('schema qualification preserves aliases, explicit schemas, literals and comments', () => {
+  for(const table of ['student_accounts','student_invites','student_announcement_audiences','student_announcement_classes','student_notice_deliveries','student_email_changes','student_course_announcements']) {
+    assert.equal(internals.qualifyApplicationTables(`SELECT * FROM ${table} WHERE 1=1`),`SELECT * FROM projeto_aprendiz.${table} WHERE 1=1`);
+    assert.equal(internals.returningId(`INSERT INTO ${table} (user_id) VALUES ($1)`),`INSERT INTO ${table} (user_id) VALUES ($1)`);
+  }
   const sql = "SELECT users.name, 'FROM users', $$JOIN courses$$ FROM users JOIN classes c ON c.professor_id=users.id -- FROM students\nWHERE users.id IN (SELECT user_id FROM user_settings)";
   assert.equal(internals.qualifyApplicationTables(sql), "SELECT users.name, 'FROM users', $$JOIN courses$$ FROM projeto_aprendiz.users JOIN projeto_aprendiz.classes c ON c.professor_id=users.id -- FROM students\nWHERE users.id IN (SELECT user_id FROM projeto_aprendiz.user_settings)");
   assert.equal(internals.qualifyApplicationTables('SELECT * FROM public.users JOIN "classes" ON true'), 'SELECT * FROM public.users JOIN projeto_aprendiz."classes" ON true');
@@ -95,4 +99,16 @@ test('successful transaction commits, nested transaction fails and connection fa
   const unused = createWorkerDatabase({}, driver);
   await unused.close();
   assert.throws(() => internals.connectionOptions({}), /Configure HYPERDRIVE/);
+});
+
+test('student portal Worker bootstrap is idempotent, private and schema-qualified', async () => {
+  const calls=[];
+  const database={exec:async sql=>{calls.push(sql);}};
+  await Promise.all([internals.ensureStudentPortalSchema(database),internals.ensureStudentPortalSchema(database)]);
+  assert.equal(calls.length,1);
+  assert.match(calls[0],/CREATE TABLE IF NOT EXISTS projeto_aprendiz\.student_accounts/);
+  assert.match(calls[0],/CREATE TABLE IF NOT EXISTS projeto_aprendiz\.student_invites/);
+  assert.match(calls[0],/CHECK\(role IN \('gestor','professor','aluno'\)\)/);
+  assert.match(calls[0],/ENABLE ROW LEVEL SECURITY/);
+  assert.match(calls[0],/FROM PUBLIC, anon, authenticated/);
 });

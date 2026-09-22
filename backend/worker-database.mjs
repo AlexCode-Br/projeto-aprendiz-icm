@@ -28,6 +28,10 @@ const tablesWithId = new Set([
   'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos', 'push_subscriptions',
 ]);
 const applicationTables = new Set([
+  'student_accounts', 'student_invites', 'student_announcement_audiences', 'student_announcement_classes',
+  'student_notice_deliveries',
+  'student_email_changes',
+  'student_course_announcements',
   ...tablesWithId, 'user_settings', 'announcement_reads', 'announcement_recipients',
   'support_ticket_reads', 'class_schedules', 'class_schedule_dates', 'enrollment_repair_archive', 'schema_migrations',
 ]);
@@ -179,6 +183,8 @@ let pushSchemaReady = false;
 let pushSchemaPromise = null;
 let scheduleDatesSchemaReady = false;
 let scheduleDatesSchemaPromise = null;
+let studentPortalSchemaReady = false;
+let studentPortalSchemaPromise = null;
 
 export function ensurePushSubscriptionsSchema(database) {
   if (pushSchemaReady) return Promise.resolve();
@@ -227,9 +233,107 @@ export function ensureClassScheduleDatesSchema(database) {
   return scheduleDatesSchemaPromise;
 }
 
+// The production Worker cannot execute the Node migration runner. Bootstrap
+// the student portal's private ownership tables here so a code deployment and
+// its database contract become available atomically on every cold start.
+export function ensureStudentPortalSchema(database) {
+  if (studentPortalSchemaReady) return Promise.resolve();
+  if (!studentPortalSchemaPromise) {
+    studentPortalSchemaPromise = database.exec(`
+      DO $$
+      DECLARE role_constraint TEXT;
+      BEGIN
+        SELECT pg_get_constraintdef(oid) INTO role_constraint
+        FROM pg_constraint
+        WHERE conrelid='projeto_aprendiz.users'::regclass AND conname='users_role_check';
+        IF role_constraint IS NULL OR POSITION('aluno' IN role_constraint)=0 THEN
+          ALTER TABLE projeto_aprendiz.users DROP CONSTRAINT IF EXISTS users_role_check;
+          ALTER TABLE projeto_aprendiz.users ADD CONSTRAINT users_role_check
+            CHECK(role IN ('gestor','professor','aluno'));
+        END IF;
+      END $$;
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_accounts (
+        student_id INTEGER PRIMARY KEY REFERENCES projeto_aprendiz.students(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL UNIQUE REFERENCES projeto_aprendiz.users(id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_invites (
+        token_hash TEXT PRIMARY KEY,
+        student_id INTEGER NOT NULL REFERENCES projeto_aprendiz.students(id) ON DELETE CASCADE,
+        email TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        accepted_at TIMESTAMPTZ,
+        created_by INTEGER REFERENCES projeto_aprendiz.users(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS student_invites_student_idx
+        ON projeto_aprendiz.student_invites(student_id);
+      CREATE INDEX IF NOT EXISTS student_invites_creator_idx
+        ON projeto_aprendiz.student_invites(created_by);
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_announcement_audiences (
+        announcement_id INTEGER PRIMARY KEY REFERENCES projeto_aprendiz.announcements(id) ON DELETE CASCADE,
+        all_students INTEGER NOT NULL DEFAULT 0 CHECK(all_students IN (0,1))
+      );
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_announcement_classes (
+        announcement_id INTEGER NOT NULL REFERENCES projeto_aprendiz.student_announcement_audiences(announcement_id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES projeto_aprendiz.classes(id) ON DELETE CASCADE,
+        PRIMARY KEY(announcement_id,class_id)
+      );
+      CREATE INDEX IF NOT EXISTS student_announcement_classes_class_idx
+        ON projeto_aprendiz.student_announcement_classes(class_id,announcement_id);
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_notice_deliveries (
+        announcement_id INTEGER NOT NULL REFERENCES projeto_aprendiz.announcements(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES projeto_aprendiz.users(id) ON DELETE CASCADE,
+        lease_until TIMESTAMPTZ NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        finished INTEGER NOT NULL DEFAULT 0 CHECK(finished IN (0,1)),
+        PRIMARY KEY(announcement_id,user_id)
+      );
+      CREATE INDEX IF NOT EXISTS student_notice_deliveries_user_idx
+        ON projeto_aprendiz.student_notice_deliveries(user_id);
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_email_changes (
+        token_hash TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES projeto_aprendiz.users(id) ON DELETE CASCADE,
+        old_email TEXT NOT NULL,
+        new_email TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS student_email_changes_user_idx
+        ON projeto_aprendiz.student_email_changes(user_id);
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_course_announcements (
+        announcement_id INTEGER PRIMARY KEY REFERENCES projeto_aprendiz.announcements(id) ON DELETE CASCADE,
+        class_id INTEGER NOT NULL REFERENCES projeto_aprendiz.classes(id) ON DELETE CASCADE,
+        requires_acknowledgement INTEGER NOT NULL DEFAULT 0 CHECK(requires_acknowledgement IN (0,1))
+      );
+      ALTER TABLE projeto_aprendiz.student_course_announcements
+        ADD COLUMN IF NOT EXISTS requires_acknowledgement INTEGER NOT NULL DEFAULT 0
+        CHECK(requires_acknowledgement IN (0,1));
+      CREATE INDEX IF NOT EXISTS student_course_announcements_class_idx
+        ON projeto_aprendiz.student_course_announcements(class_id,announcement_id);
+      CREATE INDEX IF NOT EXISTS student_course_announcements_class_ack_idx
+        ON projeto_aprendiz.student_course_announcements(class_id,requires_acknowledgement,announcement_id);
+      ALTER TABLE projeto_aprendiz.student_accounts ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE projeto_aprendiz.student_invites ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE projeto_aprendiz.student_announcement_audiences ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE projeto_aprendiz.student_announcement_classes ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE projeto_aprendiz.student_notice_deliveries ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE projeto_aprendiz.student_email_changes ENABLE ROW LEVEL SECURITY;
+      ALTER TABLE projeto_aprendiz.student_course_announcements ENABLE ROW LEVEL SECURITY;
+      REVOKE ALL ON TABLE projeto_aprendiz.student_accounts,projeto_aprendiz.student_invites,
+        projeto_aprendiz.student_announcement_audiences,projeto_aprendiz.student_announcement_classes,
+        projeto_aprendiz.student_notice_deliveries,projeto_aprendiz.student_email_changes,
+        projeto_aprendiz.student_course_announcements FROM PUBLIC, anon, authenticated;
+    `).then(() => { studentPortalSchemaReady = true; }).catch(error => {
+      studentPortalSchemaPromise = null;
+      throw error;
+    });
+  }
+  return studentPortalSchemaPromise;
+}
+
 // Instantiate inside fetch()/scheduled(), never in module scope. Hyperdrive
 // owns the origin connection pool; the driver connection belongs to one request.
 // Its configuration MUST have query caching disabled for auth/read-after-write.
 export function createWorkerDatabase(env, options) { return new WorkerDatabase(env, options); }
 
-export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8, ensurePushSubscriptionsSchema, ensureClassScheduleDatesSchema };
+export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8, ensurePushSubscriptionsSchema, ensureClassScheduleDatesSchema, ensureStudentPortalSchema };

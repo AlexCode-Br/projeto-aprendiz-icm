@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarClock, MapPin, Users } from 'lucide-react';
+import { AlertTriangle, CalendarClock, MapPin, MessageSquareText, Users } from 'lucide-react';
 import api from '../../services/api';
 import PageSkeleton from '../../components/PageSkeleton';
 import ClassScheduleList from '../../components/ClassScheduleList';
 import ClassScheduleModal from '../../components/ClassScheduleModal';
+import CourseAnnouncementsModal from '../../components/CourseAnnouncementsModal';
 import { useToast } from '../../contexts/ToastContext';
 import { classScheduleConflicts, classSchedules } from '../../../shared/class-schedules.mjs';
 
@@ -12,6 +13,7 @@ export default function ProfessorTurmas() {
     const [loading,setLoading] = useState(true);
     const [error,setError] = useState('');
     const [editing,setEditing] = useState(null);
+    const [announcing,setAnnouncing] = useState(null);
     const {showToast} = useToast();
     const conflicts=useMemo(()=>classScheduleConflicts(courses),[courses]);
     const conflictingIds=useMemo(()=>new Set(conflicts.flatMap(conflict=>conflict.turmas.map(course=>String(course.id)))),[conflicts]);
@@ -44,10 +46,11 @@ export default function ProfessorTurmas() {
                         <h3 className="mb-2 mt-5 text-xs font-semibold text-text-muted">Dias e horários</h3>
                         <div className="text-sm leading-6"><ClassScheduleList course={course} /></div>
                     </div>
-                    <div className="border-t border-border p-4"><button type="button" onClick={()=>setEditing(course)} className="btn btn-secondary w-full" aria-label={`Editar horários de ${course.nome} em ${course.local}`}><CalendarClock aria-hidden="true" />{classSchedules(course).length?'Editar horários':'Definir horários'}</button></div>
+                    <div className="space-y-2 border-t border-border p-4"><button type="button" onClick={()=>setEditing(course)} className="btn btn-secondary w-full" aria-label={`Editar horários de ${course.nome} em ${course.local}`}><CalendarClock aria-hidden="true" />{classSchedules(course).length?'Editar horários':'Definir horários'}</button><button type="button" onClick={()=>setAnnouncing(course)} className="btn btn-secondary w-full"><MessageSquareText aria-hidden="true"/>Mural da turma</button></div>
                 </article>})}
                 {!courses.length && <div className="panel empty-state md:col-span-2"><strong className="text-text-default">Nenhuma turma atribuída</strong><p>Suas turmas aparecerão aqui quando o gestor vinculá-las ao seu perfil.</p></div>}
             </div>}
         <ClassScheduleModal course={editing} onClose={()=>setEditing(null)} onSave={save} />
+        {announcing&&<CourseAnnouncementsModal course={announcing} onClose={()=>setAnnouncing(null)}/>}
     </>;
 }

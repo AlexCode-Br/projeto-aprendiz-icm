@@ -74,7 +74,7 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     });
     assert.equal(profileUpdate.status, 200, JSON.stringify(profileUpdate.data));
     const professorsAfterProfileEdit = await call(manager, 'GET', '/professores');
-    assert.equal(professorsAfterProfileEdit.data.professores.find(item => item.id === existingProfessor.id).local, 'ICM Federação');
+    assert.equal(professorsAfterProfileEdit.data.professores.find(item => item.id === existingProfessor.id).local, 'Federação');
     const existingClassesAfterEdit = (await call(manager, 'GET', '/cursos')).data.cursos
       .filter(item => item.professor === existingProfessor.nome)
       .map(item => ({ id: item.id, local: item.local, status: item.status }));
@@ -127,19 +127,25 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
 
     const studentPayload = (name, classId = offering.id) => ({
       nome: name,
-      contato: '',
+      contato: `${name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'.').replace(/^\.|\.$/g,'')}@example.test`,
       telefone: '(71) 99999-1000',
       classe: 'Jovem',
       church_id: church.data.id,
       turmas: Array.isArray(classId) ? classId : [classId],
       instrumento: 'Não',
     });
+    const missingEmail = await call(manager, 'POST', '/alunos', { ...studentPayload('Aluno Sem E-mail'), contato: '' });
+    assert.equal(missingEmail.status, 400);
+    assert.equal(missingEmail.data.errors.contato, 'O e-mail é obrigatório.');
     const first = await call(manager, 'POST', '/alunos', studentPayload('Aluno Sem Email Um'));
     const second = await call(manager, 'POST', '/alunos', studentPayload('Aluno Sem Email Dois'));
     assert.equal(first.status, 201, JSON.stringify(first.data));
     assert.equal(second.status, 201, JSON.stringify(second.data));
+    assert.equal(first.data.invitation.sent, true, JSON.stringify(first.data));
+    assert.equal(second.data.invitation.sent, true, JSON.stringify(second.data));
     const creationNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
     assert.ok(creationNotifications.includes('Novo aluno em sua turma'));
+    assert.ok(creationNotifications.includes('Seu acesso de aluno'));
     assert.ok(creationNotifications.includes('Aluno Sem Email Um'));
     assert.ok(creationNotifications.includes(offering.nome));
     assert.ok(creationNotifications.includes(offering.local));
@@ -149,9 +155,9 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     });
     assert.equal(customChurchStudent.status, 201, JSON.stringify(customChurchStudent.data));
     const churchesAfterCustomStudent = await call(manager, 'GET', '/api/churches');
-    assert.equal(churchesAfterCustomStudent.data.some(item => item.nome === 'ICM Mirantes de Periperi'), true);
+    assert.equal(churchesAfterCustomStudent.data.some(item => item.nome === 'Mirantes de Periperi'), true);
     const customChurchDirectory = await call(manager, 'GET', '/alunos?search=Aluno%20de%20Igreja%20Digitada');
-    assert.equal(customChurchDirectory.data.alunos[0].igreja, 'ICM Mirantes de Periperi');
+    assert.equal(customChurchDirectory.data.alunos[0].igreja, 'Mirantes de Periperi');
 
     const invalidTeen = await call(manager, 'POST', '/alunos', { ...studentPayload('Adolescente Sem Responsável'), classe: 'Adolescente' });
     assert.equal(invalidTeen.status, 400);
@@ -197,8 +203,10 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.ok(editNotifications.includes(offering.local));
     const unchangedClassesUpdate = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um Atualizado', destination.data.id));
     assert.equal(unchangedClassesUpdate.status, 200, JSON.stringify(unchangedClassesUpdate.data));
+    assert.equal(unchangedClassesUpdate.data.emailConfirmation.sent, true, JSON.stringify(unchangedClassesUpdate.data));
+    assert.equal(unchangedClassesUpdate.data.emailConfirmation.kind, 'invitation');
     const unchangedUpdateNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
-    assert.equal(unchangedUpdateNotifications.includes('Aluno Sem Email Um Atualizado'), false);
+    assert.ok(unchangedUpdateNotifications.includes('Aluno Sem Email Um Atualizado'));
     const secondaryOffering = classes.data.cursos.find(item => item.professor === 'Marina Oliveira' && item.id !== offering.id);
     assert.ok(secondaryOffering);
     const addedSecondary = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um Atualizado', [destination.data.id, secondaryOffering.id]));
@@ -226,7 +234,7 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
 
     const database = new DatabaseSync(databasePath);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM audit_log WHERE action=?').get(`student_anonymized:${second.data.id}`).total, 1);
-    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM students WHERE email IS NULL').get().total >= 3, true);
+    assert.equal(database.prepare('SELECT COUNT(*) AS total FROM students WHERE active=1 AND email IS NULL').get().total, 0);
     assert.equal(database.prepare('SELECT church_id FROM students WHERE id=?').get(first.data.id).church_id, church.data.id);
     const teen = database.prepare('SELECT guardian_name,guardian_consent_at FROM students WHERE id=?').get(validTeen.data.id);
     assert.equal(teen.guardian_name, 'Responsável Modelo');
@@ -252,6 +260,7 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
   } finally {
     if (server.exitCode === null) server.kill('SIGTERM');
     await new Promise(resolve => server.once('exit', resolve));
-    await rm(directory, { recursive: true, force: true });
+    try { await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+    catch (error) { if (process.platform !== 'win32' || error.code !== 'EBUSY') throw error; }
   }
 });

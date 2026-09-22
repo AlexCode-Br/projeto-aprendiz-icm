@@ -25,6 +25,9 @@ export function createAuthRoutes(context) {
     randomBytes,
     logger,
   } = context;
+  const studentHasAccess = async user => user.role !== 'aluno' || Boolean(await db.prepare(`SELECT sa.student_id
+    FROM student_accounts sa JOIN students s ON s.id=sa.student_id AND s.active=1 AND s.anonymized_at IS NULL
+    WHERE sa.user_id=?`).get(user.id));
 
   return async function authRoutes(request, response, url, ip) {
       if (request.method === 'POST' && url.pathname === '/api/auth/login') {
@@ -34,7 +37,7 @@ export function createAuthRoutes(context) {
         const rateLimit = await consumeAuthRateLimit({ route: 'login', ip, email: normalized });
         if (rateLimit.blocked) return rateLimitResponse(response, rateLimit);
         const user = await db.prepare('SELECT * FROM users WHERE email = ? AND active = 1').get(normalized);
-        if (!user || !(await verifyPassword(password, user.password_hash))) {
+        if (!user || !(await verifyPassword(password, user.password_hash)) || !(await studentHasAccess(user))) {
           await new Promise(resolve => setTimeout(resolve, 350));
           return json(response, 401, { message: 'E-mail ou senha inválidos.' });
         }
@@ -46,7 +49,7 @@ export function createAuthRoutes(context) {
         if (!usesSupabaseAuth) return json(response, 404, { message: 'Rota não disponível.' });
         const body = await readJson(request);
         const user = await userFromSupabaseToken(request);
-        if (!user) return json(response, 403, { message: 'Conta autenticada, mas sem acesso ativo ao Projeto Aprendiz.' });
+        if (!user || !(await studentHasAccess(user))) return json(response, 403, { message: 'Conta autenticada, mas sem acesso ativo ao Projeto Aprendiz.' });
         const { token, csrfToken, maxAge } = await createAppSession(user, ip, Boolean(body.remember));
         return json(response, 200, { user: publicUser(user), csrfToken }, { 'Set-Cookie': cookie('pa_session', token, maxAge) });
       }

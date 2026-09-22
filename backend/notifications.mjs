@@ -12,6 +12,7 @@ export function normalizeNotificationPreferences(value) {
 }
 
 export function notificationDestination(preference, role) {
+  if (role === 'aluno') return preference === 'courseUpdates' ? '/aluno/turmas' : preference === 'systemNews' ? '/aluno/informativos' : '/configuracoes';
   const prefix = role === 'professor' ? '/professor' : '/gestor';
   if (preference === 'newStudent') return `${prefix}/alunos`;
   if (preference === 'newTicket') return `${prefix}/suporte`;

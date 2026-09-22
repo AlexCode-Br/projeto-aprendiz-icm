@@ -7,9 +7,13 @@ import PrivateRoute from './components/PrivateRoute.jsx';
 import './index.css'; // Importando o CSS global
 
 const Login = React.lazy(() => import('./pages/Login.jsx'));
+const StudentPortal = React.lazy(() => import('./pages/aluno/StudentPortal.jsx'));
+const StudentCourses = React.lazy(() => import('./pages/aluno/StudentCourses.jsx'));
+const StudentCourseDetails = React.lazy(() => import('./pages/aluno/StudentCourseDetails.jsx'));
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword.jsx'));
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword.jsx'));
 const AcceptInvite = React.lazy(() => import('./pages/AcceptInvite.jsx'));
+const ConfirmEmail = React.lazy(() => import('./pages/ConfirmEmail.jsx'));
 const GestorDashboard = React.lazy(() => import('./pages/gestor/Dashboard.jsx'));
 const GestorTurmas = React.lazy(() => import('./pages/gestor/Turmas.jsx'));
 const Alunos = React.lazy(() => import('./pages/gestor/Alunos.jsx'));
@@ -28,7 +32,7 @@ const ProfessorConfiguracoes = React.lazy(() => import('./pages/professor/Profes
 
 const PageLoading = () => <div className="space-y-5 py-8" role="status" aria-label="Carregando página"><div className="skeleton h-9 w-72 max-w-full" /><div className="skeleton h-4 w-96 max-w-full" /><div className="grid gap-4 sm:grid-cols-2"><div className="skeleton h-32 rounded-xl" /><div className="skeleton h-32 rounded-xl" /></div></div>;
 
-const dashboardPath = user => user?.role === 'gestor' ? '/gestor/dashboard' : '/professor/dashboard';
+const dashboardPath = user => `/${['gestor','professor','aluno'].includes(user?.role) ? user.role : 'professor'}/dashboard`;
 
 const LoginRoute = () => {
     const { user } = React.useContext(AuthContext);
@@ -90,6 +94,7 @@ const AppRoutes = () => {
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
+            <Route path="/confirm-email" element={<ConfirmEmail />} />
             
             <Route 
                 path="/*"
@@ -101,6 +106,17 @@ const AppRoutes = () => {
                                 
                                 {user?.role === 'gestor' && gestorRoutes}
                                 {user?.role === 'professor' && professorRoutes}
+                                {user?.role === 'aluno' && <>
+                                    <Route path="/aluno/dashboard" element={<StudentPortal key="dashboard" page="dashboard" />} />
+                                    <Route path="/aluno/cursos" element={<StudentCourses />} />
+                                    <Route path="/aluno/cursos/:id" element={<StudentCourseDetails />} />
+                                    <Route path="/aluno/turmas" element={<Navigate to="/aluno/cursos" replace />} />
+                                    <Route path="/aluno/informativos" element={<StudentPortal key="informativos" page="informativos" />} />
+                                    <Route path="/aluno/perfil" element={<Navigate to="/configuracoes" replace />} />
+                                    <Route path="/aluno/calendario" element={<Navigate to="/aluno/cursos?view=calendario" replace />} />
+                                    <Route path="/aluno/frequencia" element={<Navigate to="/aluno/cursos?view=frequencia" replace />} />
+                                    <Route path="/aluno/notificacoes" element={<Navigate to="/aluno/informativos" replace />} />
+                                </>}
                                 {commonRoutes}
 
                                 <Route path="*" element={<NotFound />} />

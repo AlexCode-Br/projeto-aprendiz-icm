@@ -4,6 +4,7 @@ import {
     Mail, MessageSquare, Send, ShieldCheck, Smartphone, Trash2, UserRound, UsersRound,
 } from 'lucide-react';
 import AccountDeletionModal from './AccountDeletionModal';
+import StudentPersonalSettings from './StudentPersonalSettings';
 import FormSwitch from './FormSwitch';
 import PageSkeleton from './PageSkeleton';
 import ProfilePhotoPicker from './ProfilePhotoPicker';
@@ -197,6 +198,9 @@ export default function AccountSettings() {
         ['courseUpdates', 'Alterações em turmas', 'Receber atualizações de cursos e professores.'],
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
         ['systemNews', 'Comunicados do sistema', 'Receber novidades e atualizações do projeto.'],
+    ] : user?.role === 'aluno' ? [
+        ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da própria conta.'],
+        ['systemNews', 'Mural e informativos', 'Receber publicações destinadas a você ou às suas turmas.'],
     ] : [
         ['newStudent', 'Novos alunos', 'Avisar quando um aluno entrar em uma de suas turmas.'],
         ['newTicket', 'Respostas do suporte', 'Avisar quando houver uma resposta em seus chamados.'],
@@ -220,6 +224,8 @@ export default function AccountSettings() {
                 <button disabled={Boolean(saving)} className="submit-btn w-full md:w-auto">{saving === 'profile' ? 'Salvando…' : 'Salvar'}</button>
             </div>
         </form>
+
+        {user?.role === 'aluno' && <StudentPersonalSettings />}
 
         <section className="panel p-5 sm:p-7">
             <SectionHeader icon={LockKeyhole} title="Segurança da conta" description="Mantenha sua conta segura com uma senha forte." expanded={expanded.security} onToggle={() => setExpanded(value => ({ ...value, security: !value.security }))} />
@@ -269,10 +275,10 @@ export default function AccountSettings() {
         </section>
 
         <section className="panel p-5 sm:p-7">
-            <SectionHeader icon={Trash2} title="Excluir conta" description="Ação permanente. Seus dados pessoais serão removidos." expanded={expanded.deletion} onToggle={() => setExpanded(value => ({ ...value, deletion: !value.deletion }))} />
-            {expanded.deletion && <div className="mt-5 border-t border-border pt-5"><p className="max-w-3xl text-sm leading-6 text-text-muted">A conta será desativada, todas as sessões serão encerradas e os dados pessoais serão anonimizados. Registros acadêmicos e de auditoria permanecem sem identificação pessoal.</p><button type="button" onClick={() => setDeleteOpen(true)} className="btn btn-danger mt-4"><Trash2 aria-hidden="true" />Excluir minha conta</button></div>}
+            <SectionHeader icon={Trash2} title="Excluir conta" description={user.role === 'aluno' ? 'Encerrar o acesso à área do aluno.' : 'Ação permanente. Seus dados pessoais serão removidos.'} expanded={expanded.deletion} onToggle={() => setExpanded(value => ({ ...value, deletion: !value.deletion }))} />
+            {expanded.deletion && <div className="mt-5 border-t border-border pt-5"><p className="max-w-3xl text-sm leading-6 text-text-muted">{user.role === 'aluno' ? 'Sua conta de acesso será excluída e as sessões serão encerradas. O cadastro acadêmico e a foto permanecem sob responsabilidade da gestão. Para solicitar a remoção desses dados, procure o gestor.' : 'A conta será desativada, todas as sessões serão encerradas e os dados pessoais serão anonimizados. Registros acadêmicos e de auditoria permanecem sem identificação pessoal.'}</p><button type="button" onClick={() => setDeleteOpen(true)} className="btn btn-danger mt-4"><Trash2 aria-hidden="true" />Excluir minha conta</button></div>}
         </section>
 
-        <AccountDeletionModal isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} email={user.email} onConfirm={deleteAccount} loading={saving === 'delete'} />
+        <AccountDeletionModal studentAccount={user.role === 'aluno'} isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} email={user.email} onConfirm={deleteAccount} loading={saving === 'delete'} />
     </div>;
 }

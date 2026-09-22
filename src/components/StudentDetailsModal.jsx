@@ -5,6 +5,7 @@ import { WhatsAppIcon } from './ContactLink';
 import ProfileAvatar from './ProfileAvatar';
 import ProfilePhotoViewer from './ProfilePhotoViewer';
 import { emailHref, whatsappHref } from '../../shared/contact-links.mjs';
+import StudentAccessButton from './StudentAccessButton';
 
 const ContactAction = ({ href, icon: Icon, label, external = false }) => {
     const content = React.createElement(Icon, { 'aria-hidden': true, className: 'h-5 w-5' });
@@ -22,7 +23,7 @@ const DetailItem = ({ icon: Icon, label, children }) => <div className="flex min
     </div>
 </div>;
 
-const StudentDetailsModal = ({ student, isOpen, onClose, loading = false, error = '', onRetry }) => {
+const StudentDetailsModal = ({ student, isOpen, onClose, loading = false, error = '', onRetry, manageAccess = false }) => {
     const [isPhotoOpen, setIsPhotoOpen] = useState(false);
     if (loading || error) return <Modal isOpen={isOpen} onClose={onClose} title="Dados do aluno">
         {loading ? <p role="status" className="py-8 text-center text-text-muted">Carregando dados do aluno...</p> : <div className="space-y-4"><p role="alert" className="text-danger">{error}</p><button type="button" onClick={onRetry} className="btn btn-secondary">Tentar novamente</button></div>}
@@ -64,6 +65,7 @@ const StudentDetailsModal = ({ student, isOpen, onClose, loading = false, error 
                         </>}
                     </dl>
                 </div>
+                {manageAccess && <StudentAccessButton key={student.id} studentId={student.id} />}
             </Modal>
             <ProfilePhotoViewer isOpen={isPhotoOpen} onClose={() => setIsPhotoOpen(false)} name={student.nome} src={student.foto_url} />
         </>

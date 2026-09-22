@@ -14,7 +14,7 @@ Antes de trabalhar neste repositório:
 - Nunca versione `.env`, segredos, bancos locais, builds, relatórios gerados ou dados de teste.
 - Não adicione cópias, backups ou versões antigas dentro do repositório; o histórico pertence ao Git.
 - Modais usam o `X` do cabeçalho para sair. Não duplique essa ação com `Cancelar`, `Fechar` ou `Voltar`.
-- Frequência e relatórios acadêmicos permanecem exclusivos do professor.
+- Registro de frequência e relatórios acadêmicos permanecem exclusivos do professor. O aluno pode consultar somente a própria frequência nas turmas vinculadas, sem editar matrículas ou chamadas.
 - Excluir uma turma nunca exclui o cadastro do aluno ou do professor.
 
 ## Qualidade e entrega

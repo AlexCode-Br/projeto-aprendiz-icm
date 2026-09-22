@@ -14,6 +14,14 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
         '/gestor/professores': 'Professores',
         '/gestor/informativos': 'Informativos',
         '/gestor/suporte': 'Central de Suporte',
+        '/aluno/dashboard': 'Visão geral',
+        '/aluno/perfil': 'Meus dados',
+        '/aluno/turmas': 'Minhas turmas',
+        '/aluno/cursos': 'Meus cursos',
+        '/aluno/calendario': 'Calendário de aulas',
+        '/aluno/frequencia': 'Minha frequência',
+        '/aluno/informativos': 'Mural',
+        '/aluno/notificacoes': 'Notificações',
         '/professor/dashboard': 'Visão geral',
         '/professor/turmas': 'Minhas turmas',
         '/professor/alunos': 'Meus alunos',
@@ -23,7 +31,7 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
         '/professor/suporte': 'Suporte',
         '/configuracoes': 'Configurações da conta',
     };
-    const pageName = pageNames[location.pathname] || 'Projeto Aprendiz';
+    const pageName = pageNames[location.pathname] || (location.pathname.startsWith('/aluno/cursos/') ? 'Meu curso' : 'Projeto Aprendiz');
     const triggerRef = useRef(null);
     const { user, logout } = useContext(AuthContext);
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -72,7 +80,7 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
             <div className="relative flex items-center" ref={dropdownRef} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropdownOpen(false); }}>
                 <button ref={triggerRef} type="button" aria-label="Abrir menu da conta" aria-haspopup="menu" aria-expanded={dropdownOpen} onClick={() => setDropdownOpen(!dropdownOpen)} className="group flex min-h-11 min-w-11 items-center justify-center gap-3 rounded-xl p-1.5 transition hover:bg-surface-hover">
                     <ProfileAvatar name={user?.nome} src={`/api/profile-photo?v=${photoVersion}`} className="h-9 w-9" />
-                    <span className="hidden max-w-40 text-left sm:block"><span className="block truncate text-sm font-semibold">{user?.nome}</span><span className="block text-xs text-text-muted">{user?.role === 'gestor' ? 'Gestor' : 'Professor'}</span></span><ChevronDown aria-hidden="true" className={`!h-4 !w-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
+                    <span className="hidden max-w-40 text-left sm:block"><span className="block truncate text-sm font-semibold">{user?.nome}</span><span className="block text-xs text-text-muted">{user?.role === 'gestor' ? 'Gestor' : user?.role === 'aluno' ? 'Aluno' : 'Professor'}</span></span><ChevronDown aria-hidden="true" className={`!h-4 !w-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <div
                     id="profile-dropdown"

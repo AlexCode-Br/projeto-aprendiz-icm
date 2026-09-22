@@ -1,5 +1,7 @@
 import { attachClassSchedules } from '../class-schedules.mjs';
 
+import { churchName } from '../../shared/catalog-options.mjs';
+
 export function createClassRoutes(context) {
   const {
     db,
@@ -38,7 +40,8 @@ export function createClassRoutes(context) {
         const id = idText ? Number(idText) : null;
         if (request.method === 'POST') {
           const body = await readJson(request);
-          const name = cleanText(body.nome, 100);
+          const rawName = cleanText(body.nome, 100);
+          const name = kind === 'locais' ? churchName(rawName) : rawName;
           const errorMessage = catalogNameError(name, entity);
           if (errorMessage) return invalid(response, { nome: errorMessage });
           const existing = await db.prepare(`SELECT id,active FROM ${table} WHERE LOWER(name)=LOWER(?)`).get(name);
@@ -57,7 +60,8 @@ export function createClassRoutes(context) {
         if (!current) return json(response, 404, { message: `${entity[0].toUpperCase()}${entity.slice(1)} não encontrado.` });
         if (request.method === 'PUT') {
           const body = await readJson(request);
-          const name = cleanText(body.nome, 100);
+          const rawName = cleanText(body.nome, 100);
+          const name = kind === 'locais' ? churchName(rawName) : rawName;
           const errorMessage = catalogNameError(name, entity);
           if (errorMessage) return invalid(response, { nome: errorMessage });
           try {
@@ -119,7 +123,7 @@ export function createClassRoutes(context) {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
         const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
         const body = await readJson(request);
-        const courseName = cleanText(body.nome, 100), locationName = cleanText(body.local, 100), professorName = cleanText(body.professor, 100);
+        const courseName = cleanText(body.nome, 100), locationName = churchName(cleanText(body.local, 100)), professorName = cleanText(body.professor, 100);
         if (body.weekday || body.start_time || body.horarios !== undefined) return json(response,403,{message:'Os dias e horários são definidos pelo professor da turma.'});
         const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
         const errors = {
@@ -159,7 +163,7 @@ export function createClassRoutes(context) {
         if(!existingClass)return json(response,404,{message:'Turma não encontrada.'});
         const requestedCourseName=cleanText(body.nome,100);
         if(requestedCourseName&&requestedCourseName.localeCompare(existingClass.course_name,'pt-BR',{sensitivity:'base'})!==0)return json(response,400,{message:'O curso ofertado não pode ser alterado depois que a turma é criada.'});
-        const courseName=existingClass.course_name,locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
+        const courseName=existingClass.course_name,locationName=churchName(cleanText(body.local,100)),professorName=cleanText(body.professor,100);
         const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
         const errors={nome:catalogNameError(courseName,'curso'),local:catalogNameError(locationName,'local ou modalidade'),professor:professorName?'':'Selecione um professor cadastrado.',...validateClassDetails({weekday,start_time:startTime,label:classLabel,capacity})};
         if(hasValidationErrors(errors))return invalid(response,errors);
