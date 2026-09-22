@@ -30,6 +30,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - “Meus alunos” do professor exibe frequência no lugar dos contatos, cinco alunos por página e filtros de curso, turma, igreja do aluno e classe. Contatos permanecem em “Dados do aluno”. A frequência considera registros das matrículas ativas nas turmas do próprio professor e período letivo, respeita os filtros de curso/turma e inclui justificativas; ausência de registros aparece como “Sem chamadas”. Alteração validada localmente, ainda não publicada.
 - O dashboard do professor não exibe mais “Últimos alunos adicionados”. “Próximas aulas” permite consultar qualquer data, mantendo horários semanais e datas específicas por turma; datas específicas são armazenadas separadamente para não alterar a recorrência semanal.
+- “Informativos e avisos” exibe exclusivamente publicações do gestor e não mistura conteúdo do Mural da turma. No mural, a listagem das publicações fica separada do formulário de criação/edição, e o professor responsável vê nome e horário dos alunos da própria turma que visualizaram cada item. Alteração validada localmente, ainda não publicada.
 
 - A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026 (alteração local ainda não publicada).
 

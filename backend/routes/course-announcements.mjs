@@ -32,34 +32,43 @@ export function createCourseAnnouncementRoutes(context){
       ORDER BY a.pinned DESC,a.scheduled_at DESC,a.id DESC LIMIT 100`).all(classId,userId);
     if(!rows.length)return [];
     const ids=rows.map(row=>Number(row.id)),placeholders=ids.map(()=>'?').join(',');
-    const [attachments,readCounts,totalRow]=await Promise.all([
+    const [attachments,readers,totalRow]=await Promise.all([
       db.prepare(`SELECT id,announcement_id,filename,mime_type,size_bytes FROM announcement_attachments
         WHERE announcement_id IN (${placeholders}) ORDER BY id`).all(...ids),
-      db.prepare(`SELECT ar.announcement_id,COUNT(DISTINCT ar.user_id) AS total
+      db.prepare(`SELECT ar.announcement_id,s.id AS student_id,s.name AS student_name,ar.read_at
         FROM announcement_reads ar
         JOIN student_accounts sa ON sa.user_id=ar.user_id
         JOIN enrollments e ON e.student_id=sa.student_id AND e.class_id=? AND e.status='ativa'
         JOIN students s ON s.id=sa.student_id AND s.active=1
         JOIN users u ON u.id=sa.user_id AND u.active=1 AND u.role='aluno'
-        WHERE ar.announcement_id IN (${placeholders}) GROUP BY ar.announcement_id`).all(classId,...ids),
+        WHERE ar.announcement_id IN (${placeholders})
+        ORDER BY ar.read_at DESC,s.name`).all(classId,...ids),
       db.prepare(`SELECT COUNT(DISTINCT sa.user_id) AS total FROM enrollments e
         JOIN students s ON s.id=e.student_id AND s.active=1
         JOIN student_accounts sa ON sa.student_id=s.id
         JOIN users u ON u.id=sa.user_id AND u.active=1 AND u.role='aluno'
         WHERE e.class_id=? AND e.status='ativa'`).get(classId),
     ]);
-    const readMap=new Map(readCounts.map(row=>[Number(row.announcement_id),Number(row.total)]));
+    const readersByAnnouncement=new Map();
+    for(const reader of readers){
+      const announcementId=Number(reader.announcement_id);
+      const current=readersByAnnouncement.get(announcementId)||[];
+      current.push({alunoId:Number(reader.student_id),nome:reader.student_name,data:reader.read_at});
+      readersByAnnouncement.set(announcementId,current);
+    }
     const totalStudents=Number(totalRow?.total||0);
-    return rows.map(row=>({
+    return rows.map(row=>{
+      const visualizacoes=readersByAnnouncement.get(Number(row.id))||[];
+      return {
       id:Number(row.id),titulo:row.titulo,categoria:row.categoria,
       conteudo:sanitizeAnnouncementContent(row.conteudo),data:row.data,fixado:Boolean(row.fixado),
-      requerConfirmacao:Boolean(row.requer_confirmacao),confirmacoes:readMap.get(Number(row.id))||0,
-      totalAlunos:totalStudents,
+      requerConfirmacao:Boolean(row.requer_confirmacao),confirmacoes:visualizacoes.length,
+      totalAlunos:totalStudents,visualizacoes,
       anexos:attachments.filter(item=>Number(item.announcement_id)===Number(row.id)).map(item=>({
         id:Number(item.id),nome:item.filename,tipo:item.mime_type,tamanho:Number(item.size_bytes),
         url:`/api/informativos/${Number(row.id)}/anexos/${Number(item.id)}`,
       })),
-    }));
+    };});
   };
 
   const normalizedBody=async(request,existingAttachments=new Map())=>{

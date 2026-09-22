@@ -166,6 +166,8 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal((await call(alice,`/api/aluno/informativos?turma=${classes[1]}`)).status,404);
     const coursePost=await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`,'POST',{titulo:'Próxima aula',categoria:'Atividade',conteudo:'Traga seu instrumento para a próxima aula.',fixarNoTopo:true,solicitarConfirmacao:true,anexos:[]});
     assert.equal(coursePost.status,201,JSON.stringify(coursePost));
+    assert.equal((await call(professor,'/api/informativos')).data.some(item=>item.id===coursePost.data.id),false,'mural da turma não pode aparecer nos informativos do professor');
+    assert.equal((await call(manager,'/api/informativos')).data.some(item=>item.id===coursePost.data.id),false,'mural da turma não pode aparecer nos informativos do gestor');
     assert.equal((await call(professor,'/api/professores/me/turmas/999999/informativos','POST',{titulo:'Indevido',conteudo:'Não deve ser publicado.'})).status,404);
     assert.equal((await call(alice,`/api/professores/me/turmas/${classes[0]}/informativos`,'POST',{titulo:'Indevido',conteudo:'Não deve ser publicado.'})).status,403);
     const studentWall=(await call(alice,`/api/aluno/informativos?turma=${classes[0]}`)).data.items.find(i=>i.id===coursePost.data.id);
@@ -179,6 +181,9 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal((await call(alice,`/api/aluno/informativos/${coursePost.data.id}/lido`,'POST',{})).status,200);
     professorWall=(await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`)).data.items.find(i=>i.id===coursePost.data.id);
     assert.equal(professorWall.confirmacoes,1);
+    assert.equal(professorWall.visualizacoes.length,1);
+    assert.deepEqual(professorWall.visualizacoes[0],{alunoId:aliceId,nome:'Alice Teste',data:professorWall.visualizacoes[0].data});
+    assert.ok(professorWall.visualizacoes[0].data);
     const updatedWall=await call(professor,`/api/professores/me/turmas/${classes[0]}/mural/${coursePost.data.id}`,'PUT',{titulo:'Próxima aula atualizada',categoria:'Aviso',conteudo:'Leve também o caderno para a próxima aula.',fixarNoTopo:false,solicitarConfirmacao:false,anexos:[]});
     assert.equal(updatedWall.status,200,JSON.stringify(updatedWall));
     professorWall=(await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`)).data.items.find(i=>i.id===coursePost.data.id);

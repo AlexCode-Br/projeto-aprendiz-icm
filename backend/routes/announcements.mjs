@@ -29,6 +29,8 @@ export function createAnnouncementRoutes(context) {
         const session=await authorize(request,response,['professor']);if(!session)return;
         const result=await db.prepare(`SELECT COUNT(*) AS total FROM announcements
           WHERE announcements.active=1
+            AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
+            AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)
             AND ${announcementScheduledCondition('announcements.scheduled_at')}
             AND NOT EXISTS (SELECT 1 FROM announcement_reads WHERE announcement_reads.announcement_id=announcements.id AND announcement_reads.user_id=?)
             AND (
@@ -66,7 +68,7 @@ export function createAnnouncementRoutes(context) {
                 )
             )
           )` : '';
-        const rows=await db.prepare(`SELECT announcements.*,COUNT(read_users.id) AS read_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id LEFT JOIN users read_users ON read_users.id=announcement_reads.user_id AND read_users.role='professor' WHERE announcements.active=1${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(...(session.role==='professor' ? [session.user_id,session.user_id,session.user_id] : [session.user_id]));
+        const rows=await db.prepare(`SELECT announcements.*,COUNT(read_users.id) AS read_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id LEFT JOIN users read_users ON read_users.id=announcement_reads.user_id AND read_users.role='professor' WHERE announcements.active=1 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor') AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(...(session.role==='professor' ? [session.user_id,session.user_id,session.user_id] : [session.user_id]));
         const attachmentsByAnnouncement = new Map();
         const recipientsByAnnouncement = new Map();
         if (rows.length) {
@@ -176,7 +178,10 @@ export function createAnnouncementRoutes(context) {
       if(announcementMatch&&request.method==='PUT'){
         const session=await authorize(request,response,['gestor']);if(!session)return;
         const announcementId=Number(announcementMatch[1]);
-        const announcement=await db.prepare('SELECT id,scheduled_at FROM announcements WHERE id=? AND active=1').get(announcementId);
+        const announcement=await db.prepare(`SELECT id,scheduled_at FROM announcements
+          WHERE id=? AND active=1
+            AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
+            AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)`).get(announcementId);
         if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
         const existingAttachments=new Map((await db.prepare('SELECT id,filename,mime_type,size_bytes,data_url,storage_path FROM announcement_attachments WHERE announcement_id=?').all(announcementId)).map(row => [Number(row.id), row]));
         const body=await readJson(request, 32 * 1024 * 1024),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),scheduled=zonedScheduleIso(body.dataAgendamento,body.horaAgendamento),attachmentResult=normalizeAnnouncementAttachments(body.anexos, existingAttachments),recipientResult=await normalizeAnnouncementRecipients(body.destinatarios);
@@ -190,7 +195,10 @@ export function createAnnouncementRoutes(context) {
         try{
           stored=await prepareStoredAttachments(announcementId,attachmentResult.newItems);
           await db.transaction(async () => {
-            result=await db.prepare("UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,published_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND active=1").run(title,body.categoria,content,scheduled,scheduled,body.fixarNoTopo?1:0,announcementId);
+            result=await db.prepare(`UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,published_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP
+              WHERE id=? AND active=1
+                AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
+                AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)`).run(title,body.categoria,content,scheduled,scheduled,body.fixarNoTopo?1:0,announcementId);
             if(retainedIds.length)await db.prepare(`DELETE FROM announcement_attachments WHERE announcement_id=? AND id NOT IN (${retainedIds.map(()=>'?').join(',')})`).run(announcementId,...retainedIds);
             else await db.prepare('DELETE FROM announcement_attachments WHERE announcement_id=?').run(announcementId);
             await insertAnnouncementAttachments(announcementId,stored);
@@ -211,7 +219,9 @@ export function createAnnouncementRoutes(context) {
         const announcementId=Number(announcementMatch[1]);
         const attachments=await db.prepare('SELECT storage_path FROM announcement_attachments WHERE announcement_id=?').all(announcementId);
         const result=await db.transaction(async()=>{
-          const deleted=await db.prepare('DELETE FROM announcements WHERE id=?').run(announcementId);
+          const deleted=await db.prepare(`DELETE FROM announcements WHERE id=?
+            AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
+            AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)`).run(announcementId);
           if(deleted.changes)await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'announcement_deleted',ip);
           return deleted;
         });
@@ -229,7 +239,10 @@ export function createAnnouncementRoutes(context) {
               (ar.recipient_type='professor' AND ar.recipient_id=(SELECT pp.id FROM professor_profiles pp WHERE pp.user_id=? AND pp.active=1))
               OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1 AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)))
             )))`;
-        const announcement=await db.prepare(`SELECT announcements.id FROM announcements WHERE announcements.id=? AND announcements.active=1 AND ${announcementScheduledCondition('announcements.scheduled_at')}${visibility}`).get(announcementId,session.user_id,session.user_id);
+        const announcement=await db.prepare(`SELECT announcements.id FROM announcements WHERE announcements.id=? AND announcements.active=1
+          AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
+          AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)
+          AND ${announcementScheduledCondition('announcements.scheduled_at')}${visibility}`).get(announcementId,session.user_id,session.user_id);
         if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
         await db.prepare('INSERT INTO announcement_reads (announcement_id,user_id) VALUES (?,?) ON CONFLICT(announcement_id,user_id) DO UPDATE SET read_at=CURRENT_TIMESTAMP').run(announcementId,session.user_id);
         return json(response, 200, { success: true });
@@ -238,6 +251,10 @@ export function createAnnouncementRoutes(context) {
       const readersMatch = url.pathname.match(/^\/api\/informativos\/(\d+)\/leituras$/);
       if (readersMatch && request.method === 'GET') {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
+        const announcement=await db.prepare(`SELECT announcements.id FROM announcements WHERE announcements.id=? AND announcements.active=1
+          AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
+          AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)`).get(Number(readersMatch[1]));
+        if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
         const rows = await db.prepare(`
           SELECT professor_profiles.id AS professor_id,COALESCE(professor_profiles.name,users.name) AS name,announcement_reads.read_at
           FROM announcement_reads
