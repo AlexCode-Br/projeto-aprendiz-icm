@@ -31,11 +31,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `a8fe736`
+- Último commit da aplicação publicado em produção: `ce1fce7`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `8005b87d-313c-49c7-b694-7bca99df2f2b`
+- Versão Cloudflare verificada: `fc0fe834-2418-473c-9ca8-5ff72f833bc4`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -46,7 +46,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - “Informativos e avisos” exibe exclusivamente publicações do gestor e não mistura conteúdo do Mural da turma. No mural, a listagem das publicações fica separada do formulário de criação/edição, e o professor responsável vê nome e horário dos alunos da própria turma que visualizaram cada item. Alteração publicada em 22/09/2026.
 - A área do aluno não possui uma página independente de Mural: as publicações do professor e os informativos do gestor aparecem em abas distintas dentro de cada curso matriculado. Ao criar ou editar um informativo, o gestor escolhe somente uma ou mais turmas ofertadas; o sistema deriva o professor responsável e o público de alunos sem permitir seleção individual de professores. Alteração publicada em 22/09/2026.
 - A sidebar exibe em cascata somente as turmas do professor autenticado sob “Minhas turmas” e somente os cursos matriculados do aluno sob “Meus cursos”. Os atalhos do aluno abrem os detalhes do curso; os do professor posicionam a respectiva turma na tela de gerenciamento. Alteração publicada em 22/09/2026.
-- Na visão geral do aluno, “Avisos não lidos” abre a aba correta do curso que contém o aviso mais recente (Mural ou Informativos). A antiga tela agregadora “Meus cursos” não possui mais rota; seu card é somente um indicador, enquanto calendário e frequência mantêm páginas próprias. Nas Configurações do gestor são exibidas apenas as preferências Novas inscrições, Novos chamados e Alertas de segurança. Alteração validada localmente; ainda não publicada.
+- Na visão geral do aluno, “Avisos não lidos” abre a aba correta do curso que contém o aviso mais recente (Mural ou Informativos). A antiga tela agregadora “Meus cursos” não possui mais rota; seu card é somente um indicador, enquanto calendário e frequência mantêm páginas próprias. Nas Configurações do gestor são exibidas apenas as preferências Novas inscrições, Novos chamados e Alertas de segurança. Alteração publicada em 23/09/2026.
 - A opção genérica “Ver todas” foi removida das cascatas e cada item abre exclusivamente todas as informações da turma ou curso selecionado. Alteração publicada em 22/09/2026.
 - O mural exibe fotos de perfil em publicações, comentários e no campo de criação, com acesso às imagens limitado aos membros ativos da turma. Publicações e interações usam verificação compacta de versão a cada cinco segundos com a aba visível ou ao retornar a ela. Alteração publicada em 23/09/2026.
 - O professor controla a participação dos alunos no mural por turma (publicar/comentar/reagir, comentar/reagir ou somente visualizar). Publicações comuns geram leitura por visibilidade; confirmações obrigatórias permanecem explícitas. Regras e preservação da configuração foram cobertas por testes de API. Alteração publicada em 23/09/2026.
@@ -181,6 +181,7 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `09c0bd1b-79eb-4201-9882-fa3f89b802c2`; raiz, `/login`, bundle do mural e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão, conforme esperado.
 - Versão Cloudflare verificada: `86891d12-8447-4e5f-bf54-e705170e9849`; `/login`, bundle principal e `/api/health` retornaram HTTP 200, PostgreSQL conectado, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz. Publicação correspondente ao commit `20db61b`.
 - Versão Cloudflare verificada: `8005b87d-313c-49c7-b694-7bca99df2f2b`; `/login`, bundle de Informativos e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão. Publicação correspondente ao commit `a8fe736`.
+- Versão Cloudflare verificada: `fc0fe834-2418-473c-9ca8-5ff72f833bc4`; `/login`, bundles do Portal do Aluno e Configurações e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão. Publicação correspondente ao commit `ce1fce7`.
 
 ## Prompt curto para uma nova tarefa
 
