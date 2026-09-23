@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { communityPostgresSchema } from './course-community-schema.mjs';
 import { Client, types } from 'pg';
 
 // Keep these compatibility rules aligned with database.mjs. This module must
@@ -25,12 +26,13 @@ const tablesWithId = new Set([
   'professor_profiles', 'professor_invites', 'students', 'courses', 'classes',
   'school_years', 'churches', 'enrollments', 'attendance_sessions', 'attendance_records',
   'announcements', 'announcement_attachments', 'support_tickets', 'support_messages',
-  'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos', 'push_subscriptions',
+  'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos', 'push_subscriptions', 'notification_outbox',
 ]);
 const applicationTables = new Set([
+  'class_presentation', 'course_post_likes', 'course_post_comments',
   'student_accounts', 'student_invites', 'student_announcement_audiences', 'student_announcement_classes',
   'student_notice_deliveries',
-  'student_email_changes',
+  'student_email_changes', 'notification_outbox',
   'student_course_announcements',
   ...tablesWithId, 'user_settings', 'announcement_reads', 'announcement_recipients',
   'support_ticket_reads', 'class_schedules', 'class_schedule_dates', 'enrollment_repair_archive', 'schema_migrations',
@@ -185,6 +187,40 @@ let scheduleDatesSchemaReady = false;
 let scheduleDatesSchemaPromise = null;
 let studentPortalSchemaReady = false;
 let studentPortalSchemaPromise = null;
+let notificationOutboxSchemaReady = false;
+let notificationOutboxSchemaPromise = null;
+
+export function ensureNotificationOutboxSchema(database) {
+  if (notificationOutboxSchemaReady) return Promise.resolve();
+  if (!notificationOutboxSchemaPromise) {
+    notificationOutboxSchemaPromise = database.exec(`
+      CREATE TABLE IF NOT EXISTS projeto_aprendiz.notification_outbox (
+        id BIGSERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES projeto_aprendiz.users(id) ON DELETE CASCADE,
+        preference TEXT NOT NULL,subject TEXT NOT NULL,body TEXT NOT NULL,destination TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE,notification_tag TEXT NOT NULL,
+        email_enabled INTEGER NOT NULL DEFAULT 0 CHECK(email_enabled IN (0,1)),
+        push_enabled INTEGER NOT NULL DEFAULT 1 CHECK(push_enabled IN (0,1)),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','sent','dead')),
+        attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),
+        available_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,lease_until TIMESTAMPTZ,
+        sent_at TIMESTAMPTZ,last_error TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS notification_outbox_pending_idx
+        ON projeto_aprendiz.notification_outbox(status,available_at,id);
+      CREATE INDEX IF NOT EXISTS notification_outbox_lease_idx
+        ON projeto_aprendiz.notification_outbox(status,lease_until) WHERE status='processing';
+      ALTER TABLE projeto_aprendiz.notification_outbox ENABLE ROW LEVEL SECURITY;
+      REVOKE ALL ON TABLE projeto_aprendiz.notification_outbox FROM PUBLIC,anon,authenticated;
+      REVOKE ALL ON SEQUENCE projeto_aprendiz.notification_outbox_id_seq FROM PUBLIC,anon,authenticated;
+    `).then(() => { notificationOutboxSchemaReady = true; }).catch(error => {
+      notificationOutboxSchemaPromise = null;
+      throw error;
+    });
+  }
+  return notificationOutboxSchemaPromise;
+}
 
 export function ensurePushSubscriptionsSchema(database) {
   if (pushSchemaReady) return Promise.resolve();
@@ -256,6 +292,13 @@ export function ensureStudentPortalSchema(database) {
         student_id INTEGER PRIMARY KEY REFERENCES projeto_aprendiz.students(id) ON DELETE CASCADE,
         user_id INTEGER NOT NULL UNIQUE REFERENCES projeto_aprendiz.users(id) ON DELETE CASCADE
       );
+      UPDATE projeto_aprendiz.enrollments
+        SET completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP)
+        WHERE status<>'ativa';
+      CREATE INDEX IF NOT EXISTS enrollments_class_status_student_idx
+        ON projeto_aprendiz.enrollments(class_id,status,student_id);
+      CREATE INDEX IF NOT EXISTS enrollments_class_period_idx
+        ON projeto_aprendiz.enrollments(class_id,enrolled_at,completed_at,student_id);
       CREATE TABLE IF NOT EXISTS projeto_aprendiz.student_invites (
         token_hash TEXT PRIMARY KEY,
         student_id INTEGER NOT NULL REFERENCES projeto_aprendiz.students(id) ON DELETE CASCADE,
@@ -323,7 +366,7 @@ export function ensureStudentPortalSchema(database) {
         projeto_aprendiz.student_announcement_audiences,projeto_aprendiz.student_announcement_classes,
         projeto_aprendiz.student_notice_deliveries,projeto_aprendiz.student_email_changes,
         projeto_aprendiz.student_course_announcements FROM PUBLIC, anon, authenticated;
-    `).then(() => { studentPortalSchemaReady = true; }).catch(error => {
+    `).then(() => database.exec(communityPostgresSchema)).then(() => { studentPortalSchemaReady = true; }).catch(error => {
       studentPortalSchemaPromise = null;
       throw error;
     });
@@ -336,4 +379,4 @@ export function ensureStudentPortalSchema(database) {
 // Its configuration MUST have query caching disabled for auth/read-after-write.
 export function createWorkerDatabase(env, options) { return new WorkerDatabase(env, options); }
 
-export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8, ensurePushSubscriptionsSchema, ensureClassScheduleDatesSchema, ensureStudentPortalSchema };
+export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8, ensurePushSubscriptionsSchema, ensureClassScheduleDatesSchema, ensureStudentPortalSchema, ensureNotificationOutboxSchema };

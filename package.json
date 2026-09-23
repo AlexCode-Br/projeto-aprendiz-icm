@@ -16,6 +16,7 @@
     "dev:backend": "node --watch backend/server.mjs",
     "db:migrate": "node backend/migrate.mjs",
     "vapid:generate": "node backend/generate-vapid-keys.mjs",
+    "test:mass": "node backend/mass-simulation.mjs",
     "cloudflare:build": "node cloudflare/build.mjs && wrangler deploy --dry-run --outdir cloudflare/build",
     "cloudflare:dev": "wrangler dev",
     "cloudflare:deploy": "node cloudflare/build.mjs && wrangler deploy",

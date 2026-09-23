@@ -24,6 +24,7 @@ import { createNotificationService, normalizeNotificationPreferences } from './n
 import { createWebPushService } from './web-push.mjs';
 import { createLazyClient } from './lazy-client.mjs';
 import { deliverStudentNotices } from './student-notifications.mjs';
+import { createNotificationOutbox } from './notification-outbox.mjs';
 import {
   catalogNameError,
   cleanText,
@@ -57,6 +58,7 @@ export function createApplication({
   env = process.env,
   logger = createStructuredLogger({ includeStack: env.NODE_ENV !== 'production' }),
   authRateLimiter = createSlidingWindowRateLimiter(),
+  scheduleNotificationDrain,
 } = {}) {
   if (!db) throw new TypeError('Uma conexão de banco de dados é obrigatória.');
   const port = Number(env.PORT || 4180);
@@ -99,6 +101,7 @@ export function createApplication({
   const { sendEmail } = createEmailService({ db, isProduction, env });
   const webPushService = createWebPushService({ db, env, logger });
   const notificationService = createNotificationService({ db, sendEmail, sendPush: webPushService.sendToUser, logger });
+  const notificationOutbox = createNotificationOutbox({ db, notificationService, logger, scheduleDrain: scheduleNotificationDrain });
 
   function requireSupabaseAdmin(response) {
     if (!usesSupabaseAuth || supabaseAdmin) return true;
@@ -738,6 +741,7 @@ export function createApplication({
     baseUrl,
     sendEmail,
     notificationService,
+    notificationOutbox,
     webPushService,
     normalizeNotificationPreferences,
     sha256,
@@ -840,5 +844,6 @@ export function createApplication({
   }
 
   return { handler, isApiPath, securityHeaders, json, handleError,
-    deliverStudentNotices: () => deliverStudentNotices({db,notificationService,announcementScheduledCondition,logger}) };
+    deliverStudentNotices: () => deliverStudentNotices({db,notificationService,announcementScheduledCondition,logger}),
+    deliverNotificationOutbox: options => notificationOutbox.drain(options) };
 }

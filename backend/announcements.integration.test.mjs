@@ -113,14 +113,22 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
     assert.ok(itemA);
     assert.equal(itemA.hasRead,false);
     assert.deepEqual(itemA.anexos.map(item=>item.tipo),['image/png','application/pdf','application/pdf']);
+    const pagedA=await call(professorA,'GET','/api/informativos?page=1&limit=1&q=cronograma&read=nao-lidos');
+    assert.equal(pagedA.status,200,JSON.stringify(pagedA.data));
+    assert.equal(pagedA.data.items.length,1);
+    assert.equal(pagedA.data.items[0].id,announcementId);
+    assert.ok(pagedA.data.total>=1);
+    const managerPaged=await call(gestor,'GET','/api/informativos?page=1&limit=1&status=Publicado');
+    assert.equal(managerPaged.status,200,JSON.stringify(managerPaged.data));
+    assert.equal(managerPaged.data.items.length,1);
+    assert.ok(managerPaged.data.total>=1);
     assert.equal((await call(professorA,'GET','/api/informativos/nao-lidos')).data.total,initialUnread+1);
     assert.equal((await call(professorA,'POST',`/api/informativos/${announcementId}/lida`,{})).status,200);
     assert.equal((await call(professorA,'GET','/api/informativos/nao-lidos')).data.total,initialUnread);
     assert.equal((await call(professorB,'GET','/api/informativos')).data.find(item=>item.id===announcementId).hasRead,false,'leitura deve ser individual');
-    const readers=await call(gestor,'GET',`/api/informativos/${announcementId}/leituras`);
-    assert.deepEqual(readers.data.map(reader=>reader.professor_id),[professorAProfile]);
-    assert.deepEqual(readers.data.map(reader=>reader.name),['Marina Oliveira']);
-    assert.equal('email' in readers.data[0],false,'a lista compacta não deve expor o e-mail');
+    const managerPublishedItem=(await call(gestor,'GET','/api/informativos')).data.find(item=>item.id===announcementId);
+    assert.equal('lido' in managerPublishedItem,false,'o gestor não recebe contagem de visualizações');
+    assert.equal((await call(gestor,'GET',`/api/informativos/${announcementId}/leituras`)).status,404,'a lista administrativa de leitores foi removida');
 
     const pdfAttachments=itemA.anexos.filter(item=>item.tipo==='application/pdf');
     const pdfAttachment=pdfAttachments[0];

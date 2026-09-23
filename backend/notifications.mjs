@@ -4,6 +4,9 @@ export const NOTIFICATION_DEFAULTS = Object.freeze({
   courseUpdates: true,
   systemAlerts: true,
   systemNews: false,
+  wallPosts: true,
+  wallComments: true,
+  wallLikes: true,
 });
 
 export function normalizeNotificationPreferences(value) {
@@ -12,11 +15,12 @@ export function normalizeNotificationPreferences(value) {
 }
 
 export function notificationDestination(preference, role) {
-  if (role === 'aluno') return ['courseUpdates','systemNews'].includes(preference) ? '/aluno/cursos' : '/configuracoes';
+  const wallPreference=['wallPosts','wallComments','wallLikes'].includes(preference);
+  if (role === 'aluno') return ['courseUpdates','systemNews'].includes(preference)||wallPreference ? '/aluno/cursos' : '/configuracoes';
   const prefix = role === 'professor' ? '/professor' : '/gestor';
   if (preference === 'newStudent') return `${prefix}/alunos`;
   if (preference === 'newTicket') return `${prefix}/suporte`;
-  if (preference === 'courseUpdates') return role === 'professor' ? '/professor/turmas' : '/gestor/cursos';
+  if (preference === 'courseUpdates'||wallPreference) return role === 'professor' ? '/professor/turmas' : '/gestor/cursos';
   return '/configuracoes';
 }
 
@@ -28,19 +32,25 @@ export function createNotificationService({ db, sendEmail, sendPush = async () =
     return normalizeNotificationPreferences(parsed);
   }
 
-  async function notifyUser(userId, preference, subject, body, idempotencyKey) {
+  async function notifyUser(userId, preference, subject, body, idempotencyKey, destinationOrOptions) {
     const user = await db.prepare('SELECT id,name,email,role FROM users WHERE id=? AND active=1').get(userId);
     if (!user || !(await preferencesFor(user.id))[preference]) return { sent: false, reason: 'disabled' };
-    const destination = notificationDestination(preference, user.role);
+    const options=typeof destinationOrOptions==='string'
+      ?{destination:destinationOrOptions}
+      :(destinationOrOptions&&typeof destinationOrOptions==='object'?destinationOrOptions:{});
+    const channels={email:options.channels?.email!==false,push:options.channels?.push!==false};
+    const destination = options.destination || notificationDestination(preference, user.role);
     const [emailResult, pushResult] = await Promise.allSettled([
-      sendEmail(user.email, subject, `Olá, ${user.name}.\n\n${body}\n\nProjeto Aprendiz`, idempotencyKey),
-      sendPush(user.id, { title: subject, body, tag: idempotencyKey, url: destination }),
+      channels.email?sendEmail(user.email, subject, `Olá, ${user.name}.\n\n${body}\n\nProjeto Aprendiz`, idempotencyKey):Promise.resolve({sent:false,reason:'channel_disabled'}),
+      channels.push?sendPush(user.id, { title: subject, body, tag: options.tag||idempotencyKey, url: destination }):Promise.resolve({sent:false,reason:'channel_disabled'}),
     ]);
-    if (emailResult.status === 'rejected') logger.error('preference_notification_failed', emailResult.reason, { userId: user.id, preference, channel: 'email' });
-    if (pushResult.status === 'rejected') logger.error('preference_notification_failed', pushResult.reason, { userId: user.id, preference, channel: 'push' });
-    const emailSent = emailResult.status === 'fulfilled';
+    if (channels.email&&emailResult.status === 'rejected') logger.error('preference_notification_failed', emailResult.reason, { userId: user.id, preference, channel: 'email' });
+    if (channels.push&&pushResult.status === 'rejected') logger.error('preference_notification_failed', pushResult.reason, { userId: user.id, preference, channel: 'push' });
+    const emailSent = channels.email&&emailResult.status === 'fulfilled';
     const pushSent = pushResult.status === 'fulfilled' && pushResult.value?.sent === true;
-    return { sent: emailSent || pushSent, channels: { email: emailSent, push: pushSent }, reason: emailSent || pushSent ? undefined : 'delivery_failed' };
+    const pushReason=pushResult.status==='fulfilled'?pushResult.value?.reason:'delivery_failed';
+    const terminalSkip=!channels.email&&channels.push&&['not_subscribed','not_configured','expired'].includes(pushReason);
+    return { sent: emailSent || pushSent, channels: { email: emailSent, push: pushSent }, reason: emailSent || pushSent ? undefined : terminalSkip?pushReason:'delivery_failed' };
   }
 
   async function notifyManagers(preference, subject, body, idempotencyKey) {

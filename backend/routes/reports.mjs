@@ -25,7 +25,7 @@ export function createReportRoutes(context) {
       if(request.method==='GET'&&url.pathname==='/api/relatorios/frequencia'){
         const session=await authorize(request,response,['professor']);if(!session)return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
-        const conditions=["enrollments.status='ativa'","students.active=1","classes.active=1","classes.school_year_id=?"],whereParams=[period.id],joinParams=[];
+        const conditions=["classes.active=1","classes.school_year_id=?"],whereParams=[period.id],joinParams=[];
         const filters={curso:url.searchParams.get('curso'),local:url.searchParams.get('local'),professor:url.searchParams.get('professor'),classId:url.searchParams.get('curso_id')};
         if(filters.classId&&(!/^\d+$/.test(filters.classId)||!Number.isSafeInteger(Number(filters.classId))||Number(filters.classId)<1))return json(response,400,{message:'Selecione uma turma válida.'});
         if(filters.curso){conditions.push('courses.name=?');whereParams.push(filters.curso)}
@@ -69,13 +69,11 @@ export function createReportRoutes(context) {
                 COALESCE(SUM(CASE WHEN attendance_records.status='presente' THEN 1 ELSE 0 END),0) AS presentes,
                 COALESCE(SUM(CASE WHEN attendance_records.status='ausente' THEN 1 ELSE 0 END),0) AS ausentes,
                 COALESCE(SUM(CASE WHEN attendance_records.status='justificado' THEN 1 ELSE 0 END),0) AS justificados
-              FROM enrollments
-              JOIN students ON students.id=enrollments.student_id
-              JOIN classes ON classes.id=enrollments.class_id
-              LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id${dateJoin}
-              LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id
-                AND attendance_records.student_id=students.id
-              WHERE enrollments.status='ativa' AND students.active=1 AND classes.id IN (${placeholders})
+              FROM attendance_records
+              JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id${dateJoin}
+              JOIN students ON students.id=attendance_records.student_id
+              JOIN classes ON classes.id=attendance_sessions.class_id
+              WHERE classes.id IN (${placeholders})
               GROUP BY classes.id,students.id,students.name
               ORDER BY classes.id,students.name
             `).all(...joinParams,...classIds);
@@ -149,7 +147,7 @@ export function createReportRoutes(context) {
             turmas:reportClasses,
           });
         }
-        const sql="SELECT courses.name AS curso,students.name AS aluno,professor_profiles.name AS professor,locations.name AS local,COUNT(DISTINCT attendance_sessions.id) AS aulas,COALESCE(SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS presencas FROM enrollments JOIN students ON students.id=enrollments.student_id JOIN classes ON classes.id=enrollments.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id LEFT JOIN attendance_sessions ON attendance_sessions.class_id=classes.id"+dateJoin+" LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE "+conditions.join(' AND ')+" GROUP BY enrollments.id,courses.name,students.name,professor_profiles.name,locations.name ORDER BY courses.name,students.name";
+        const sql="SELECT courses.name AS curso,students.name AS aluno,professor_profiles.name AS professor,locations.name AS local,COUNT(DISTINCT attendance_sessions.id) AS aulas,COALESCE(SUM(CASE WHEN attendance_records.status IN ('presente','justificado') THEN 1 ELSE 0 END),0) AS presencas FROM attendance_records JOIN attendance_sessions ON attendance_sessions.id=attendance_records.session_id"+dateJoin+" JOIN students ON students.id=attendance_records.student_id JOIN classes ON classes.id=attendance_sessions.class_id JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE "+conditions.join(' AND ')+" GROUP BY classes.id,students.id,courses.name,students.name,professor_profiles.name,locations.name ORDER BY courses.name,students.name";
         const rows=await db.prepare(sql).all(...joinParams,...whereParams);
         return json(response,200,rows.map(row=>({curso:row.curso,aluno:row.aluno,professor:row.professor,local:row.local,frequencia:row.aulas?(Math.round(100*row.presencas/row.aulas)+'%'):'Sem aulas'})));
       }

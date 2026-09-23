@@ -1,10 +1,23 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 22 de setembro de 2026 (America/Sao_Paulo).
+Atualizado em 23 de setembro de 2026 (America/Sao_Paulo).
 
 Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de alterar o projeto e atualize-o depois de mudanças relevantes ou de um deploy.
 
 ## Ponto de retomada
+
+### Mural participativo, apresentação e notificações da turma — publicado
+
+- Página selecionada da turma usa `CourseRoom` compartilhado entre professor e aluno: banner, navegação horizontal Mural/Aulas/Arquivos/Informações, coluna lateral com próxima aula e local, e compositor de publicação direto no mural. No aluno, Informativos da gestão e Frequência permanecem separados. Arquivos são consultados em grupos paginados de publicações. A referência visual não amplia permissões para dados/fotos de colegas nem cria um chat privado ou em tempo real.
+
+- Alunos matriculados podem publicar textos, fotos/anexos, curtir e comentar no mural da turma. Editam somente as próprias publicações; professor pode excluir conteúdo e comentários da própria turma. Informativos administrativos continuam separados.
+- O professor escolhe por turma entre participação completa, somente comentários/reações ou mural somente leitura para alunos. A restrição é aplicada na API a publicações, edições, comentários e curtidas. O compositor do professor oferece categoria, destaque e confirmação de leitura sem abrir outro modal.
+- Publicações comuns registram visualização após permanecerem visíveis por 900 ms; itens que exigem confirmação continuam dependendo do botão explícito do aluno. Comentários carregam a página mais recente primeiro, as curtidas respondem de forma otimista e o feed verifica uma versão compacta a cada cinco segundos, recarregando apenas quando há mudança.
+- Notificações do Mural funcionam por evento: nova publicação e comentário avisam os demais alunos ativos da turma, o professor responsável e todos os gestores ativos; curtida avisa somente o autor da publicação, seja aluno ou professor. O autor da ação nunca recebe o próprio aviso. Preferências independentes (`wallPosts`, `wallComments` e `wallLikes`) controlam o push do aplicativo; mensagens do mural não geram e-mail. O clique abre diretamente a turma no perfil correto. O gestor possui acesso administrativo somente leitura ao mural pela página Turmas. Informativos da gestão continuam em fluxo e preferência separados, sem duplicar avisos do Mural.
+- Configuração inicial das turmas do professor solicita local e banner opcionais e pode ser reaberta depois. Sem imagem, o cabeçalho usa fundo vermelho. Ao escolher uma imagem, abre editor de recorte com arrasto, zoom, pinça de dois dedos e teclado; só aplica ao confirmar. A fonte otimizada é preservada para reenquadramentos posteriores pelo botão Ajustar recorte da imagem.
+- O card de configuração mostra os dias/horários existentes e permite ajustá-los pelo formulário compartilhado, preservando ajustes do banner. O usuário optou por colar o link compartilhado do Google Maps, dispensando Google Cloud: o servidor valida o domínio/protocolo, armazena em `class_presentation.address` e devolve `mapsUrl`; o aluno vê o botão para abrir o local. Nenhum redirecionamento é seguido pelo servidor.
+- Migrações `023_course_community.sql` e `024_course_wall_permissions.sql` adicionam apresentação, política de participação, curtidas e comentários em tabelas privadas com RLS. A API confere vínculo ativo para cada acesso, inclusive à imagem do banner; não há novas tabelas públicas.
+- Validação local: `pnpm lint` e `pnpm check` aprovados (92 testes: 91 executados com sucesso e uma regressão PostgreSQL opcional não executada), incluindo notificações por perfil, preferências, exclusão do autor da ação e as três políticas do mural. Fluxos desktop e mobile (390 × 844) conferidos visualmente em banco isolado. Publicado em 23/09/2026 na versão Cloudflare `09c0bd1b-79eb-4201-9882-fa3f89b802c2`.
 
 ### Área do aluno e mural — publicados
 
@@ -18,11 +31,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `0c70808`
+- Último commit da aplicação publicado em produção: `0c70808` (alterações atuais publicadas a partir da árvore de trabalho; commit ainda pendente)
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `3622f94f-e079-437a-a15d-91ee92ea2fa4`
+- Versão Cloudflare verificada: `09c0bd1b-79eb-4201-9882-fa3f89b802c2`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -34,6 +47,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - A área do aluno não possui uma página independente de Mural: as publicações do professor e os informativos do gestor aparecem em abas distintas dentro de cada curso matriculado. Ao criar ou editar um informativo, o gestor escolhe somente uma ou mais turmas ofertadas; o sistema deriva o professor responsável e o público de alunos sem permitir seleção individual de professores. Alteração publicada em 22/09/2026.
 - A sidebar exibe em cascata somente as turmas do professor autenticado sob “Minhas turmas” e somente os cursos matriculados do aluno sob “Meus cursos”. Os atalhos do aluno abrem os detalhes do curso; os do professor posicionam a respectiva turma na tela de gerenciamento. Alteração publicada em 22/09/2026.
 - A opção genérica “Ver todas” foi removida das cascatas e cada item abre exclusivamente todas as informações da turma ou curso selecionado. Alteração publicada em 22/09/2026.
+- O mural exibe fotos de perfil em publicações, comentários e no campo de criação, com acesso às imagens limitado aos membros ativos da turma. Publicações e interações usam verificação compacta de versão a cada cinco segundos com a aba visível ou ao retornar a ela. Alteração validada localmente; ainda não publicada.
+- O professor controla a participação dos alunos no mural por turma (publicar/comentar/reagir, comentar/reagir ou somente visualizar). Publicações comuns geram leitura por visibilidade; confirmações obrigatórias permanecem explícitas. Regras e preservação da configuração foram cobertas por testes de API. Alteração validada localmente; ainda não publicada.
+- Informativos administrativos não exibem mais contagem ou lista de leitores ao gestor. O estado de leitura permanece privado para cada professor ou aluno controlar itens novos e para o sistema gerenciar notificações; as confirmações visíveis do Mural da turma continuam separadas. Alteração validada localmente; ainda não publicada.
+- Publicações e comentários do Mural notificam o grupo da turma, incluindo o professor e gestores, com exclusão do autor da ação; curtidas notificam somente o dono da publicação. As três categorias podem ser desligadas separadamente em Configurações. Alteração validada localmente; ainda não publicada.
+- Teste em massa reproduzível em `pnpm test:mass`: 5 professores, 25 alunos, 5 turmas, 60 chamadas, 71 publicações, 230 comentários, 300 curtidas, 29 anexos, 10 informativos, 2.526 eventos de notificação e 1.084 requisições, sem erro HTTP inesperado. Os dois P1 foram corrigidos: chamadas salvas preservam o elenco histórico e o Mural usa outbox assíncrona em lote, push agrupado por turma e nenhuma notificação por e-mail. Vinte comentários simultâneos na turma de 25 ficaram em p95 de 96,93 ms; a verificação leve do mural em concorrência 30 atingiu 1.366,71 req/s. Paginação de Informativos, consultas de leitores restritas ao professor e índices compostos também foram incluídos. Relatório em `docs/MASS_TEST_2026-09-23.md`. Alterações ainda não publicadas; nenhuma carga foi aplicada à produção.
 
 - A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026 (alteração local ainda não publicada).
 
@@ -94,7 +112,7 @@ git diff --check
 git status --short
 ```
 
-Validação local em 22/09/2026: 87 testes, sendo 86 executados com sucesso e uma regressão PostgreSQL opcional ignorada porque `TEST_DATABASE_URL` não está definida. `pnpm lint`, build React e empacotamento do Worker passaram. O mural também foi conferido visualmente em largura responsiva.
+Validação local em 23/09/2026: 94 testes, sendo 93 executados com sucesso e uma regressão PostgreSQL opcional ignorada porque `TEST_DATABASE_URL` não está definida. `pnpm lint`, build React, empacotamento do Worker e o teste em massa (`pnpm test:mass`) passaram. O cenário de carga usou banco temporário isolado e não escreveu em produção.
 
 Fluxo de publicação:
 
@@ -155,6 +173,10 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `02b7c3ec-ac41-428b-8ee5-d57493e651f8`; `/login` e `/api/health` retornaram HTTP 200, o banco respondeu `postgres` e `/api/auth/me` retornou HTTP 401 sem sessão.
 - Hotfix `aae5493` passou a garantir de forma idempotente a tabela de datas específicas no Worker, corrigindo o erro inicial do dashboard em produção.
 - Versão Cloudflare verificada: `87567d82-4d8d-4366-8c8c-abc7f28887f8`; `/api/health` retornou HTTP 200 com PostgreSQL e duas atualizações consecutivas de `/api/dashboard/professor` foram atendidas sem erro nos logs.
+- Atualização do mural publicada em 23/09/2026: fotos de perfil em publicações, comentários e compositor, rotas de foto limitadas aos membros ativos da turma e atualização automática do mural em até três segundos.
+- Versão Cloudflare verificada: `1913afa6-7125-4c7e-b45a-fa20f6ea3a27`; raiz, `/login`, bundle de sala da turma e `/api/health` retornaram HTTP 200, com PostgreSQL conectado.
+- Mural participativo, permissões por turma, acompanhamento administrativo e notificações de publicações, comentários e curtidas publicados em 23/09/2026.
+- Versão Cloudflare verificada: `09c0bd1b-79eb-4201-9882-fa3f89b802c2`; raiz, `/login`, bundle do mural e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão, conforme esperado.
 
 ## Prompt curto para uma nova tarefa
 

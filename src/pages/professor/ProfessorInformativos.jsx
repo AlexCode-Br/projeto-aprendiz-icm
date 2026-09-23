@@ -1,11 +1,13 @@
 import { Pin } from 'lucide-react';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import AnnouncementDetailModal from '../../components/AnnouncementDetailModal';
 import useLiveRefresh from '../../hooks/useLiveRefresh';
 import SearchInput from '../../components/SearchInput';
+import Pagination from '../../components/Pagination';
 
 const plainText = html => String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+const ITEMS_PER_PAGE=5;
 
 const ProfessorInformativos = () => {
     const [informativos, setInformativos] = useState([]);
@@ -14,13 +16,21 @@ const ProfessorInformativos = () => {
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [currentPage,setCurrentPage]=useState(1);
+    const [total,setTotal]=useState(0);
+    const [unread,setUnread]=useState(0);
 
     const fetchInformativos = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
         try {
-            const response = await api.get('/api/informativos');
-            const nextInformativos = Array.isArray(response.data) ? response.data : [];
+            const [response,unreadResponse] = await Promise.all([
+                api.get('/api/informativos',{params:{page:currentPage,limit:ITEMS_PER_PAGE,q:search.trim()||undefined,read:filter==='todos'?undefined:filter}}),
+                api.get('/api/informativos/nao-lidos'),
+            ]);
+            const nextInformativos = response.data?.items||[];
             setInformativos(nextInformativos);
+            setTotal(Number(response.data?.total||0));
+            setUnread(Number(unreadResponse.data?.total||0));
             setSelected(current => current ? nextInformativos.find(item => item.id === current.id) || null : current);
             setError(null);
         } catch (err) {
@@ -30,7 +40,7 @@ const ProfessorInformativos = () => {
         } finally {
             if (!silent) setLoading(false);
         }
-    }, []);
+    }, [currentPage,filter,search]);
 
     useEffect(() => { void fetchInformativos(); }, [fetchInformativos]);
     const refreshLive = useCallback(() => fetchInformativos({ silent: true }), [fetchInformativos]);
@@ -49,17 +59,8 @@ const ProfessorInformativos = () => {
         }
     };
 
-    const visible = useMemo(() => {
-        const term = search.trim().toLocaleLowerCase('pt-BR');
-        return informativos.filter(info => {
-            if (filter === 'nao-lidos' && info.hasRead) return false;
-            if (filter === 'lidos' && !info.hasRead) return false;
-            if (filter === 'fixados' && !info.fixado) return false;
-            return !term || `${info.titulo} ${plainText(info.conteudo)} ${info.categoria}`.toLocaleLowerCase('pt-BR').includes(term);
-        });
-    }, [filter, informativos, search]);
-
-    const unread = informativos.filter(info => !info.hasRead).length;
+    useEffect(()=>{setCurrentPage(1);},[filter,search]);
+    useEffect(()=>{const pages=Math.max(1,Math.ceil(total/ITEMS_PER_PAGE));if(currentPage>pages)setCurrentPage(pages);},[currentPage,total]);
 
     if (loading) return <div className="grid gap-4 md:grid-cols-2" role="status" aria-label="Carregando informativos">{[1,2,3].map(item=><div key={item} className="panel p-5"><div className="skeleton h-5 w-24"/><div className="skeleton mt-4 h-7 w-3/4"/><div className="skeleton mt-4 h-20 rounded-lg"/></div>)}</div>;
     if (error) return <div className="panel p-10 text-center"><p className="text-danger" role="alert">{error}</p><button type="button" onClick={() => void fetchInformativos()} className="btn btn-secondary mt-4">Tentar novamente</button></div>;
@@ -82,7 +83,7 @@ const ProfessorInformativos = () => {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {visible.map(info => (
+                {informativos.map(info => (
                     <article key={info.id} className={`panel flex min-w-0 flex-col p-5 sm:p-6 ${!info.hasRead ? 'border-l-4 border-l-primary' : ''}`}>
                         <div className="mb-3 flex items-center justify-between gap-3">
                             <span className="text-xs font-semibold uppercase text-primary">{info.tipo}</span>
@@ -99,8 +100,10 @@ const ProfessorInformativos = () => {
                         </div>
                     </article>
                 ))}
-                {!visible.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted"><strong className="block text-text-default">{informativos.length ? 'Nenhum informativo encontrado' : 'Nenhum informativo disponível'}</strong><span className="mt-1 block text-sm">{informativos.length ? 'Limpe a busca ou altere os filtros.' : 'Os avisos enviados para você aparecerão aqui.'}</span></div>}
+                {!informativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted"><strong className="block text-text-default">{search||filter!=='todos' ? 'Nenhum informativo encontrado' : 'Nenhum informativo disponível'}</strong><span className="mt-1 block text-sm">{search||filter!=='todos' ? 'Limpe a busca ou altere os filtros.' : 'Os avisos enviados para você aparecerão aqui.'}</span></div>}
             </div>
+
+            <Pagination currentPage={currentPage} totalItems={total} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact className="mt-4 rounded-xl border border-border bg-surface" />
 
             <AnnouncementDetailModal isOpen={Boolean(selected)} onClose={() => setSelected(null)} announcement={selected} />
         </>

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Bell, CheckCircle2, ChevronDown, FileText, Info, Laptop, LockKeyhole, LogOut,
+    Bell, CheckCircle2, ChevronDown, FileText, Heart, Info, Laptop, LockKeyhole, LogOut,
     Mail, MessageSquare, Send, ShieldCheck, Smartphone, Trash2, UserRound, UsersRound,
 } from 'lucide-react';
 import AccountDeletionModal from './AccountDeletionModal';
@@ -18,7 +18,7 @@ import {
 import { describeDevice } from '../utils/deviceInfo';
 import { personNameError } from '../../shared/validation.mjs';
 
-const preferenceIcons = { newStudent: Mail, newTicket: MessageSquare, courseUpdates: UsersRound, systemAlerts: ShieldCheck, systemNews: FileText };
+const preferenceIcons = { newStudent: Mail, newTicket: MessageSquare, courseUpdates: UsersRound, systemAlerts: ShieldCheck, systemNews: FileText, wallPosts: Bell, wallComments: MessageSquare, wallLikes: Heart };
 
 function formatAccessDate(value) {
     if (!value) return 'Acesso recente';
@@ -45,7 +45,7 @@ export default function AccountSettings() {
     const [photoChange, setPhotoChange] = useState(undefined);
     const [photoVersion, setPhotoVersion] = useState(Date.now());
     const [photoUrl, setPhotoUrl] = useState('');
-    const [preferences, setPreferences] = useState({ newStudent: true, newTicket: true, courseUpdates: true, systemAlerts: true, systemNews: false });
+    const [preferences, setPreferences] = useState({ newStudent: true, newTicket: true, courseUpdates: true, systemAlerts: true, systemNews: false, wallPosts: true, wallComments: true, wallLikes: true });
     const [preferenceStatus, setPreferenceStatus] = useState('saved');
     const [saving, setSaving] = useState('');
     const [loading, setLoading] = useState(true);
@@ -196,15 +196,23 @@ export default function AccountSettings() {
         ['newStudent', 'Novas inscrições', 'Avisar quando um aluno for cadastrado.'],
         ['newTicket', 'Novos chamados', 'Avisar sobre solicitações de suporte.'],
         ['courseUpdates', 'Alterações em turmas', 'Receber atualizações de cursos e professores.'],
+        ['wallPosts', 'Novas publicações no mural', 'Acompanhar novas mensagens publicadas em todas as turmas.'],
+        ['wallComments', 'Comentários no mural', 'Acompanhar novas respostas e conversas nas turmas.'],
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
         ['systemNews', 'Comunicados do sistema', 'Receber novidades e atualizações do projeto.'],
     ] : user?.role === 'aluno' ? [
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da própria conta.'],
-        ['systemNews', 'Publicações e informativos', 'Receber publicações destinadas às suas turmas.'],
+        ['wallPosts', 'Novas publicações no mural', 'Receber mensagens publicadas nas suas turmas.'],
+        ['wallComments', 'Comentários no mural', 'Receber novas respostas e conversas das suas turmas.'],
+        ['wallLikes', 'Curtidas nas suas publicações', 'Avisar quando alguém curtir uma publicação sua.'],
+        ['systemNews', 'Informativos da gestão', 'Receber informativos destinados às suas turmas.'],
     ] : [
         ['newStudent', 'Novos alunos', 'Avisar quando um aluno entrar em uma de suas turmas.'],
         ['newTicket', 'Respostas do suporte', 'Avisar quando houver uma resposta em seus chamados.'],
         ['courseUpdates', 'Alterações nas turmas', 'Receber mudanças de curso, local ou horário.'],
+        ['wallPosts', 'Novas publicações no mural', 'Receber mensagens publicadas nas suas turmas.'],
+        ['wallComments', 'Comentários no mural', 'Receber novas respostas e conversas das suas turmas.'],
+        ['wallLikes', 'Curtidas nas suas publicações', 'Avisar quando alguém curtir uma publicação sua.'],
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
         ['systemNews', 'Comunicados do sistema', 'Receber novidades e atualizações do projeto.'],
     ];
@@ -240,7 +248,7 @@ export default function AccountSettings() {
         </section>
 
         <section className="panel p-5 sm:p-7">
-            <SectionHeader icon={Bell} title="Notificações" description="Escolha o que deseja receber por e-mail e no sistema." expanded={expanded.notifications} onToggle={() => setExpanded(value => ({ ...value, notifications: !value.notifications }))} />
+            <SectionHeader icon={Bell} title="Notificações" description="Escolha os avisos da conta. Interações do mural usam notificações do aplicativo, sem gerar um e-mail por mensagem." expanded={expanded.notifications} onToggle={() => setExpanded(value => ({ ...value, notifications: !value.notifications }))} />
             {expanded.notifications && <div className="mt-5 border-t border-border pt-2">
                 <div className="divide-y divide-border">{options.map(([key, title, description]) => {
                     const Icon = preferenceIcons[key];

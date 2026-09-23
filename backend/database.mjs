@@ -34,7 +34,7 @@ const tablesWithId = new Set([
   'churches',
   'enrollments', 'attendance_sessions', 'attendance_records', 'announcements', 'announcement_attachments',
   'support_tickets', 'support_messages', 'support_ticket_events', 'dropout_events', 'student_contacts',
-  'scheduled_notifications', 'profile_photos', 'push_subscriptions',
+  'scheduled_notifications', 'profile_photos', 'push_subscriptions', 'notification_outbox',
 ]);
 
 function returningId(sql) {

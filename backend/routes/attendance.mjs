@@ -41,7 +41,22 @@ export function createAttendanceRoutes(context) {
         if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
         if(!Number.isSafeInteger(classId)||classId<1||!isCalendarDate(date))return json(response,400,{message:'Informe uma turma e uma data de aula válidas.'});
         const attendanceSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
-        const rows=await db.prepare(`SELECT students.id,students.name AS nome,attendance_records.status AS status FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' LEFT JOIN attendance_sessions ON attendance_sessions.class_id=enrollments.class_id AND attendance_sessions.class_date=? LEFT JOIN attendance_records ON attendance_records.session_id=attendance_sessions.id AND attendance_records.student_id=students.id WHERE enrollments.class_id=? AND students.active=1 ORDER BY students.name`).all(date,classId);
+        // Once a call exists, its records are the immutable roster snapshot. Using
+        // current enrollments here made students enrolled months later appear in
+        // old calls and made those calls impossible to edit consistently.
+        const rows=attendanceSession
+          ? await db.prepare(`SELECT students.id,students.name AS nome,attendance_records.status
+              FROM attendance_records
+              JOIN students ON students.id=attendance_records.student_id
+              WHERE attendance_records.session_id=?
+              ORDER BY students.name`).all(attendanceSession.id)
+          : await db.prepare(`SELECT students.id,students.name AS nome,NULL AS status
+              FROM enrollments
+              JOIN students ON students.id=enrollments.student_id
+              WHERE enrollments.class_id=? AND students.active=1
+                AND date(enrollments.enrolled_at)<=?
+                AND (enrollments.status='ativa' OR (enrollments.completed_at IS NOT NULL AND date(enrollments.completed_at)>=?))
+              ORDER BY students.name`).all(classId,date,date);
         return json(response,200,{alunos:rows,registrada:Boolean(attendanceSession)});
       }
     
@@ -54,7 +69,16 @@ export function createAttendanceRoutes(context) {
         if(!Array.isArray(body.frequencias))return json(response,400,{message:'A lista de frequência é inválida.'});
         const owned=await db.prepare(`SELECT classes.id FROM classes JOIN professor_profiles ON professor_profiles.id=classes.professor_id WHERE classes.id=? AND professor_profiles.user_id=? AND classes.active=1 AND classes.school_year_id=?`).get(classId,session.user_id,period.id);
         if(!owned)return json(response,403,{message:'Turma não vinculada a este professor.'});
-        const enrolled=(await db.prepare("SELECT student_id FROM enrollments WHERE class_id=? AND status='ativa'").all(classId)).map(row=>row.student_id);
+        const existingSession=await db.prepare('SELECT id FROM attendance_sessions WHERE class_id=? AND class_date=?').get(classId,date);
+        const rosterRows=existingSession
+          ? await db.prepare('SELECT student_id FROM attendance_records WHERE session_id=? ORDER BY student_id').all(existingSession.id)
+          : await db.prepare(`SELECT enrollments.student_id FROM enrollments
+              JOIN students ON students.id=enrollments.student_id
+              WHERE enrollments.class_id=? AND students.active=1
+                AND date(enrollments.enrolled_at)<=?
+                AND (enrollments.status='ativa' OR (enrollments.completed_at IS NOT NULL AND date(enrollments.completed_at)>=?))
+              ORDER BY enrollments.student_id`).all(classId,date,date);
+        const enrolled=rosterRows.map(row=>Number(row.student_id));
         const allowed=new Set(enrolled);
         const submitted=new Map();
         for(const item of body.frequencias){

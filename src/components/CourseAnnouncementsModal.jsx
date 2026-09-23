@@ -7,13 +7,13 @@ import AnnouncementAttachmentPicker from './AnnouncementAttachmentPicker';
 import ConfirmationModal from './ConfirmationModal';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
+import { COURSE_WALL_CATEGORIES } from '../../shared/course-wall.mjs';
 
-const categories=['Aviso','Material de aula','Alteração de horário','Evento ou ensaio','Atividade'];
 const emptyForm=()=>({titulo:'',categoria:'Aviso',conteudo:'',fixarNoTopo:false,solicitarConfirmacao:false,anexos:[]});
 const plainText=value=>String(value||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
 const formatReadAt=value=>value?new Date(value).toLocaleString('pt-BR'):'Horário indisponível';
 
-function CourseWallFormModal({course,item,onClose,onSaved}){
+export function CourseWallFormModal({course,item,onClose,onSaved,student=false}){
   const [form,setForm]=useState(()=>item?{
     titulo:item.titulo,
     categoria:item.categoria,
@@ -28,27 +28,27 @@ function CourseWallFormModal({course,item,onClose,onSaved}){
   const submit=async event=>{
     event.preventDefault();setBusy(true);setError('');
     try{
-      const path=`/api/professores/me/turmas/${course.id}/mural${item?`/${item.id}`:''}`;
+      const path=`/api/turmas/${course.id}/mural${item?`/${item.id}`:''}`;
       const response=item?await api.put(path,form):await api.post(path,form);
       showToast(response.data.message,'success');
       await onSaved();
     }catch(reason){setError(reason.message);}
     finally{setBusy(false);}
   };
-  return <Modal isOpen onClose={onClose} title={`${item?'Editar':'Nova'} publicação — ${course.nome}`} maxWidth="max-w-3xl">
+  return <Modal isOpen onClose={onClose} title={`${item?'Editar':'Nova'} publicação — ${course.nome||course.curso}`} maxWidth="max-w-3xl">
     <p className="mb-5 text-sm text-text-muted">{item?'Atualize a publicação já enviada aos alunos.':'Crie uma publicação exclusiva para os alunos desta turma.'}</p>
     {error&&<p role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-sm text-danger">{error}</p>}
     <form onSubmit={submit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block"><span className="form-label">Título</span><input className="form-control" value={form.titulo} onChange={event=>setField('titulo',event.target.value)} required minLength={3} maxLength={120}/></label>
-        <label className="block"><span className="form-label">Categoria</span><FormSelect value={form.categoria} options={categories} isClearable={false} isSearchable={false} onChange={event=>setField('categoria',event.target.value)}/></label>
+        <label className="block"><span className="form-label">Categoria</span><FormSelect value={form.categoria} options={COURSE_WALL_CATEGORIES} isClearable={false} isSearchable={false} onChange={event=>setField('categoria',event.target.value)}/></label>
       </div>
       <label className="mt-4 block"><span className="form-label">Mensagem para a turma</span><textarea className="form-control min-h-32" value={form.conteudo} onChange={event=>setField('conteudo',event.target.value)} required minLength={10} maxLength={5000}/></label>
       <div className="mt-4"><AnnouncementAttachmentPicker value={form.anexos} onChange={value=>setField('anexos',value)} disabled={busy}/></div>
-      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+      {!student&&<div className="mt-5 grid gap-3 sm:grid-cols-2">
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted p-3"><input type="checkbox" className="mt-1 h-4 w-4 accent-primary" checked={form.fixarNoTopo} onChange={event=>setField('fixarNoTopo',event.target.checked)}/><span><strong className="block text-sm">Fixar no topo</strong><span className="text-xs text-text-muted">Mantém esta publicação em destaque.</span></span></label>
         <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-border bg-surface-muted p-3"><input type="checkbox" className="mt-1 h-4 w-4 accent-primary" checked={form.solicitarConfirmacao} onChange={event=>setField('solicitarConfirmacao',event.target.checked)}/><span><strong className="block text-sm">Solicitar confirmação de leitura</strong><span className="text-xs text-text-muted">O aluno precisará confirmar que leu.</span></span></label>
-      </div>
+      </div>}
       <button className="btn btn-primary mt-5 w-full" disabled={busy}>{busy?'Salvando…':item?'Salvar alterações':'Publicar no mural'}</button>
     </form>
   </Modal>;
@@ -79,7 +79,7 @@ export default function CourseAnnouncementsModal({course,onClose}){
   if(editor)return <CourseWallFormModal course={course} item={editor.item} onClose={()=>setEditor(null)} onSaved={finishEditing}/>;
 
   return <>
-    <Modal isOpen onClose={onClose} title={`Mural da turma — ${course.nome}`} maxWidth="max-w-4xl">
+    <Modal isOpen onClose={onClose} title={`Mural da turma — ${course.nome||course.curso}`} maxWidth="max-w-4xl">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-2xl text-sm text-text-muted">Acompanhe separadamente as publicações exclusivas de {course.nome} — {course.local} e veja quais alunos já visualizaram.</p>
         <button type="button" className="btn btn-primary shrink-0" onClick={()=>setEditor({item:null})}><Plus className="h-4 w-4" aria-hidden="true"/>Nova publicação</button>

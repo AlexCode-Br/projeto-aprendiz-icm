@@ -1,5 +1,5 @@
 import { createApplication, isApiPath } from '../backend/application.mjs';
-import { createWorkerDatabase, ensureClassScheduleDatesSchema, ensurePushSubscriptionsSchema, ensureStudentPortalSchema } from '../backend/worker-database.mjs';
+import { createWorkerDatabase, ensureClassScheduleDatesSchema, ensureNotificationOutboxSchema, ensurePushSubscriptionsSchema, ensureStudentPortalSchema } from '../backend/worker-database.mjs';
 import { createHttpSecurity } from '../backend/security.mjs';
 import { createStructuredLogger } from '../backend/logger.mjs';
 import { invokeApi } from './http-bridge.mjs';
@@ -8,6 +8,14 @@ export { AuthRateLimiter } from './rate-limiter.mjs';
 
 const logger = createStructuredLogger({ write: line => console.error(line), includeStack: false });
 
+async function drainNotificationOutbox(env){
+  const db=createWorkerDatabase(env,{logger});
+  try{
+    await ensureNotificationOutboxSchema(db);
+    return await createApplication({db,env,logger}).deliverNotificationOutbox({limit:100});
+  }finally{await db.close();}
+}
+
 export default {
   async scheduled(_event, env, ctx) {
     if (env.READ_ONLY_PREVIEW === 'true') return;
@@ -15,7 +23,10 @@ export default {
       const db=createWorkerDatabase(env,{logger});
       try {
         await ensureStudentPortalSchema(db);
-        await createApplication({db,env,logger}).deliverStudentNotices();
+        await ensureNotificationOutboxSchema(db);
+        const application=createApplication({db,env,logger});
+        await application.deliverStudentNotices();
+        await application.deliverNotificationOutbox({limit:200});
       }
       finally { await db.close(); }
     })());
@@ -52,7 +63,8 @@ export default {
       await ensurePushSubscriptionsSchema(db);
       await ensureClassScheduleDatesSchema(db);
       await ensureStudentPortalSchema(db);
-      const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER) });
+      await ensureNotificationOutboxSchema(db);
+      const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER), scheduleNotificationDrain:()=>ctx.waitUntil(drainNotificationOutbox(env).catch(error=>logger.error('notification_outbox_background_failed',error))) });
       return await invokeApi(request, application.handler);
     } catch (error) {
       // Avoid reflecting provider errors, configuration or credentials to clients.

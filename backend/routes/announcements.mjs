@@ -49,6 +49,9 @@ export function createAnnouncementRoutes(context) {
     
       if(request.method==='GET'&&url.pathname==='/api/informativos'){
         const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+        const paginated=url.searchParams.has('page')||url.searchParams.has('limit');
+        const page=Math.max(1,Math.min(100000,Number(url.searchParams.get('page'))||1));
+        const limit=Math.max(1,Math.min(50,Number(url.searchParams.get('limit'))||5));
         const visibility=session.role==='professor' ? `
           AND ${announcementScheduledCondition('announcements.scheduled_at')}
           AND (
@@ -68,7 +71,24 @@ export function createAnnouncementRoutes(context) {
                 )
             )
           )` : '';
-        const rows=await db.prepare(`SELECT announcements.*,COUNT(read_users.id) AS read_count,MAX(CASE WHEN announcement_reads.user_id=? THEN 1 ELSE 0 END) AS has_read FROM announcements LEFT JOIN announcement_reads ON announcement_reads.announcement_id=announcements.id LEFT JOIN users read_users ON read_users.id=announcement_reads.user_id AND read_users.role='professor' WHERE announcements.active=1 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor') AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)${visibility} GROUP BY announcements.id ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC`).all(...(session.role==='professor' ? [session.user_id,session.user_id,session.user_id] : [session.user_id]));
+        const readState=session.role==='professor'
+          ? 'EXISTS(SELECT 1 FROM announcement_reads WHERE announcement_reads.announcement_id=announcements.id AND announcement_reads.user_id=?) AS has_read'
+          : '0 AS has_read';
+        const filters=[],filterParams=[];
+        const search=String(url.searchParams.get('q')||'').trim().slice(0,120);
+        if(search){filters.push(`(LOWER(announcements.title) LIKE LOWER(?) OR LOWER(announcements.content) LIKE LOWER(?) OR EXISTS(
+          SELECT 1 FROM announcement_attachments search_attachment WHERE search_attachment.announcement_id=announcements.id AND LOWER(search_attachment.filename) LIKE LOWER(?)))`);filterParams.push(`%${search}%`,`%${search}%`,`%${search}%`);}
+        const status=url.searchParams.get('status');
+        if(status==='Publicado')filters.push(announcementScheduledCondition('announcements.scheduled_at'));
+        if(status==='Agendado')filters.push(`NOT (${announcementScheduledCondition('announcements.scheduled_at')})`);
+        const readFilter=session.role==='professor'?url.searchParams.get('read'):'';
+        if(readFilter==='lidos'){filters.push('EXISTS(SELECT 1 FROM announcement_reads filter_read WHERE filter_read.announcement_id=announcements.id AND filter_read.user_id=?)');filterParams.push(session.user_id);}
+        if(readFilter==='nao-lidos'){filters.push('NOT EXISTS(SELECT 1 FROM announcement_reads filter_read WHERE filter_read.announcement_id=announcements.id AND filter_read.user_id=?)');filterParams.push(session.user_id);}
+        if(readFilter==='fixados')filters.push('announcements.pinned=1');
+        const filterSql=filters.length?` AND ${filters.join(' AND ')}`:'';
+        const visibilityParams=session.role==='professor'?[session.user_id,session.user_id]:[];
+        const rows=await db.prepare(`SELECT announcements.*,${readState} FROM announcements WHERE announcements.active=1 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor') AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)${visibility}${filterSql} ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC,announcements.id DESC${paginated?' LIMIT ? OFFSET ?':''}`).all(...(session.role==='professor'?[session.user_id]:[]),...visibilityParams,...filterParams,...(paginated?[limit,(page-1)*limit]:[]));
+        const totalRow=paginated?await db.prepare(`SELECT COUNT(*) AS total FROM announcements WHERE announcements.active=1 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor') AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)${visibility}${filterSql}`).get(...visibilityParams,...filterParams):null;
         const attachmentsByAnnouncement = new Map();
         const recipientsByAnnouncement = new Map();
         if (rows.length) {
@@ -98,9 +118,9 @@ export function createAnnouncementRoutes(context) {
         const mapped=rows.map(row=>{
           const schedule=announcementScheduleParts(row.scheduled_at);
           const isScheduled=Date.parse(row.scheduled_at)>Date.now();
-          return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:sanitizeAnnouncementContent(row.content),data_publicacao:row.scheduled_at,agendado_em:row.scheduled_at,data:schedule.date.split('-').reverse().join('/'),hora:schedule.time,status:isScheduled?'Agendado':'Publicado',lido:Number(row.read_count||0),fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read),anexos:attachmentsByAnnouncement.get(Number(row.id)) || [],destinatarios:recipientsByAnnouncement.get(Number(row.id)) || { todos: true, professores: [], cursos: [], turmas: [] }};
+          return {id:row.id,titulo:row.title,categoria:row.category,tipo:row.category==='Urgente'?'Urgente':row.category==='Eventos'?'Evento':'Comunicado',conteudo:sanitizeAnnouncementContent(row.content),data_publicacao:row.scheduled_at,agendado_em:row.scheduled_at,data:schedule.date.split('-').reverse().join('/'),hora:schedule.time,status:isScheduled?'Agendado':'Publicado',fixado:Boolean(row.pinned),hasRead:Boolean(row.has_read),anexos:attachmentsByAnnouncement.get(Number(row.id)) || [],destinatarios:recipientsByAnnouncement.get(Number(row.id)) || { todos: true, professores: [], cursos: [], turmas: [] }};
         });
-        return json(response,200,mapped);
+        return json(response,200,paginated?{items:mapped,total:Number(totalRow?.total||0),page,limit}:mapped);
       }
       if(request.method==='GET'&&url.pathname==='/api/informativos/destinatarios'){
         const session=await authorize(request,response,['gestor']);if(!session)return;
@@ -249,23 +269,6 @@ export function createAnnouncementRoutes(context) {
         return json(response, 200, { success: true });
       }
     
-      const readersMatch = url.pathname.match(/^\/api\/informativos\/(\d+)\/leituras$/);
-      if (readersMatch && request.method === 'GET') {
-        const session = await authorize(request, response, ['gestor']); if (!session) return;
-        const announcement=await db.prepare(`SELECT announcements.id FROM announcements WHERE announcements.id=? AND announcements.active=1
-          AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
-          AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)`).get(Number(readersMatch[1]));
-        if(!announcement)return json(response,404,{message:'Informativo não encontrado.'});
-        const rows = await db.prepare(`
-          SELECT professor_profiles.id AS professor_id,COALESCE(professor_profiles.name,users.name) AS name,announcement_reads.read_at
-          FROM announcement_reads
-          JOIN users ON users.id = announcement_reads.user_id
-          LEFT JOIN professor_profiles ON professor_profiles.user_id = users.id
-          WHERE announcement_reads.announcement_id = ? AND users.role='professor'
-          ORDER BY announcement_reads.read_at DESC
-        `).all(Number(readersMatch[1]));
-        return json(response, 200, rows);
-      }
     return json(response, 404, { message: 'Rota não encontrada.' });
   };
 }

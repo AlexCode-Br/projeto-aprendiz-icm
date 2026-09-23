@@ -21,7 +21,21 @@ const logger = createStructuredLogger();
 await mkdir(dataRoot, { recursive: true });
 const db = await createDatabase({ sqlitePath, logger });
 await initializeNodeApplication({ db });
-const { handler, isApiPath, securityHeaders, json, handleError } = createApplication({ db, logger });
+let application;
+let drainScheduled=false;
+application=createApplication({ db, logger, scheduleNotificationDrain:()=>{
+  if(drainScheduled)return;
+  drainScheduled=true;
+  setImmediate(async()=>{
+    try{
+      let result;
+      do{result=await application.deliverNotificationOutbox({limit:100});}while(result.processed>0);
+    }
+    catch(error){logger.error('notification_outbox_background_failed',error);}
+    finally{drainScheduled=false;}
+  });
+} });
+const { handler, isApiPath, securityHeaders, json, handleError } = application;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));

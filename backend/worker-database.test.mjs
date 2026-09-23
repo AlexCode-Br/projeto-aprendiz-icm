@@ -105,7 +105,14 @@ test('student portal Worker bootstrap is idempotent, private and schema-qualifie
   const calls=[];
   const database={exec:async sql=>{calls.push(sql);}};
   await Promise.all([internals.ensureStudentPortalSchema(database),internals.ensureStudentPortalSchema(database)]);
-  assert.equal(calls.length,1);
+  assert.equal(calls.length,2);
+  for(const table of ['class_presentation','course_post_likes','course_post_comments']){
+    assert.ok(calls[1].includes(`CREATE TABLE IF NOT EXISTS projeto_aprendiz.${table}`));
+    assert.ok(calls[1].includes(`ALTER TABLE projeto_aprendiz.${table} ENABLE ROW LEVEL SECURITY`));
+  }
+  assert.match(calls[1],/stream_mode TEXT NOT NULL DEFAULT 'post_and_comment'/);
+  await internals.ensureStudentPortalSchema(database);
+  assert.equal(calls.length,2);
   assert.match(calls[0],/CREATE TABLE IF NOT EXISTS projeto_aprendiz\.student_accounts/);
   assert.match(calls[0],/CREATE TABLE IF NOT EXISTS projeto_aprendiz\.student_invites/);
   assert.match(calls[0],/CHECK\(role IN \('gestor','professor','aluno'\)\)/);

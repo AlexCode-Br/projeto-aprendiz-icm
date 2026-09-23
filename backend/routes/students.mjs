@@ -142,7 +142,7 @@ export function createStudentRoutes(context) {
       await db.prepare(`INSERT INTO dropout_events (student_id,class_id,reason,reason_category,occurred_at)
         SELECT student_id,class_id,?,?,? FROM enrollments WHERE student_id IN (${placeholders}) AND status='ativa'`)
         .run('Dados anonimizados por solicitação','outro',new Date().toISOString().slice(0,10),...studentIds);
-      await db.prepare(`UPDATE enrollments SET status='cancelada',transferred_to_class_id=NULL WHERE student_id IN (${placeholders}) AND status='ativa'`).run(...studentIds);
+      await db.prepare(`UPDATE enrollments SET status='cancelada',completed_at=CURRENT_TIMESTAMP,transferred_to_class_id=NULL WHERE student_id IN (${placeholders}) AND status='ativa'`).run(...studentIds);
       await db.prepare(`UPDATE students SET name='Aluno anonimizado #' || id,email=NULL,phone=NULL,guardian_name=NULL,guardian_phone=NULL,guardian_consent_at=NULL,church_id=NULL,age_group=NULL,has_instrument=0,active=0,anonymized_at=CURRENT_TIMESTAMP,anonymized_by=?,updated_at=CURRENT_TIMESTAMP WHERE id IN (${placeholders}) AND active=1`).run(session.user_id,...studentIds);
       const auditValues = studentIds.map(() => '(?,?,?)').join(',');
       await db.prepare(`INSERT INTO audit_log (user_id,action,ip) VALUES ${auditValues}`).run(...studentIds.flatMap(id => [session.user_id,`student_anonymized:${id}`,ip]));
@@ -226,7 +226,7 @@ export function createStudentRoutes(context) {
             const transferred=new Set(activeEnrollments.filter(row=>newEnrollmentSet.has(Number(row.student_id))&&Number(row.course_id)===Number(classRow.course_id)&&Number(row.class_id)!==classId).map(row=>Number(row.student_id))).size;
             if(newEnrollmentIds.length){
               const newPlaceholders=newEnrollmentIds.map(()=>'?').join(',');
-              await db.prepare(`UPDATE enrollments SET status='cancelada',transferred_to_class_id=? WHERE student_id IN (${newPlaceholders}) AND status='ativa' AND class_id IN (SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND id<>?)`).run(classId,...newEnrollmentIds,period.id,classRow.course_id,classId);
+              await db.prepare(`UPDATE enrollments SET status='cancelada',completed_at=CURRENT_TIMESTAMP,transferred_to_class_id=? WHERE student_id IN (${newPlaceholders}) AND status='ativa' AND class_id IN (SELECT id FROM classes WHERE school_year_id=? AND course_id=? AND id<>?)`).run(classId,...newEnrollmentIds,period.id,classRow.course_id,classId);
               const enrollmentValues=newEnrollmentIds.map(()=>"(?,?,'ativa',NULL,NULL)").join(',');
               await db.prepare(`INSERT INTO enrollments (student_id,class_id,status,completed_at,transferred_to_class_id) VALUES ${enrollmentValues} ON CONFLICT(student_id,class_id) DO UPDATE SET status='ativa',enrolled_at=CASE WHEN enrollments.status='ativa' THEN enrollments.enrolled_at ELSE CURRENT_TIMESTAMP END,completed_at=NULL,transferred_to_class_id=NULL`).run(...newEnrollmentIds.flatMap(id=>[id,classId]));
               await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`students_bulk_enrolled:${classId}:${newEnrollmentIds.length}`,ip);
@@ -405,7 +405,7 @@ export function createStudentRoutes(context) {
             const selectedByCourse=new Map(classRows.map(classRow=>[Number(classRow.course_id),Number(classRow.id)]));
             for(const enrollment of currentEnrollments){
               if(selectedIds.has(Number(enrollment.class_id)))continue;
-              await db.prepare("UPDATE enrollments SET status='cancelada',transferred_to_class_id=? WHERE id=?")
+              await db.prepare("UPDATE enrollments SET status='cancelada',completed_at=CURRENT_TIMESTAMP,transferred_to_class_id=? WHERE id=?")
                 .run(selectedByCourse.get(Number(enrollment.course_id))||null,enrollment.id);
             }
             for (const classRow of classRows) {

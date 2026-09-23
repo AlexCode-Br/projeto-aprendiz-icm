@@ -1,3 +1,4 @@
+import { communitySchema } from './course-community-schema.mjs';
 // SQLite is used only for development/tests; production uses migration 020.
 export async function initializeStudentSchema(db) {
   if (db.dialect !== 'sqlite') return;
@@ -74,4 +75,9 @@ export async function initializeStudentSchema(db) {
     await db.exec('ALTER TABLE student_course_announcements ADD COLUMN requires_acknowledgement INTEGER NOT NULL DEFAULT 0 CHECK(requires_acknowledgement IN (0,1))');
   }
   await db.exec('CREATE INDEX IF NOT EXISTS student_course_announcements_class_ack_idx ON student_course_announcements(class_id,requires_acknowledgement,announcement_id)');
+  await db.exec(communitySchema);
+  const presentationColumns=await db.prepare('PRAGMA table_info(class_presentation)').all();
+  if(!presentationColumns.some(column=>column.name==='stream_mode')){
+    await db.exec("ALTER TABLE class_presentation ADD COLUMN stream_mode TEXT NOT NULL DEFAULT 'post_and_comment' CHECK(stream_mode IN ('post_and_comment','comment_only','teacher_only'))");
+  }
 }

@@ -1,6 +1,7 @@
 import { createStudentAccessRoutes } from './student-access.mjs';
 import { createStudentEmailRoutes } from './student-email.mjs';
 import { createCourseAnnouncementRoutes } from './course-announcements.mjs';
+import { createCommunityRoutes } from './course-community.mjs';
 import { createStudentPortalRoutes } from './student-portal.mjs';
 import { createAuthRoutes } from './auth.mjs';
 import { createScheduleRoutes } from './schedules.mjs';
@@ -57,6 +58,7 @@ export function createApiHandler(context) {
   const studentAccessRoutes = createStudentAccessRoutes(context);
   const studentEmailRoutes = createStudentEmailRoutes(context);
   const courseAnnouncementRoutes = createCourseAnnouncementRoutes(context);
+  const communityRoutes = createCommunityRoutes(context);
   const studentPortalRoutes = createStudentPortalRoutes(context);
   const authRoutes = createAuthRoutes(context);
   const scheduleRoutes = createScheduleRoutes(context);
@@ -84,6 +86,8 @@ export function createApiHandler(context) {
     }
   
     if (url.pathname.startsWith('/api/student-email/')) return studentEmailRoutes(request,response,url,ip);
+    if(/^\/api\/turmas\/\d+\/mural(?:\/versao|\/\d+)?$/.test(url.pathname))return courseAnnouncementRoutes(request,response,url,ip);
+    if(url.pathname.startsWith('/api/turmas/'))return communityRoutes(request,response,url,ip);
     if (url.pathname.startsWith('/api/student-access/') || url.pathname.startsWith('/api/student-invitations/')) return studentAccessRoutes(request,response,url,ip);
     if (url.pathname.startsWith('/api/aluno/') || url.pathname.startsWith('/api/student-audiences/')) return studentPortalRoutes(request,response,url,ip);
 

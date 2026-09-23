@@ -1,6 +1,7 @@
 import PageSkeleton from '../../components/PageSkeleton';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { MessageSquareText, Pencil, Plus, Trash2 } from 'lucide-react';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TurmaCard from '../../components/TurmaCard';
 import ClassScheduleList from '../../components/ClassScheduleList';
 import SearchInput from '../../components/SearchInput';
@@ -8,6 +9,8 @@ import TurmaModal from '../../components/TurmaModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import FormSelect from '../../components/FormSelect';
 import Pagination from '../../components/Pagination';
+import Modal from '../../components/Modal';
+import CourseCommunity from '../../components/CourseCommunity';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 import { CHURCH_SUGGESTIONS, COURSE_SUGGESTIONS, catalogKey } from '../../../shared/catalog-options.mjs';
@@ -17,6 +20,7 @@ const mergeCatalogNames = (...groups) => [...new Map(groups.flat().filter(Boolea
 const ITEMS_PER_PAGE = 5;
 
 const Turmas = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const { showToast } = useToast();
@@ -121,6 +125,18 @@ const Turmas = () => {
         turmas.map(item => item.local),
     ), [catalogos.locais, turmas]);
     const filterLocations = useMemo(() => mergeCatalogNames(turmas.map(item => item.local)), [turmas]);
+    const wallClassId = Number(searchParams.get('turma')) || 0;
+    const wallClass = useMemo(() => turmas.find(item => Number(item.id) === wallClassId) || null, [turmas, wallClassId]);
+    const openWall = turma => setSearchParams(current => {
+        const next = new URLSearchParams(current);
+        next.set('turma', String(turma.id));
+        return next;
+    });
+    const closeWall = () => setSearchParams(current => {
+        const next = new URLSearchParams(current);
+        next.delete('turma');
+        return next;
+    });
 
     if (loading) return <PageSkeleton label="Carregando turmas" />;
     if (loadError) return <div className="panel empty-state"><p role="alert">{loadError}</p><button type="button" className="btn btn-secondary mt-3" onClick={fetchTurmas}>Tentar novamente</button></div>;
@@ -168,7 +184,7 @@ const Turmas = () => {
                     {(searchTerm || selectedLocal) && <button type="button" onClick={() => { setSearchTerm(''); setSelectedLocal(''); }} className="btn btn-ghost px-2 text-xs">Limpar filtros</button>}
                 </div>
                 <div className="space-y-4">
-                    {paginatedTurmas.map(turma => <TurmaCard key={turma.id} turma={turma} onEdit={handleOpenTurmaModal} onDelete={handleOpenConfirmModal} />)}
+                    {paginatedTurmas.map(turma => <TurmaCard key={turma.id} turma={turma} onViewWall={openWall} onEdit={handleOpenTurmaModal} onDelete={handleOpenConfirmModal} />)}
                     {!filteredTurmas.length && <div className="panel empty-state"><strong className="text-text-default">Nenhuma turma encontrada</strong><span>{searchTerm || selectedLocal ? 'Tente outra busca ou limpe os filtros.' : 'Use “Adicionar” para montar a primeira turma.'}</span></div>}
                 </div>
             </section>
@@ -204,6 +220,9 @@ const Turmas = () => {
                                     </td>
                                     <td className="px-6 py-4 text-center">
                                         <div className="flex items-center justify-center space-x-2">
+                                            <button type="button" aria-label={`Ver mural de ${turma.nome}`} onClick={() => openWall(turma)} className="icon-button text-primary hover:bg-primary/10" title="Ver mural">
+                                                <MessageSquareText aria-hidden="true" className="w-5 h-5" />
+                                            </button>
                                             <button type="button" aria-label={`Editar ${turma.nome}`} onClick={() => handleOpenTurmaModal(turma)} className="icon-button text-primary hover:bg-primary/10" title="Editar">
                                                 <Pencil aria-hidden="true" className="w-5 h-5" />
                                             </button>
@@ -221,6 +240,10 @@ const Turmas = () => {
             </div>
 
             <Pagination currentPage={currentPage} totalItems={filteredTurmas.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact className="mt-4 rounded-xl border border-border bg-surface" />
+
+            <Modal isOpen={Boolean(wallClass)} onClose={closeWall} title={wallClass ? `Mural da turma — ${wallClass.nome}` : 'Mural da turma'} maxWidth="max-w-5xl">
+                {wallClass && <CourseCommunity course={wallClass} />}
+            </Modal>
 
             <TurmaModal
                 isOpen={isTurmaModalOpen}

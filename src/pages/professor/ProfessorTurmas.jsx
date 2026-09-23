@@ -5,7 +5,10 @@ import api from '../../services/api';
 import PageSkeleton from '../../components/PageSkeleton';
 import ClassScheduleList from '../../components/ClassScheduleList';
 import ClassScheduleModal from '../../components/ClassScheduleModal';
-import CourseAnnouncementsModal from '../../components/CourseAnnouncementsModal';
+import Modal from '../../components/Modal';
+import ClassSettingsModal from '../../components/ClassSettingsModal';
+import CourseRoom from '../../components/CourseRoom';
+import CourseCommunity from '../../components/CourseCommunity';
 import { useToast } from '../../contexts/ToastContext';
 import { classScheduleConflicts, classSchedules } from '../../../shared/class-schedules.mjs';
 
@@ -17,6 +20,9 @@ export default function ProfessorTurmas() {
     const [error,setError] = useState('');
     const [editing,setEditing] = useState(null);
     const [announcing,setAnnouncing] = useState(null);
+    const [configuring,setConfiguring]=useState(null),[presentation,setPresentation]=useState(null);
+    const loadPresentation=useCallback(async()=>{if(!selectedId){setPresentation(null);return;}try{setPresentation((await api.get(`/api/turmas/${selectedId}/configuracao`)).data);}catch{setPresentation(null);}},[selectedId]);
+    useEffect(()=>{setPresentation(null);setEditing(null);setAnnouncing(null);setConfiguring(null);void loadPresentation();window.addEventListener('class-presentation:updated',loadPresentation);return()=>window.removeEventListener('class-presentation:updated',loadPresentation);},[loadPresentation]);
     const {showToast} = useToast();
     const conflicts=useMemo(()=>classScheduleConflicts(courses),[courses]);
     const selectedCourses=useMemo(()=>Number.isSafeInteger(selectedId)&&selectedId>0?courses.filter(course=>Number(course.id)===selectedId):courses,[courses,selectedId]);
@@ -28,7 +34,13 @@ export default function ProfessorTurmas() {
         catch(error) { setError(error.message || 'Não foi possível carregar suas turmas.'); }
         finally { setLoading(false); }
     },[]);
-    useEffect(()=>{load();},[load]);
+    useEffect(()=>{
+        load();
+        let active=true;
+        const refresh=()=>api.get('/professores/meus-cursos').then(({data})=>{if(active)setCourses(data);}).catch(()=>{});
+        window.addEventListener('class-schedules:updated',refresh);
+        return()=>{active=false;window.removeEventListener('class-schedules:updated',refresh);};
+    },[load]);
     const save = async horarios => {
         const {data}=await api.put(`/api/professores/me/turmas/${editing.id}/horarios`,{horarios});
         setCourses(current=>current.map(course=>course.id===editing.id?{...course,horarios:data.horarios}:course));
@@ -36,6 +48,12 @@ export default function ProfessorTurmas() {
     };
     if(loading)return <PageSkeleton label="Carregando suas turmas" />;
     const selectedCourse=selectedCourses.length===1&&Number.isSafeInteger(selectedId)&&selectedId>0?selectedCourses[0]:null;
+    if(selectedCourse)return <>
+        {visibleConflicts.length>0&&<div role="alert" className="alert-warning mb-4">Há conflito de horários: {visibleConflicts.map(item=>item.descricao).join('; ')}.</div>}
+        <CourseRoom key={selectedCourse.id} course={selectedCourse} settings={presentation} onConfigure={()=>setConfiguring(selectedCourse)} onSchedule={()=>setEditing(selectedCourse)}/>
+        <ClassScheduleModal course={editing} onClose={()=>setEditing(null)} onSave={save}/>
+        {configuring&&<ClassSettingsModal course={configuring} onClose={()=>setConfiguring(null)} onSaved={async()=>{setConfiguring(null);await loadPresentation();window.dispatchEvent(new Event('class-presentation:updated'));}}/>}
+    </>;
     return <>
         <div className="page-header"><div><h1 className="page-title">{selectedCourse?selectedCourse.nome:'Minhas turmas'}</h1><p className="page-description">{selectedCourse?`Informações da turma em ${selectedCourse.local}.`:'Defina os dias da semana e os horários das suas aulas.'}</p></div></div>
         {visibleConflicts.length>0&&<div className="alert-warning mb-5" role="alert">
@@ -52,11 +70,13 @@ export default function ProfessorTurmas() {
                         <h3 className="mb-2 mt-5 text-xs font-semibold text-text-muted">Dias e horários</h3>
                         <div className="text-sm leading-6"><ClassScheduleList course={course} /></div>
                     </div>
-                    <div className="space-y-2 border-t border-border p-4"><button type="button" onClick={()=>setEditing(course)} className="btn btn-secondary w-full" aria-label={`Editar horários de ${course.nome} em ${course.local}`}><CalendarClock aria-hidden="true" />{classSchedules(course).length?'Editar horários':'Definir horários'}</button><button type="button" onClick={()=>setAnnouncing(course)} className="btn btn-secondary w-full"><MessageSquareText aria-hidden="true"/>Mural da turma</button></div>
+                    <div className="space-y-2 border-t border-border p-4"><button type="button" onClick={()=>setConfiguring(course)} className="btn btn-secondary w-full">Configurar endereço e banner</button><button type="button" onClick={()=>setEditing(course)} className="btn btn-secondary w-full" aria-label={`Editar horários de ${course.nome} em ${course.local}`}><CalendarClock aria-hidden="true" />{classSchedules(course).length?'Editar horários':'Definir horários'}</button>{!selectedCourse&&<button type="button" onClick={()=>setAnnouncing(course)} className="btn btn-secondary w-full"><MessageSquareText aria-hidden="true"/>Mural da turma</button>}</div>
                 </article>})}
                 {!selectedCourses.length && <div className="panel empty-state md:col-span-2"><strong className="text-text-default">{courses.length?'Turma não encontrada':'Nenhuma turma atribuída'}</strong><p>{courses.length?'Selecione uma das suas turmas no menu lateral.':'Suas turmas aparecerão aqui quando o gestor vinculá-las ao seu perfil.'}</p></div>}
             </div>}
         <ClassScheduleModal course={editing} onClose={()=>setEditing(null)} onSave={save} />
-        {announcing&&<CourseAnnouncementsModal course={announcing} onClose={()=>setAnnouncing(null)}/>}
+        {selectedCourse&&<section className="mt-6"><h2 className="mb-4 text-xl font-semibold">Mural da turma</h2><CourseCommunity key={selectedCourse.id} course={selectedCourse}/></section>}
+        {configuring&&<ClassSettingsModal course={configuring} onClose={()=>setConfiguring(null)} onSaved={async()=>{setConfiguring(null);await loadPresentation();window.dispatchEvent(new Event('class-presentation:updated'));}}/>}
+        {announcing&&<Modal isOpen title={`Mural da turma — ${announcing.nome}`} maxWidth="max-w-4xl" onClose={()=>setAnnouncing(null)}><CourseCommunity course={announcing}/></Modal>}
     </>;
 }

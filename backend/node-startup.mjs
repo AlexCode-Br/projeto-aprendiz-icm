@@ -180,6 +180,8 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     );
     CREATE INDEX IF NOT EXISTS enrollments_recent_active_idx ON enrollments(enrolled_at DESC,id DESC) WHERE status='ativa';
     CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);
+    CREATE INDEX IF NOT EXISTS enrollments_class_status_student_idx ON enrollments(class_id,status,student_id);
+    CREATE INDEX IF NOT EXISTS enrollments_class_period_idx ON enrollments(class_id,enrolled_at,completed_at,student_id);
     CREATE TABLE IF NOT EXISTS attendance_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       class_id INTEGER NOT NULL REFERENCES classes(id),
@@ -303,6 +305,28 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       UNIQUE(notification_type,reference_key,recipient)
     );
     CREATE INDEX IF NOT EXISTS scheduled_notifications_status_idx ON scheduled_notifications(status,updated_at);
+    CREATE TABLE IF NOT EXISTS notification_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      preference TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      notification_tag TEXT NOT NULL,
+      email_enabled INTEGER NOT NULL DEFAULT 0 CHECK(email_enabled IN (0,1)),
+      push_enabled INTEGER NOT NULL DEFAULT 1 CHECK(push_enabled IN (0,1)),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','sent','dead')),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),
+      available_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      lease_until TEXT,
+      sent_at TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS notification_outbox_pending_idx ON notification_outbox(status,available_at,id);
+    CREATE INDEX IF NOT EXISTS notification_outbox_lease_idx ON notification_outbox(status,lease_until) WHERE status='processing';
   `);
   if (db.dialect === 'sqlite') {
     const userColumns = await db.prepare('PRAGMA table_info(users)').all();
@@ -473,6 +497,9 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     if(!enrollmentColumns.some(column=>column.name==='transferred_to_class_id'))await db.exec('ALTER TABLE enrollments ADD COLUMN transferred_to_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;');
     await db.exec("CREATE INDEX IF NOT EXISTS enrollments_recent_active_idx ON enrollments(enrolled_at DESC,id DESC) WHERE status='ativa';");
     await db.exec('CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);');
+    await db.exec('CREATE INDEX IF NOT EXISTS enrollments_class_status_student_idx ON enrollments(class_id,status,student_id);');
+    await db.exec('CREATE INDEX IF NOT EXISTS enrollments_class_period_idx ON enrollments(class_id,enrolled_at,completed_at,student_id);');
+    await db.exec("UPDATE enrollments SET completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP) WHERE status<>'ativa';");
     const dropoutColumns=await db.prepare('PRAGMA table_info(dropout_events)').all();
     if(!dropoutColumns.some(column=>column.name==='reason_category'))await db.exec("ALTER TABLE dropout_events ADD COLUMN reason_category TEXT NOT NULL DEFAULT 'outro' CHECK(reason_category IN ('mudanca','desinteresse','horario','saude','familia','outro')); UPDATE dropout_events SET reason_category=CASE WHEN LOWER(reason) LIKE '%horário%' OR LOWER(reason) LIKE '%horario%' THEN 'horario' WHEN LOWER(reason) LIKE '%pessoais%' OR LOWER(reason) LIKE '%familia%' THEN 'familia' ELSE 'outro' END;");
   }
