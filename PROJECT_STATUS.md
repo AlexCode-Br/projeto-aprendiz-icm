@@ -31,29 +31,29 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `0c70808` (alterações atuais publicadas a partir da árvore de trabalho; commit ainda pendente)
+- Último commit da aplicação publicado em produção: `20db61b`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `09c0bd1b-79eb-4201-9882-fa3f89b802c2`
+- Versão Cloudflare verificada: `86891d12-8447-4e5f-bf54-e705170e9849`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
 ## Decisões consolidadas
 
-- “Meus alunos” do professor exibe frequência no lugar dos contatos, cinco alunos por página e filtros de curso, turma, igreja do aluno e classe. Contatos permanecem em “Dados do aluno”. A frequência considera registros das matrículas ativas nas turmas do próprio professor e período letivo, respeita os filtros de curso/turma e inclui justificativas; ausência de registros aparece como “Sem chamadas”. Alteração validada localmente, ainda não publicada.
+- “Meus alunos” do professor exibe frequência no lugar dos contatos, cinco alunos por página e filtros de curso, turma, igreja do aluno e classe. Contatos permanecem em “Dados do aluno”. A frequência considera registros das matrículas ativas nas turmas do próprio professor e período letivo, respeita os filtros de curso/turma e inclui justificativas; ausência de registros aparece como “Sem chamadas”. Alteração publicada em 23/09/2026.
 - O dashboard do professor não exibe mais “Últimos alunos adicionados”. “Próximas aulas” permite consultar qualquer data, mantendo horários semanais e datas específicas por turma; datas específicas são armazenadas separadamente para não alterar a recorrência semanal.
 - “Informativos e avisos” exibe exclusivamente publicações do gestor e não mistura conteúdo do Mural da turma. No mural, a listagem das publicações fica separada do formulário de criação/edição, e o professor responsável vê nome e horário dos alunos da própria turma que visualizaram cada item. Alteração publicada em 22/09/2026.
 - A área do aluno não possui uma página independente de Mural: as publicações do professor e os informativos do gestor aparecem em abas distintas dentro de cada curso matriculado. Ao criar ou editar um informativo, o gestor escolhe somente uma ou mais turmas ofertadas; o sistema deriva o professor responsável e o público de alunos sem permitir seleção individual de professores. Alteração publicada em 22/09/2026.
 - A sidebar exibe em cascata somente as turmas do professor autenticado sob “Minhas turmas” e somente os cursos matriculados do aluno sob “Meus cursos”. Os atalhos do aluno abrem os detalhes do curso; os do professor posicionam a respectiva turma na tela de gerenciamento. Alteração publicada em 22/09/2026.
 - A opção genérica “Ver todas” foi removida das cascatas e cada item abre exclusivamente todas as informações da turma ou curso selecionado. Alteração publicada em 22/09/2026.
-- O mural exibe fotos de perfil em publicações, comentários e no campo de criação, com acesso às imagens limitado aos membros ativos da turma. Publicações e interações usam verificação compacta de versão a cada cinco segundos com a aba visível ou ao retornar a ela. Alteração validada localmente; ainda não publicada.
-- O professor controla a participação dos alunos no mural por turma (publicar/comentar/reagir, comentar/reagir ou somente visualizar). Publicações comuns geram leitura por visibilidade; confirmações obrigatórias permanecem explícitas. Regras e preservação da configuração foram cobertas por testes de API. Alteração validada localmente; ainda não publicada.
-- Informativos administrativos não exibem mais contagem ou lista de leitores ao gestor. O estado de leitura permanece privado para cada professor ou aluno controlar itens novos e para o sistema gerenciar notificações; as confirmações visíveis do Mural da turma continuam separadas. Alteração validada localmente; ainda não publicada.
-- Publicações e comentários do Mural notificam o grupo da turma, incluindo o professor e gestores, com exclusão do autor da ação; curtidas notificam somente o dono da publicação. As três categorias podem ser desligadas separadamente em Configurações. Alteração validada localmente; ainda não publicada.
-- Teste em massa reproduzível em `pnpm test:mass`: 5 professores, 25 alunos, 5 turmas, 60 chamadas, 71 publicações, 230 comentários, 300 curtidas, 29 anexos, 10 informativos, 2.526 eventos de notificação e 1.084 requisições, sem erro HTTP inesperado. Os dois P1 foram corrigidos: chamadas salvas preservam o elenco histórico e o Mural usa outbox assíncrona em lote, push agrupado por turma e nenhuma notificação por e-mail. Vinte comentários simultâneos na turma de 25 ficaram em p95 de 96,93 ms; a verificação leve do mural em concorrência 30 atingiu 1.366,71 req/s. Paginação de Informativos, consultas de leitores restritas ao professor e índices compostos também foram incluídos. Relatório em `docs/MASS_TEST_2026-09-23.md`. Alterações ainda não publicadas; nenhuma carga foi aplicada à produção.
+- O mural exibe fotos de perfil em publicações, comentários e no campo de criação, com acesso às imagens limitado aos membros ativos da turma. Publicações e interações usam verificação compacta de versão a cada cinco segundos com a aba visível ou ao retornar a ela. Alteração publicada em 23/09/2026.
+- O professor controla a participação dos alunos no mural por turma (publicar/comentar/reagir, comentar/reagir ou somente visualizar). Publicações comuns geram leitura por visibilidade; confirmações obrigatórias permanecem explícitas. Regras e preservação da configuração foram cobertas por testes de API. Alteração publicada em 23/09/2026.
+- Informativos administrativos não exibem mais contagem ou lista de leitores ao gestor. O estado de leitura permanece privado para cada professor ou aluno controlar itens novos e para o sistema gerenciar notificações; as confirmações visíveis do Mural da turma continuam separadas. Alteração publicada em 23/09/2026.
+- Publicações e comentários do Mural notificam o grupo da turma, incluindo o professor e gestores, com exclusão do autor da ação; curtidas notificam somente o dono da publicação. As três categorias podem ser desligadas separadamente em Configurações. Alteração publicada em 23/09/2026.
+- Teste em massa reproduzível em `pnpm test:mass`: 5 professores, 25 alunos, 5 turmas, 60 chamadas, 71 publicações, 230 comentários, 300 curtidas, 29 anexos, 10 informativos, 2.526 eventos de notificação e 1.084 requisições, sem erro HTTP inesperado. Os dois P1 foram corrigidos: chamadas salvas preservam o elenco histórico e o Mural usa outbox assíncrona em lote, push agrupado por turma e nenhuma notificação por e-mail. Vinte comentários simultâneos na turma de 25 ficaram em p95 de 96,93 ms; a verificação leve do mural em concorrência 30 atingiu 1.366,71 req/s. Paginação de Informativos, consultas de leitores restritas ao professor e índices compostos também foram incluídos. Relatório em `docs/MASS_TEST_2026-09-23.md`. Alterações publicadas em 23/09/2026; o teste de carga permaneceu isolado e não inseriu dados falsos em produção.
 
-- A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026 (alteração local ainda não publicada).
+- A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026. Alteração publicada em 23/09/2026.
 
 - A antiga página “Cursos e igrejas” tornou-se “Turmas” e mostra somente as turmas ofertadas.
 - Cada turma combina curso, igreja ou modalidade EAD e professor. `EAD` substitui definitivamente `Remoto`.
@@ -177,6 +177,7 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `1913afa6-7125-4c7e-b45a-fa20f6ea3a27`; raiz, `/login`, bundle de sala da turma e `/api/health` retornaram HTTP 200, com PostgreSQL conectado.
 - Mural participativo, permissões por turma, acompanhamento administrativo e notificações de publicações, comentários e curtidas publicados em 23/09/2026.
 - Versão Cloudflare verificada: `09c0bd1b-79eb-4201-9882-fa3f89b802c2`; raiz, `/login`, bundle do mural e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão, conforme esperado.
+- Versão Cloudflare verificada: `86891d12-8447-4e5f-bf54-e705170e9849`; `/login`, bundle principal e `/api/health` retornaram HTTP 200, PostgreSQL conectado, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz. Publicação correspondente ao commit `20db61b`.
 
 ## Prompt curto para uma nova tarefa
 
