@@ -96,10 +96,10 @@ const Informativos = () => {
             const payload = { ...formDataToSave, destinatarios };
             if (currentInformativo) {
                 await api.put(`/api/informativos/${currentInformativo.id}`, payload);
-                showToast('Informativo atualizado com sucesso!', 'success');
+                showToast(payload.modoEnvio === 'agendar' ? 'Informativo atualizado e agendado com sucesso!' : 'Informativo atualizado com sucesso!', 'success');
             } else {
                 await api.post('/api/informativos', payload);
-                showToast('Informativo criado e publicado com sucesso!', 'success');
+                showToast(payload.modoEnvio === 'agendar' ? 'Informativo agendado com sucesso!' : 'Informativo enviado com sucesso!', 'success');
             }
             setSendConfirmModalOpen(false);
             setCurrentInformativo(null);
@@ -199,6 +199,8 @@ const Informativos = () => {
                 options={audienceOptions}
                 loading={audienceLoading}
                 initialAudience={formDataToSave?.destinatarios}
+                confirmLabel={formDataToSave?.modoEnvio === 'agendar' ? 'Agendar informativo' : 'Enviar informativo'}
+                submittingLabel={formDataToSave?.modoEnvio === 'agendar' ? 'Agendando…' : 'Enviando…'}
             />
 
             <ConfirmationModal

@@ -5,7 +5,7 @@ import FormCheckbox from './FormCheckbox';
 const normalizeIds=value=>[...new Set((Array.isArray(value)?value:[]).map(Number).filter(id=>Number.isInteger(id)&&id>0))];
 const normalizeSearch=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
 
-const AnnouncementAudienceModal=({isOpen,onClose,onConfirm,options={},loading=false,initialAudience})=>{
+const AnnouncementAudienceModal=({isOpen,onClose,onConfirm,options={},loading=false,initialAudience,confirmLabel='Publicar informativo',submittingLabel='Publicando…'})=>{
   const [selected,setSelected]=useState([]),[search,setSearch]=useState(''),[error,setError]=useState(''),[submitting,setSubmitting]=useState(false);
   const classes=useMemo(()=>Array.isArray(options.turmas)?options.turmas:[],[options.turmas]);
   const filtered=useMemo(()=>{
@@ -52,7 +52,7 @@ const AnnouncementAudienceModal=({isOpen,onClose,onConfirm,options={},loading=fa
         </div>
       </section>
       {error&&<p className="mt-4 text-sm text-danger" role="alert">{error}</p>}
-      <div className="mt-6 flex border-t border-border pt-5 sm:justify-end"><button type="submit" disabled={loading||submitting||!classes.length} className="btn btn-primary">{loading?'Carregando…':submitting?'Publicando…':'Publicar informativo'}</button></div>
+        <div className="mt-6 flex border-t border-border pt-5 sm:justify-end"><button type="submit" disabled={loading||submitting||!classes.length} className="btn btn-primary">{loading?'Carregando…':submitting?submittingLabel:confirmLabel}</button></div>
     </form>
   </Modal>;
 };

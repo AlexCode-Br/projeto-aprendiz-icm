@@ -8,6 +8,7 @@ import { requiredTextError } from '../../shared/validation.mjs';
 const initialFormState = {
     titulo: '',
     categoria: '',
+    modoEnvio: 'agora',
     dataAgendamento: '',
     horaAgendamento: '',
     conteudo: '',
@@ -90,6 +91,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
             const nextForm = {
                 titulo: informativo.titulo || '',
                 categoria: informativo.categoria || '',
+                modoEnvio: informativo.status === 'Agendado' ? 'agendar' : 'agora',
                 dataAgendamento: informativo.data ? informativo.data.split('/').reverse().join('-') : '',
                 horaAgendamento: informativo.hora || '',
                 conteudo: informativo.conteudo || '',
@@ -153,13 +155,12 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         const contentError = requiredTextError(formData.conteudo.replace(/<[^>]+>/g, ' '), 'O conteúdo', 10, 5000);
         if (titleError) newErrors.titulo = titleError;
         if (!formData.categoria) newErrors.categoria = 'A categoria é obrigatória.';
-        if (!formData.dataAgendamento) newErrors.dataAgendamento = 'A data é obrigatória.';
-        if (!formData.horaAgendamento) newErrors.horaAgendamento = 'A hora é obrigatória.';
-        const scheduled = new Date(`${formData.dataAgendamento}T${formData.horaAgendamento}:00`);
-        const unchangedPublishedSchedule = informativo?.status === 'Publicado'
-            && formData.dataAgendamento === informativo.data?.split('/').reverse().join('-')
-            && formData.horaAgendamento === informativo.hora;
-        if (formData.dataAgendamento && formData.horaAgendamento && scheduled.getTime() < Date.now() && !unchangedPublishedSchedule) newErrors.dataAgendamento = 'A data e hora devem ser futuras.';
+        if (formData.modoEnvio === 'agendar') {
+            if (!formData.dataAgendamento) newErrors.dataAgendamento = 'A data é obrigatória.';
+            if (!formData.horaAgendamento) newErrors.horaAgendamento = 'A hora é obrigatória.';
+            const scheduled = new Date(`${formData.dataAgendamento}T${formData.horaAgendamento}:00`);
+            if (formData.dataAgendamento && formData.horaAgendamento && scheduled.getTime() < Date.now()) newErrors.dataAgendamento = 'A data e hora devem ser futuras.';
+        }
         if (contentError) newErrors.conteudo = contentError;
         return newErrors;
     };
@@ -170,9 +171,8 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
             ...prev,
             [name]: type === 'checkbox' ? checked : value
         }));
-        if (errors[name]) {
-            setErrors(prev => ({ ...prev, [name]: null }));
-        }
+        if (name === 'modoEnvio') setErrors(prev => ({ ...prev, dataAgendamento: null, horaAgendamento: null }));
+        else if (errors[name]) setErrors(prev => ({ ...prev, [name]: null }));
     };
 
     const handleSubmit = (e) => {
@@ -365,10 +365,23 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                 {errors.categoria && <p className="text-danger text-xs mt-1">{errors.categoria}</p>}
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <fieldset>
+                            <legend className="form-label">Quando enviar?</legend>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${formData.modoEnvio === 'agora' ? 'border-primary bg-primary/5' : 'border-border bg-surface'}`}>
+                                    <input type="radio" name="modoEnvio" value="agora" checked={formData.modoEnvio === 'agora'} onChange={handleChange} className="mt-1 h-4 w-4 accent-primary" />
+                                    <span><strong className="block text-sm text-text-default">Enviar agora</strong><span className="mt-0.5 block text-xs text-text-muted">Publica assim que você confirmar os destinatários.</span></span>
+                                </label>
+                                <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-colors ${formData.modoEnvio === 'agendar' ? 'border-primary bg-primary/5' : 'border-border bg-surface'}`}>
+                                    <input type="radio" name="modoEnvio" value="agendar" checked={formData.modoEnvio === 'agendar'} onChange={handleChange} className="mt-1 h-4 w-4 accent-primary" />
+                                    <span><strong className="block text-sm text-text-default">Agendar</strong><span className="mt-0.5 block text-xs text-text-muted">Escolha uma data e um horário futuros.</span></span>
+                                </label>
+                            </div>
+                        </fieldset>
+                        {formData.modoEnvio === 'agendar' && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <div>
                                 <label htmlFor="info-date" className="form-label">Data de agendamento</label>
-                                <input id="info-date" name="dataAgendamento" type="date" min={informativo?.status === 'Publicado' ? undefined : todayForInput()} value={formData.dataAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.dataAgendamento)} className={`form-control ${errors.dataAgendamento ? 'border-danger' : ''}`} />
+                                <input id="info-date" name="dataAgendamento" type="date" min={todayForInput()} value={formData.dataAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.dataAgendamento)} className={`form-control ${errors.dataAgendamento ? 'border-danger' : ''}`} />
                                 {errors.dataAgendamento && <p className="text-danger text-xs mt-1">{errors.dataAgendamento}</p>}
                             </div>
                             <div>
@@ -376,7 +389,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                 <input id="info-time" name="horaAgendamento" type="time" value={formData.horaAgendamento} onChange={handleChange} aria-invalid={Boolean(errors.horaAgendamento)} className={`form-control ${errors.horaAgendamento ? 'border-danger' : ''}`} />
                                 {errors.horaAgendamento && <p className="text-danger text-xs mt-1">{errors.horaAgendamento}</p>}
                             </div>
-                        </div>
+                        </div>}
                         <div>
                             <label htmlFor="info-content" className="form-label">Conteúdo</label>
                                 <div className="editor-toolbar" role="toolbar" aria-label="Formatação do conteúdo">
@@ -427,7 +440,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                     </div>
                     {linkDialogOpen && <div className="mt-4 rounded-lg border border-border bg-surface-muted p-3"><div className="grid gap-3 sm:grid-cols-2"><label><span className="form-label">Texto do link</span><input autoFocus type="text" value={linkText} onChange={event => { setLinkText(event.target.value); setLinkError(''); }} placeholder="Texto visível (opcional)" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label><label><span className="form-label">Link</span><input type="text" value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError(''); }} placeholder="google.com" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label></div><p className="mt-2 text-xs text-text-muted">Você pode digitar google.com; o endereço será convertido para HTTPS automaticamente.</p>{linkError && <p className="mt-2 text-xs text-danger">{linkError}</p>}<div className="mt-3 flex flex-wrap justify-end gap-2"><button type="button" onClick={applyLink} className="btn btn-primary">Aplicar</button><button type="button" onClick={() => setLinkDialogOpen(false)} className="btn btn-secondary">Cancelar</button></div></div>}
                     <div className="mt-6 flex border-t border-border pt-5 sm:justify-end">
-                        <button type="submit" disabled={fileProcessing} className="btn btn-primary">{fileProcessing ? 'Processando arquivos…' : 'Revisar e publicar'}</button>
+                        <button type="submit" disabled={fileProcessing} className="btn btn-primary">{fileProcessing ? 'Processando arquivos…' : formData.modoEnvio === 'agendar' ? 'Revisar agendamento' : 'Revisar e enviar'}</button>
                     </div>
                 </form>
         </Modal>

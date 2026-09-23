@@ -83,6 +83,17 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
       ],
     };
 
+    const invalidSchedule=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Agendamento incompleto',modoEnvio:'agendar',dataAgendamento:'',horaAgendamento:'',anexos:[]});
+    assert.equal(invalidSchedule.status,400);
+    assert.ok(invalidSchedule.data.errors.dataAgendamento);
+    assert.ok(invalidSchedule.data.errors.horaAgendamento);
+
+    const immediate=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Aviso enviado agora',modoEnvio:'agora',dataAgendamento:'',horaAgendamento:'',anexos:[]});
+    assert.equal(immediate.status,201,JSON.stringify(immediate.data));
+    const immediateManagerItem=(await call(gestor,'GET','/api/informativos')).data.find(item=>item.id===immediate.data.id);
+    assert.equal(immediateManagerItem.status,'Publicado');
+    assert.ok((await call(professorA,'GET','/api/informativos')).data.some(item=>item.id===immediate.data.id),'envio imediato deve aparecer sem data e hora preenchidas');
+
     assert.equal((await call(professorA,'POST','/api/informativos',payload)).status,403);
     const spoofed=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Arquivo inválido',anexos:[{nome:'falso.pdf',tipo:'application/pdf',dataUrl:dataUrl('application/pdf',png)}]});
     assert.equal(spoofed.status,400);
