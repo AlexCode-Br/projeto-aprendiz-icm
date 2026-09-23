@@ -153,7 +153,26 @@ export function createStudentPortalRoutes(context) {
     if (request.method==='GET' && url.pathname==='/api/aluno/nao-lidos') {
       const row=await db.prepare(`SELECT COUNT(*) AS total FROM announcements a WHERE ${published}
         AND NOT EXISTS (SELECT 1 FROM announcement_reads ar WHERE ar.announcement_id=a.id AND ar.user_id=?)`).get(studentId,session.user_id);
-      return json(response,200,{total:Number(row.total)});
+      const latest=await db.prepare(`SELECT a.id,
+        EXISTS(SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=a.id) AS mural
+        FROM announcements a WHERE ${published}
+          AND NOT EXISTS (SELECT 1 FROM announcement_reads ar WHERE ar.announcement_id=a.id AND ar.user_id=?)
+        ORDER BY a.scheduled_at DESC,a.id DESC LIMIT 1`).get(studentId,session.user_id);
+      let targetClass=null;
+      if(latest){
+        targetClass=Boolean(latest.mural)
+          ?await db.prepare('SELECT class_id FROM student_course_announcements WHERE announcement_id=?').get(latest.id)
+          :await db.prepare(`SELECT sac.class_id FROM student_announcement_classes sac
+            JOIN enrollments e ON e.class_id=sac.class_id AND e.student_id=? AND e.status='ativa'
+            JOIN classes c ON c.id=e.class_id AND c.active=1
+            JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
+            WHERE sac.announcement_id=? ORDER BY sac.class_id LIMIT 1`).get(studentId,latest.id);
+        if(!targetClass)targetClass=await db.prepare(`SELECT e.class_id FROM enrollments e
+          JOIN classes c ON c.id=e.class_id AND c.active=1
+          JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
+          WHERE e.student_id=? AND e.status='ativa' ORDER BY e.enrolled_at,e.class_id LIMIT 1`).get(studentId);
+      }
+      return json(response,200,{total:Number(row.total),turmaId:targetClass?Number(targetClass.class_id):null,origem:latest?(latest.mural?'mural':'informativos'):null});
     }
     if (request.method==='GET' && ['/api/aluno/informativos','/api/aluno/notificacoes'].includes(url.pathname)) {
       const page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'),10)||1));

@@ -195,11 +195,7 @@ export default function AccountSettings() {
     const options = user?.role === 'gestor' ? [
         ['newStudent', 'Novas inscrições', 'Avisar quando um aluno for cadastrado.'],
         ['newTicket', 'Novos chamados', 'Avisar sobre solicitações de suporte.'],
-        ['courseUpdates', 'Alterações em turmas', 'Receber atualizações de cursos e professores.'],
-        ['wallPosts', 'Novas publicações no mural', 'Acompanhar novas mensagens publicadas em todas as turmas.'],
-        ['wallComments', 'Comentários no mural', 'Acompanhar novas respostas e conversas nas turmas.'],
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
-        ['systemNews', 'Comunicados do sistema', 'Receber novidades e atualizações do projeto.'],
     ] : user?.role === 'aluno' ? [
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da própria conta.'],
         ['wallPosts', 'Novas publicações no mural', 'Receber mensagens publicadas nas suas turmas.'],
@@ -248,7 +244,7 @@ export default function AccountSettings() {
         </section>
 
         <section className="panel p-5 sm:p-7">
-            <SectionHeader icon={Bell} title="Notificações" description="Escolha os avisos da conta. Interações do mural usam notificações do aplicativo, sem gerar um e-mail por mensagem." expanded={expanded.notifications} onToggle={() => setExpanded(value => ({ ...value, notifications: !value.notifications }))} />
+            <SectionHeader icon={Bell} title="Notificações" description={user?.role === 'gestor' ? 'Escolha os avisos administrativos que deseja receber.' : 'Escolha os avisos da conta. Interações do mural usam notificações do aplicativo, sem gerar um e-mail por mensagem.'} expanded={expanded.notifications} onToggle={() => setExpanded(value => ({ ...value, notifications: !value.notifications }))} />
             {expanded.notifications && <div className="mt-5 border-t border-border pt-2">
                 <div className="divide-y divide-border">{options.map(([key, title, description]) => {
                     const Icon = preferenceIcons[key];

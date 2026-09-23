@@ -156,7 +156,10 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     const notices=await call(alice,'/api/aluno/notificacoes');
     assert.deepEqual(notices.data.items.map(r=>r.id),[target]);
     assert.equal((await call(bob,'/api/aluno/informativos')).data.total,0);
-    assert.equal((await call(alice,'/api/aluno/nao-lidos')).data.total,1);
+    const unreadNotice=(await call(alice,'/api/aluno/nao-lidos')).data;
+    assert.equal(unreadNotice.total,1);
+    assert.equal(unreadNotice.turmaId,Number(classes[0]));
+    assert.equal(unreadNotice.origem,'informativos');
     assert.equal((await call(bob,`/api/aluno/informativos/${target}/anexos/${attachment}`)).status,404);
     assert.equal((await call(alice,`/api/aluno/informativos/${target}/anexos/${attachment}`)).status,200);
     assert.equal((await call(alice,`/api/aluno/informativos/${staff}/lido`,'POST',{})).status,404);
@@ -175,6 +178,9 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     const studentWall=(await call(alice,`/api/aluno/informativos?turma=${classes[0]}`)).data.items.find(i=>i.id===coursePost.data.id);
     assert.equal(studentWall.requerConfirmacao,true);
     assert.equal(studentWall.confirmado,false);
+    const unreadWall=(await call(alice,'/api/aluno/nao-lidos')).data;
+    assert.equal(unreadWall.turmaId,Number(classes[0]));
+    assert.equal(unreadWall.origem,'mural');
     assert.ok((await call(alice,`/api/aluno/informativos?turma=${classes[0]}&origem=mural`)).data.items.some(item=>item.id===coursePost.data.id));
     assert.equal((await call(alice,`/api/aluno/informativos?turma=${classes[0]}&origem=gestao`)).data.items.some(item=>item.id===coursePost.data.id),false);
     let professorWall=(await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`)).data.items.find(i=>i.id===coursePost.data.id);
@@ -200,7 +206,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.ok(deliveryCalls.every(args=>args[0]===alice.user.id));
     assert.ok(deliveryCalls.every(args=>args[2].includes('informativo')&&args[5]===`/aluno/cursos/${classes[0]}?view=informativos`));
     assert.equal((await deliverStudentNotices(dispatcher)).processed,0);
-    assert.equal(notificationDestination('systemNews','aluno'),'/aluno/cursos');
+    assert.equal(notificationDestination('systemNews','aluno'),'/aluno/dashboard');
     const audienceOptions=await call(manager,'/api/informativos/destinatarios');
     assert.equal(audienceOptions.status,200,JSON.stringify(audienceOptions));
     assert.ok(audienceOptions.data.turmas.some(item=>item.id===Number(classes[0])));

@@ -16,7 +16,7 @@ export function normalizeNotificationPreferences(value) {
 
 export function notificationDestination(preference, role) {
   const wallPreference=['wallPosts','wallComments','wallLikes'].includes(preference);
-  if (role === 'aluno') return ['courseUpdates','systemNews'].includes(preference)||wallPreference ? '/aluno/cursos' : '/configuracoes';
+  if (role === 'aluno') return ['courseUpdates','systemNews'].includes(preference)||wallPreference ? '/aluno/dashboard' : '/configuracoes';
   const prefix = role === 'professor' ? '/professor' : '/gestor';
   if (preference === 'newStudent') return `${prefix}/alunos`;
   if (preference === 'newTicket') return `${prefix}/suporte`;

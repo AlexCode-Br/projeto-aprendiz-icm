@@ -30,7 +30,7 @@ export async function deliverStudentNotices({db,notificationService,announcement
         WHERE a.id=? AND a.active=1 AND ${announcementScheduledCondition('a.scheduled_at')}
         AND ${studentAudience.replace('?', 'sa.student_id')}`).get(row.user_id,row.announcement_id);
       if (!eligible) continue;
-      const destination=row.class_id?`/aluno/cursos/${row.class_id}?view=informativos`:'/aluno/cursos';
+      const destination=row.class_id?`/aluno/cursos/${row.class_id}?view=informativos`:'/aluno/dashboard';
       const result=await notificationService.notifyUser(row.user_id,'systemNews','Novo informativo — Projeto Aprendiz',
         'Há um novo informativo da gestão destinado à sua turma.',`student-announcement/${row.announcement_id}/${row.user_id}`,destination);
       if (result.sent || result.reason==='disabled') await db.prepare('UPDATE student_notice_deliveries SET finished=1 WHERE announcement_id=? AND user_id=? AND lease_until=?').run(row.announcement_id,row.user_id,lease);

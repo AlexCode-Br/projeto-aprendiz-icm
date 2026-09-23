@@ -27,14 +27,14 @@ export default function StudentCourseDetails() {
   if (error) return (
     <div className="panel p-5">
       <p className="text-danger" role="alert">{error}</p>
-      <Link className="btn btn-secondary mt-4" to="/aluno/cursos">Voltar aos meus cursos</Link>
+      <Link className="btn btn-secondary mt-4" to="/aluno/dashboard">Voltar à visão geral</Link>
     </div>
   );
   if (!course) return <PageSkeleton />;
 
   return (
     <div className="space-y-5">
-      <Link className="text-sm font-semibold text-primary hover:underline" to="/aluno/cursos">← Meus cursos</Link>
+      <Link className="text-sm font-semibold text-primary hover:underline" to="/aluno/dashboard">← Visão geral</Link>
       <CourseRoom key={`${id}/${searchParams.get('view')||'mural'}`} course={course} settings={settings} student initialView={searchParams.get('view')==='informativos'?'informativos':'mural'} renderView={view=><StudentPortal key={`${id}/${view}`} page={view} courseId={id} initialPeriod={String(course.periodId)}/>}/>
     </div>
   );

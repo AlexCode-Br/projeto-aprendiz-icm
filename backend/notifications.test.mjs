@@ -43,8 +43,8 @@ test('destino da notificação acompanha o perfil e o tipo do aviso', () => {
   assert.equal(notificationDestination('courseUpdates', 'gestor'), '/gestor/cursos');
   assert.equal(notificationDestination('systemAlerts', 'professor'), '/configuracoes');
   assert.equal(notificationDestination('systemNews', 'gestor'), '/configuracoes');
-  assert.equal(notificationDestination('systemNews', 'aluno'), '/aluno/cursos');
-  assert.equal(notificationDestination('wallPosts', 'aluno'), '/aluno/cursos');
+  assert.equal(notificationDestination('systemNews', 'aluno'), '/aluno/dashboard');
+  assert.equal(notificationDestination('wallPosts', 'aluno'), '/aluno/dashboard');
   assert.equal(notificationDestination('wallComments', 'professor'), '/professor/turmas');
   assert.equal(notificationDestination('wallLikes', 'gestor'), '/gestor/cursos');
 });

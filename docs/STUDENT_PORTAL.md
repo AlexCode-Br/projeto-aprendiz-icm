@@ -5,7 +5,7 @@ Atualizado em 22/09/2026. **Publicado em produção** no commit `6e3ae3c`, vers�
 ## Navegação e funcionalidades
 
 - **Início:** resumo pessoal, próximas aulas no mês e avisos não lidos.
-- **Meus cursos:** matrículas ativas/concluídas por período letivo, cinco por página. Um clique abre o curso com suas abas Mural, Aulas e Frequência. A página também reúne consultas gerais de calendário e frequência sem criar novas entradas na sidebar.
+- **Meus cursos:** as matrículas aparecem diretamente em cascata na sidebar. Um clique abre o curso correspondente com Mural, Aulas, Arquivos, Informações, Informativos e Frequência; não existe uma página agregadora intermediária. Calendário e frequência gerais continuam acessíveis pelos cards da visão geral.
 - **Mural:** somente publicações destinadas ao aluno ou às turmas vinculadas, com categorias, fixação, anexos privados e leitura individual. Quando o professor exigir confirmação, abrir não marca a publicação; o aluno precisa usar “Confirmar leitura”.
 - **Configurações:** nome, foto, telefone, igreja cadastrada, classe, instrumento e dados do responsável quando necessários, preferências e dispositivos. O aluno não pode matricular-se, trocar de turma ou editar frequência.
 
@@ -30,6 +30,8 @@ Os testes locais cobrem senha incorreta, manutenção do endereço antigo antes 
 - Excluir o acesso do aluno remove o vínculo de login e revoga a conta, mas conserva registros acadêmicos. A interface explica essa distinção.
 
 ## Notificações
+
+- O card **Avisos não lidos** da visão geral recebe da API a turma e a origem do aviso mais recente e abre diretamente a aba Mural ou Informativos daquele curso. Rotas genéricas antigas retornam à visão geral.
 
 O cron do Worker executa a cada minuto. Informativos da gestão continuam processando até 50 pares informativo/conta por execução, com lease de cinco minutos, até três tentativas e chave de entrega idempotente. A mesma execução recupera lotes pendentes da outbox do Mural. O público é revalidado após obter o lease e as mensagens não expõem frequência ou outros dados acadêmicos na tela bloqueada.
 

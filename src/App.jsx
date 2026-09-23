@@ -8,7 +8,6 @@ import './index.css'; // Importando o CSS global
 
 const Login = React.lazy(() => import('./pages/Login.jsx'));
 const StudentPortal = React.lazy(() => import('./pages/aluno/StudentPortal.jsx'));
-const StudentCourses = React.lazy(() => import('./pages/aluno/StudentCourses.jsx'));
 const StudentCourseDetails = React.lazy(() => import('./pages/aluno/StudentCourseDetails.jsx'));
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword.jsx'));
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword.jsx'));
@@ -108,14 +107,14 @@ const AppRoutes = () => {
                                 {user?.role === 'professor' && professorRoutes}
                                 {user?.role === 'aluno' && <>
                                     <Route path="/aluno/dashboard" element={<StudentPortal key="dashboard" page="dashboard" />} />
-                                    <Route path="/aluno/cursos" element={<StudentCourses />} />
+                                    <Route path="/aluno/cursos" element={<Navigate to="/aluno/dashboard" replace />} />
                                     <Route path="/aluno/cursos/:id" element={<StudentCourseDetails />} />
-                                    <Route path="/aluno/turmas" element={<Navigate to="/aluno/cursos" replace />} />
-                                    <Route path="/aluno/informativos" element={<Navigate to="/aluno/cursos" replace />} />
+                                    <Route path="/aluno/turmas" element={<Navigate to="/aluno/dashboard" replace />} />
+                                    <Route path="/aluno/informativos" element={<Navigate to="/aluno/dashboard" replace />} />
                                     <Route path="/aluno/perfil" element={<Navigate to="/configuracoes" replace />} />
-                                    <Route path="/aluno/calendario" element={<Navigate to="/aluno/cursos?view=calendario" replace />} />
-                                    <Route path="/aluno/frequencia" element={<Navigate to="/aluno/cursos?view=frequencia" replace />} />
-                                    <Route path="/aluno/notificacoes" element={<Navigate to="/aluno/cursos" replace />} />
+                                    <Route path="/aluno/calendario" element={<StudentPortal key="calendar" page="calendario" />} />
+                                    <Route path="/aluno/frequencia" element={<StudentPortal key="attendance" page="frequencia" />} />
+                                    <Route path="/aluno/notificacoes" element={<Navigate to="/aluno/dashboard" replace />} />
                                 </>}
                                 {commonRoutes}
 
