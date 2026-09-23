@@ -31,11 +31,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `20db61b`
+- Último commit da aplicação publicado em produção: `a8fe736`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `86891d12-8447-4e5f-bf54-e705170e9849`
+- Versão Cloudflare verificada: `8005b87d-313c-49c7-b694-7bca99df2f2b`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -50,7 +50,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - O mural exibe fotos de perfil em publicações, comentários e no campo de criação, com acesso às imagens limitado aos membros ativos da turma. Publicações e interações usam verificação compacta de versão a cada cinco segundos com a aba visível ou ao retornar a ela. Alteração publicada em 23/09/2026.
 - O professor controla a participação dos alunos no mural por turma (publicar/comentar/reagir, comentar/reagir ou somente visualizar). Publicações comuns geram leitura por visibilidade; confirmações obrigatórias permanecem explícitas. Regras e preservação da configuração foram cobertas por testes de API. Alteração publicada em 23/09/2026.
 - Informativos administrativos não exibem mais contagem ou lista de leitores ao gestor. O estado de leitura permanece privado para cada professor ou aluno controlar itens novos e para o sistema gerenciar notificações; as confirmações visíveis do Mural da turma continuam separadas. Alteração publicada em 23/09/2026.
-- Ao criar ou editar um informativo, o gestor escolhe entre envio imediato e agendamento. “Enviar agora” não solicita data ou hora e usa o horário confiável do servidor; “Agendar” revela os dois campos e exige um momento futuro. A edição de um item já publicado preserva o horário original para não alterar artificialmente sua posição. Alteração validada localmente; ainda não publicada.
+- Ao criar ou editar um informativo, o gestor escolhe entre envio imediato e agendamento. “Enviar agora” não solicita data ou hora e usa o horário confiável do servidor; “Agendar” revela os dois campos e exige um momento futuro. A edição de um item já publicado preserva o horário original para não alterar artificialmente sua posição. Alteração publicada em 23/09/2026.
 - Publicações e comentários do Mural notificam o grupo da turma, incluindo o professor e gestores, com exclusão do autor da ação; curtidas notificam somente o dono da publicação. As três categorias podem ser desligadas separadamente em Configurações. Alteração publicada em 23/09/2026.
 - Teste em massa reproduzível em `pnpm test:mass`: 5 professores, 25 alunos, 5 turmas, 60 chamadas, 71 publicações, 230 comentários, 300 curtidas, 29 anexos, 10 informativos, 2.526 eventos de notificação e 1.084 requisições, sem erro HTTP inesperado. Os dois P1 foram corrigidos: chamadas salvas preservam o elenco histórico e o Mural usa outbox assíncrona em lote, push agrupado por turma e nenhuma notificação por e-mail. Vinte comentários simultâneos na turma de 25 ficaram em p95 de 96,93 ms; a verificação leve do mural em concorrência 30 atingiu 1.366,71 req/s. Paginação de Informativos, consultas de leitores restritas ao professor e índices compostos também foram incluídos. Relatório em `docs/MASS_TEST_2026-09-23.md`. Alterações publicadas em 23/09/2026; o teste de carga permaneceu isolado e não inseriu dados falsos em produção.
 
@@ -179,6 +179,7 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Mural participativo, permissões por turma, acompanhamento administrativo e notificações de publicações, comentários e curtidas publicados em 23/09/2026.
 - Versão Cloudflare verificada: `09c0bd1b-79eb-4201-9882-fa3f89b802c2`; raiz, `/login`, bundle do mural e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão, conforme esperado.
 - Versão Cloudflare verificada: `86891d12-8447-4e5f-bf54-e705170e9849`; `/login`, bundle principal e `/api/health` retornaram HTTP 200, PostgreSQL conectado, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz. Publicação correspondente ao commit `20db61b`.
+- Versão Cloudflare verificada: `8005b87d-313c-49c7-b694-7bca99df2f2b`; `/login`, bundle de Informativos e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão. Publicação correspondente ao commit `a8fe736`.
 
 ## Prompt curto para uma nova tarefa
 
