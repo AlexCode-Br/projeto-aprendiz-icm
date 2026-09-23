@@ -31,11 +31,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `ce1fce7`
+- Último commit da aplicação publicado em produção: `d29c785`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `fc0fe834-2418-473c-9ca8-5ff72f833bc4`
+- Versão Cloudflare verificada: `132668d7-63eb-4268-8ba5-0d7458736825`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -47,7 +47,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - A área do aluno não possui uma página independente de Mural: as publicações do professor e os informativos do gestor aparecem em abas distintas dentro de cada curso matriculado. Ao criar ou editar um informativo, o gestor escolhe somente uma ou mais turmas ofertadas; o sistema deriva o professor responsável e o público de alunos sem permitir seleção individual de professores. Alteração publicada em 22/09/2026.
 - A sidebar exibe em cascata somente as turmas do professor autenticado sob “Minhas turmas” e somente os cursos matriculados do aluno sob “Meus cursos”. Os atalhos do aluno abrem os detalhes do curso; os do professor posicionam a respectiva turma na tela de gerenciamento. Alteração publicada em 22/09/2026.
 - Na visão geral do aluno, “Avisos não lidos” abre a aba correta do curso que contém o aviso mais recente (Mural ou Informativos). A antiga tela agregadora “Meus cursos” não possui mais rota; seu card é somente um indicador. Nas Configurações do gestor são exibidas apenas as preferências Novas inscrições, Novos chamados e Alertas de segurança. Alteração publicada em 23/09/2026.
-- A visão geral do aluno foi redesenhada para múltiplas matrículas: cada curso possui seu próprio resumo de frequência, avisos novos e próxima aula, com acesso direto às abas correspondentes. As rotas gerais de calendário e frequência redirecionam ao painel para não misturar dados de cursos distintos; calendário e histórico de frequência permanecem dentro de cada curso. Implementação validada localmente, ainda não publicada.
+- A visão geral do aluno foi redesenhada para múltiplas matrículas: cada curso possui seu próprio resumo de frequência, avisos novos e próxima aula, com acesso direto às abas correspondentes. As rotas gerais de calendário e frequência redirecionam ao painel para não misturar dados de cursos distintos; calendário e histórico de frequência permanecem dentro de cada curso. Alteração publicada em 23/09/2026.
 - A opção genérica “Ver todas” foi removida das cascatas e cada item abre exclusivamente todas as informações da turma ou curso selecionado. Alteração publicada em 22/09/2026.
 - O mural exibe fotos de perfil em publicações, comentários e no campo de criação, com acesso às imagens limitado aos membros ativos da turma. Publicações e interações usam verificação compacta de versão a cada cinco segundos com a aba visível ou ao retornar a ela. Alteração publicada em 23/09/2026.
 - O professor controla a participação dos alunos no mural por turma (publicar/comentar/reagir, comentar/reagir ou somente visualizar). Publicações comuns geram leitura por visibilidade; confirmações obrigatórias permanecem explícitas. Regras e preservação da configuração foram cobertas por testes de API. Alteração publicada em 23/09/2026.
