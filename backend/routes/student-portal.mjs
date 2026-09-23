@@ -131,8 +131,15 @@ export function createStudentPortalRoutes(context) {
       const ids=selected.map(c=>Number(c.id)), placeholders=ids.map(()=>'?').join(',');
       const slots=ids.length ? await db.prepare(`SELECT class_id,weekday_index,start_minutes FROM class_schedules WHERE class_id IN (${placeholders})`).all(...ids) : [];
       const dates=ids.length ? await db.prepare(`SELECT class_id,class_date,start_minutes FROM class_schedule_dates WHERE class_id IN (${placeholders})`).all(...ids) : [];
+      const attendanceByClass=ids.length?await db.prepare(`SELECT ats.class_id,COUNT(*) AS total,
+        SUM(CASE WHEN ar.status='presente' THEN 1 ELSE 0 END) AS presentes,
+        SUM(CASE WHEN ar.status='justificado' THEN 1 ELSE 0 END) AS justificadas
+        FROM attendance_records ar JOIN attendance_sessions ats ON ats.id=ar.session_id
+        WHERE ar.student_id=? AND ats.class_id IN (${placeholders}) GROUP BY ats.class_id`).all(studentId,...ids):[];
+      const attendanceMap=new Map(attendanceByClass.map(item=>[Number(item.class_id),item]));
       const safeClasses=selected.map(c=>({id:Number(c.id),curso:c.curso,local:c.local,label:c.label,status:c.status,periodo:c.periodo,
-        horarios:[...slots,...dates].filter(s=>Number(s.class_id)===Number(c.id)).map(s=>({dia:s.weekday_index??null,data:s.class_date?String(s.class_date).slice(0,10):null,minutos:Number(s.start_minutes)}))}));
+        horarios:[...slots,...dates].filter(s=>Number(s.class_id)===Number(c.id)).map(s=>({dia:s.weekday_index??null,data:s.class_date?String(s.class_date).slice(0,10):null,minutos:Number(s.start_minutes)})),
+        frequencia:(()=>{const item=attendanceMap.get(Number(c.id)),total=Number(item?.total||0),presentes=Number(item?.presentes||0),justificadas=Number(item?.justificadas||0);return{total,presentes,justificadas,percentual:total?Math.round((presentes+justificadas)/total*100):null};})()}));
       if (url.pathname.endsWith('/turmas')) return json(response,200,{turmas:safeClasses,periods,periodId});
       if (url.pathname.endsWith('/calendario')) {
         const month=url.searchParams.get('mes') || context.zonedTodayDate().slice(0,7);
@@ -172,7 +179,21 @@ export function createStudentPortalRoutes(context) {
           JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
           WHERE e.student_id=? AND e.status='ativa' ORDER BY e.enrolled_at,e.class_id LIMIT 1`).get(studentId);
       }
-      return json(response,200,{total:Number(row.total),turmaId:targetClass?Number(targetClass.class_id):null,origem:latest?(latest.mural?'mural':'informativos'):null});
+      const unreadRows=await db.prepare(`SELECT sac.class_id,a.id,a.scheduled_at,
+        EXISTS(SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=a.id) AS mural
+        FROM announcements a JOIN student_announcement_classes sac ON sac.announcement_id=a.id
+        JOIN enrollments e ON e.class_id=sac.class_id AND e.student_id=? AND e.status='ativa'
+        JOIN classes c ON c.id=e.class_id AND c.active=1
+        JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
+        WHERE ${published} AND NOT EXISTS (SELECT 1 FROM announcement_reads ar WHERE ar.announcement_id=a.id AND ar.user_id=?)
+        ORDER BY sac.class_id,a.scheduled_at DESC,a.id DESC`).all(studentId,studentId,session.user_id);
+      const noticesByClass=[];
+      for(const item of unreadRows){
+        let summary=noticesByClass.find(value=>value.turmaId===Number(item.class_id));
+        if(!summary){summary={turmaId:Number(item.class_id),total:0,origem:Boolean(item.mural)?'mural':'informativos'};noticesByClass.push(summary);}
+        summary.total+=1;
+      }
+      return json(response,200,{total:Number(row.total),turmaId:targetClass?Number(targetClass.class_id):null,origem:latest?(latest.mural?'mural':'informativos'):null,porTurma:noticesByClass});
     }
     if (request.method==='GET' && ['/api/aluno/informativos','/api/aluno/notificacoes'].includes(url.pathname)) {
       const page=Math.max(1,Math.min(100000,parseInt(url.searchParams.get('page'),10)||1));

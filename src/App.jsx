@@ -112,8 +112,8 @@ const AppRoutes = () => {
                                     <Route path="/aluno/turmas" element={<Navigate to="/aluno/dashboard" replace />} />
                                     <Route path="/aluno/informativos" element={<Navigate to="/aluno/dashboard" replace />} />
                                     <Route path="/aluno/perfil" element={<Navigate to="/configuracoes" replace />} />
-                                    <Route path="/aluno/calendario" element={<StudentPortal key="calendar" page="calendario" />} />
-                                    <Route path="/aluno/frequencia" element={<StudentPortal key="attendance" page="frequencia" />} />
+                                    <Route path="/aluno/calendario" element={<Navigate to="/aluno/dashboard" replace />} />
+                                    <Route path="/aluno/frequencia" element={<Navigate to="/aluno/dashboard" replace />} />
                                     <Route path="/aluno/notificacoes" element={<Navigate to="/aluno/dashboard" replace />} />
                                 </>}
                                 {commonRoutes}

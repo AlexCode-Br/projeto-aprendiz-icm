@@ -4,8 +4,8 @@ Atualizado em 22/09/2026. **Publicado em produção** no commit `6e3ae3c`, vers�
 
 ## Navegação e funcionalidades
 
-- **Início:** resumo pessoal, próximas aulas no mês e avisos não lidos.
-- **Meus cursos:** as matrículas aparecem diretamente em cascata na sidebar. Um clique abre o curso correspondente com Mural, Aulas, Arquivos, Informações, Informativos e Frequência; não existe uma página agregadora intermediária. Calendário e frequência gerais continuam acessíveis pelos cards da visão geral.
+- **Início:** indicadores gerais e um card de acompanhamento para cada matrícula, mantendo frequência, avisos novos e próxima aula separados por curso.
+- **Meus cursos:** as matrículas aparecem diretamente em cascata na sidebar. Um clique abre o curso correspondente com Mural, Aulas, Arquivos, Informações, Informativos e Frequência; não existe uma página agregadora intermediária. Calendário e histórico de frequência são acessados no contexto do curso, e as rotas gerais antigas retornam à visão geral.
 - **Mural:** somente publicações destinadas ao aluno ou às turmas vinculadas, com categorias, fixação, anexos privados e leitura individual. Quando o professor exigir confirmação, abrir não marca a publicação; o aluno precisa usar “Confirmar leitura”.
 - **Configurações:** nome, foto, telefone, igreja cadastrada, classe, instrumento e dados do responsável quando necessários, preferências e dispositivos. O aluno não pode matricular-se, trocar de turma ou editar frequência.
 
@@ -31,7 +31,7 @@ Os testes locais cobrem senha incorreta, manutenção do endereço antigo antes 
 
 ## Notificações
 
-- O card **Avisos não lidos** da visão geral recebe da API a turma e a origem do aviso mais recente e abre diretamente a aba Mural ou Informativos daquele curso. Rotas genéricas antigas retornam à visão geral.
+- O card **Avisos não lidos** da visão geral recebe da API a turma e a origem do aviso mais recente e abre diretamente a aba Mural ou Informativos daquele curso. A API também devolve a contagem por turma, usada nos cards individuais sem somar ou atribuir avisos ao curso errado. Rotas genéricas antigas retornam à visão geral.
 
 O cron do Worker executa a cada minuto. Informativos da gestão continuam processando até 50 pares informativo/conta por execução, com lease de cinco minutos, até três tentativas e chave de entrega idempotente. A mesma execução recupera lotes pendentes da outbox do Mural. O público é revalidado após obter o lease e as mensagens não expõem frequência ou outros dados acadêmicos na tela bloqueada.
 

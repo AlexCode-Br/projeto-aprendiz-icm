@@ -160,6 +160,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal(unreadNotice.total,1);
     assert.equal(unreadNotice.turmaId,Number(classes[0]));
     assert.equal(unreadNotice.origem,'informativos');
+    assert.deepEqual(unreadNotice.porTurma,[{turmaId:Number(classes[0]),total:1,origem:'informativos'}]);
     assert.equal((await call(bob,`/api/aluno/informativos/${target}/anexos/${attachment}`)).status,404);
     assert.equal((await call(alice,`/api/aluno/informativos/${target}/anexos/${attachment}`)).status,200);
     assert.equal((await call(alice,`/api/aluno/informativos/${staff}/lido`,'POST',{})).status,404);
@@ -167,6 +168,13 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal((await call(alice,'/api/aluno/nao-lidos')).data.total,0);
     assert.equal((await call(alice,`/api/aluno/cursos/${classes[1]}`)).status,404);
     assert.equal((await call(alice,`/api/aluno/informativos?turma=${classes[1]}`)).status,404);
+    db.prepare("INSERT INTO enrollments(student_id,class_id,enrolled_at) VALUES (?,?,'2026-01-01')").run(aliceId,classes[1]);
+    const secondCourseLesson=Number(db.prepare("INSERT INTO attendance_sessions(class_id,class_date,recorded_by) VALUES (?,'2026-09-02',?)").run(classes[1],professor.user.id).lastInsertRowid);
+    db.prepare("INSERT INTO attendance_records(session_id,student_id,status) VALUES (?,?,'ausente')").run(secondCourseLesson,aliceId);
+    const multiCourse=(await call(alice,'/api/aluno/turmas')).data.turmas;
+    assert.equal(multiCourse.length,2);
+    assert.equal(multiCourse.find(item=>Number(item.id)===Number(classes[0])).frequencia.percentual,100);
+    assert.equal(multiCourse.find(item=>Number(item.id)===Number(classes[1])).frequencia.percentual,0);
     const coursePost=await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`,'POST',{titulo:'Próxima aula',categoria:'Atividade',conteudo:'Traga seu instrumento para a próxima aula.',fixarNoTopo:true,solicitarConfirmacao:true,anexos:[]});
     assert.equal(coursePost.status,201,JSON.stringify(coursePost));
     const teacherPostRecipients=db.prepare("SELECT users.email AS recipient FROM notification_outbox JOIN users ON users.id=notification_outbox.user_id WHERE notification_outbox.subject LIKE 'Nova publicação — %' AND notification_outbox.body LIKE '%Marina Oliveira publicou%' AND notification_outbox.email_enabled=0 AND notification_outbox.push_enabled=1 ORDER BY users.email").all().map(item=>item.recipient);
@@ -181,6 +189,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     const unreadWall=(await call(alice,'/api/aluno/nao-lidos')).data;
     assert.equal(unreadWall.turmaId,Number(classes[0]));
     assert.equal(unreadWall.origem,'mural');
+    assert.deepEqual(unreadWall.porTurma,[{turmaId:Number(classes[0]),total:1,origem:'mural'}]);
     assert.ok((await call(alice,`/api/aluno/informativos?turma=${classes[0]}&origem=mural`)).data.items.some(item=>item.id===coursePost.data.id));
     assert.equal((await call(alice,`/api/aluno/informativos?turma=${classes[0]}&origem=gestao`)).data.items.some(item=>item.id===coursePost.data.id),false);
     let professorWall=(await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`)).data.items.find(i=>i.id===coursePost.data.id);
@@ -340,7 +349,10 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal(db.prepare('SELECT ch.name FROM students s JOIN churches ch ON ch.id=s.church_id WHERE s.id=?').get(aliceId).name,'Igreja Nova Esperança');
     assert.equal((await call(bob,'/api/aluno/perfil')).data.telefone,null);
     assert.equal((await call(alice,'/api/aluno/perfil','PUT',{...personal,classe:'Adolescente'})).status,400);
-    assert.deepEqual((await call(alice,'/api/aluno/turmas')).data.turmas.map(c=>c.id),[classes[0]]);
+    assert.deepEqual(
+      (await call(alice,'/api/aluno/turmas')).data.turmas.map(c=>Number(c.id)).sort((a,b)=>a-b),
+      classes.map(Number).sort((a,b)=>a-b),
+    );
     assert.equal((await call(alice,'/api/account/profile','PUT',{nome:'Alice Atualizada',id:bobUser,role:'gestor'})).status,200);
     assert.equal(db.prepare('SELECT name FROM students WHERE id=?').get(aliceId).name,'Alice Atualizada');
     assert.equal(db.prepare('SELECT name FROM users WHERE id=?').get(bobUser).name,'Beto Teste');
