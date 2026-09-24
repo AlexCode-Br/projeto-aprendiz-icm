@@ -31,11 +31,11 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 
 - Repositório: `AlexCode-Br/projeto-aprendiz-aprimorado`
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`
-- Último commit da aplicação publicado em produção: `d29c785`
+- Último commit da aplicação publicado em produção: `81e22cc`
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `132668d7-63eb-4268-8ba5-0d7458736825`
+- Versão Cloudflare verificada: `8a33b7cf-4f74-4cfd-b823-05744eff480a`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -54,7 +54,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Informativos administrativos não exibem mais contagem ou lista de leitores ao gestor. O estado de leitura permanece privado para cada professor ou aluno controlar itens novos e para o sistema gerenciar notificações; as confirmações visíveis do Mural da turma continuam separadas. Alteração publicada em 23/09/2026.
 - Ao criar ou editar um informativo, o gestor escolhe entre envio imediato e agendamento. “Enviar agora” não solicita data ou hora e usa o horário confiável do servidor; “Agendar” revela os dois campos e exige um momento futuro. A edição de um item já publicado preserva o horário original para não alterar artificialmente sua posição. Alteração publicada em 23/09/2026.
 - Publicações e comentários do Mural notificam o grupo da turma, incluindo o professor e gestores, com exclusão do autor da ação; curtidas notificam somente o dono da publicação. As três categorias podem ser desligadas separadamente em Configurações. Alteração publicada em 23/09/2026.
-- O compositor e a edição de publicações do Mural, para professor e aluno, reutilizam o editor dos Informativos com negrito, itálico, sublinhado, listas e links HTTPS. O servidor mantém somente HTML permitido e remove scripts, atributos executáveis e links inseguros. Implementação validada localmente, ainda não publicada.
+- O compositor e a edição de publicações do Mural, para professor e aluno, reutilizam o editor dos Informativos com negrito, itálico, sublinhado, listas e links HTTPS. O servidor mantém somente HTML permitido e remove scripts, atributos executáveis e links inseguros. Alteração publicada em 23/09/2026.
 - Teste em massa reproduzível em `pnpm test:mass`: 5 professores, 25 alunos, 5 turmas, 60 chamadas, 71 publicações, 230 comentários, 300 curtidas, 29 anexos, 10 informativos, 2.526 eventos de notificação e 1.084 requisições, sem erro HTTP inesperado. Os dois P1 foram corrigidos: chamadas salvas preservam o elenco histórico e o Mural usa outbox assíncrona em lote, push agrupado por turma e nenhuma notificação por e-mail. Vinte comentários simultâneos na turma de 25 ficaram em p95 de 96,93 ms; a verificação leve do mural em concorrência 30 atingiu 1.366,71 req/s. Paginação de Informativos, consultas de leitores restritas ao professor e índices compostos também foram incluídos. Relatório em `docs/MASS_TEST_2026-09-23.md`. Alterações publicadas em 23/09/2026; o teste de carga permaneceu isolado e não inseriu dados falsos em produção.
 
 - A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026. Alteração publicada em 23/09/2026.
