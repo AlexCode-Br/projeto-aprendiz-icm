@@ -64,6 +64,8 @@ As rotas `/api/turmas/:id` compartilham autorização por professor responsável
 
 Fotos de autores de publicações e comentários são entregues por URLs vinculadas à turma e ao item, somente após validar a sessão, a matrícula ou responsabilidade pela turma e o vínculo atual do autor. O cliente usa `ProfileAvatar`; a cada cinco segundos consulta apenas a versão compacta do mural e recarrega o feed quando algo mudou, além de atualizar ao recuperar o foco. Comentários abertos também se atualizam com a página visível. Consultas nominais de visualização são exclusivas do professor. Publicações comuns registram visualização depois de permanecerem visíveis por 900 ms; publicações com confirmação exigida nunca são confirmadas automaticamente e dependem de ação explícita do aluno.
 
+Informativos e publicações do Mural compartilham `RichTextEditor` no cliente e `sanitizeAnnouncementContent` na API. A formatação permitida limita-se a parágrafos, divisões, quebras, negrito, itálico, sublinhado, listas e links HTTPS com abertura isolada; comentários permanecem como texto simples.
+
 `class_presentation` guarda endereço, imagem otimizada (máximo 1 MB), posição, zoom e política de participação. A imagem é entregue por endpoint autenticado com cache privado desabilitado. `ClassBanner` compartilha o enquadramento entre prévia, professor e aluno; `ClassSettingsModal` permite reenquadrar sem reenviar e configurar a participação no mural. Turmas ainda não configuradas pelo professor atual aparecem no fluxo inicial de configuração. As migrações 023 e 024 e o bootstrap idempotente mantêm SQLite local e PostgreSQL compatíveis.
 
 ## Compatibilidade de nomes

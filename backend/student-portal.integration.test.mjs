@@ -175,7 +175,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal(multiCourse.length,2);
     assert.equal(multiCourse.find(item=>Number(item.id)===Number(classes[0])).frequencia.percentual,100);
     assert.equal(multiCourse.find(item=>Number(item.id)===Number(classes[1])).frequencia.percentual,0);
-    const coursePost=await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`,'POST',{titulo:'Próxima aula',categoria:'Atividade',conteudo:'Traga seu instrumento para a próxima aula.',fixarNoTopo:true,solicitarConfirmacao:true,anexos:[]});
+    const coursePost=await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`,'POST',{titulo:'Próxima aula',categoria:'Atividade',conteudo:'<p><strong>Traga seu instrumento</strong> para a próxima aula. <a href="https://example.com/partitura">Abrir partitura</a><script>alert(1)</script></p>',fixarNoTopo:true,solicitarConfirmacao:true,anexos:[]});
     assert.equal(coursePost.status,201,JSON.stringify(coursePost));
     const teacherPostRecipients=db.prepare("SELECT users.email AS recipient FROM notification_outbox JOIN users ON users.id=notification_outbox.user_id WHERE notification_outbox.subject LIKE 'Nova publicação — %' AND notification_outbox.body LIKE '%Marina Oliveira publicou%' AND notification_outbox.email_enabled=0 AND notification_outbox.push_enabled=1 ORDER BY users.email").all().map(item=>item.recipient);
     assert.deepEqual(teacherPostRecipients,['alice@example.test','gestor@projetoaprendiz.local']);
@@ -186,6 +186,9 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     const studentWall=(await call(alice,`/api/aluno/informativos?turma=${classes[0]}`)).data.items.find(i=>i.id===coursePost.data.id);
     assert.equal(studentWall.requerConfirmacao,true);
     assert.equal(studentWall.confirmado,false);
+    assert.match(studentWall.conteudo,/<strong>Traga seu instrumento<\/strong>/);
+    assert.match(studentWall.conteudo,/<a href="https:\/\/example\.com\/partitura" target="_blank" rel="noopener noreferrer">Abrir partitura<\/a>/);
+    assert.doesNotMatch(studentWall.conteudo,/<script|alert\(1\)/i);
     const unreadWall=(await call(alice,'/api/aluno/nao-lidos')).data;
     assert.equal(unreadWall.turmaId,Number(classes[0]));
     assert.equal(unreadWall.origem,'mural');
@@ -272,7 +275,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal((await call(professor,`${communityBase}/configuracao`,'PUT',{mapsUrl:'https://maps.app.goo.gl/localTeste',x:40,y:80,zoom:180})).status,200);
     assert.equal((await call(alice,`${communityBase}/configuracao`)).data.mapsUrl,'https://maps.app.goo.gl/localTeste');
     assert.equal((await call(alice,`${communityBase}/configuracao`,'PUT',{mapsUrl:'https://maps.app.goo.gl/outro'})).status,403);
-    const studentPost=await call(alice,`${communityBase}/mural`,'POST',{titulo:'Material da Alice',conteudo:'Material para estudar com a turma.',anexos:[],fixarNoTopo:true,solicitarConfirmacao:true});
+    const studentPost=await call(alice,`${communityBase}/mural`,'POST',{titulo:'Material da Alice',conteudo:'<p><em>Material para estudar</em> com a turma.</p><ul><li>Exercício 1</li><li>Exercício 2</li></ul>',anexos:[],fixarNoTopo:true,solicitarConfirmacao:true});
     assert.equal(studentPost.status,201,JSON.stringify(studentPost));
     const studentPostRecipients=db.prepare("SELECT users.email AS recipient FROM notification_outbox JOIN users ON users.id=notification_outbox.user_id WHERE notification_outbox.subject LIKE 'Nova publicação — %' AND notification_outbox.body LIKE '%Alice Teste publicou%' ORDER BY users.email").all().map(item=>item.recipient);
     assert.deepEqual(studentPostRecipients,['gestor@projetoaprendiz.local','professor@projetoaprendiz.local']);
@@ -281,6 +284,8 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal((await call(alice,'/api/profile-photo','PUT',{dataUrl:bannerData})).status,200);
     let sharedPost=(await call(professor,`${communityBase}/mural`)).data.items.find(item=>item.id===studentPost.data.id);
     assert.equal(sharedPost.autor,'Alice Teste');assert.equal(sharedPost.fixado,false);assert.equal(sharedPost.requerConfirmacao,false);
+    assert.match(sharedPost.conteudo,/<em>Material para estudar<\/em>/);
+    assert.match(sharedPost.conteudo,/<ul><li>Exercício 1<\/li><li>Exercício 2<\/li><\/ul>/);
     assert.match(sharedPost.fotoUrl,new RegExp(`${studentPostPath}/foto\\?v=`));
     const wallPhoto=await fetch(base+sharedPost.fotoUrl,{headers:{Cookie:professor.cookie}});
     assert.equal(wallPhoto.status,200);assert.equal(wallPhoto.headers.get('content-type'),'image/png');

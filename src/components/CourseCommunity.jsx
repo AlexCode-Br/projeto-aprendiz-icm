@@ -11,6 +11,7 @@ import AnnouncementAttachmentPicker from './AnnouncementAttachmentPicker';
 import ProfileAvatar from './ProfileAvatar';
 import FormSelect from './FormSelect';
 import useLiveRefresh from '../hooks/useLiveRefresh';
+import RichTextEditor,{richTextToPlainText} from './RichTextEditor';
 
 const WALL_REFRESH_MS=5000;
 const defaultPermissions={mode:'teacher_only',publicar:false,comentar:false,reagir:false};
@@ -102,9 +103,10 @@ export default function CourseCommunity({course}){
   };
   const publish=async event=>{
     event.preventDefault();if(publishing)return;setPublishing(true);setError('');
-    const content=composer.conteudo.trim();
+    const content=composer.conteudo.trim(),plainContent=richTextToPlainText(content);
+    if(plainContent.length<10){setPublishing(false);return;}
     try{
-      await api.post(base,{titulo:content.slice(0,100),conteudo:content,categoria:composer.categoria,anexos:attachments,fixarNoTopo:isTeacher&&composer.fixarNoTopo,solicitarConfirmacao:isTeacher&&composer.solicitarConfirmacao});
+      await api.post(base,{titulo:plainContent.slice(0,100),conteudo:content,categoria:composer.categoria,anexos:attachments,fixarNoTopo:isTeacher&&composer.fixarNoTopo,solicitarConfirmacao:isTeacher&&composer.solicitarConfirmacao});
       setComposer({conteudo:'',categoria:'Aviso',fixarNoTopo:false,solicitarConfirmacao:false});setAttachments([]);setAttachOpen(false);
       if(page===1)await load();else setPage(1);
     }catch(reason){setError(reason.message);}finally{setPublishing(false);}
@@ -112,10 +114,10 @@ export default function CourseCommunity({course}){
 
   return <div className="space-y-4">
     {permissions.publicar?<form onSubmit={publish} className="panel p-4 sm:p-5">
-      <div className="flex items-start gap-3"><ProfileAvatar name={user?.nome||user?.name||'Você'} src="/api/profile-photo" className="h-10 w-10"/><textarea aria-label="Mensagem para a turma" className="form-control min-h-24 flex-1 resize-y" placeholder="Compartilhe uma mensagem, atividade ou material com a turma…" minLength={10} maxLength={5000} required value={composer.conteudo} disabled={publishing} onChange={event=>setComposer(current=>({...current,conteudo:event.target.value}))}/></div>
+      <div className="flex items-start gap-3"><ProfileAvatar name={user?.nome||user?.name||'Você'} src="/api/profile-photo" className="h-10 w-10"/><div className="min-w-0 flex-1"><RichTextEditor id={`course-wall-composer-${course.id}`} value={composer.conteudo} onChange={value=>setComposer(current=>({...current,conteudo:value}))} label="Mensagem para a turma" placeholder="Compartilhe uma mensagem, atividade ou material com a turma…" disabled={publishing} minHeightClass="min-h-24"/></div></div>
       {isTeacher&&<div className="mt-3 grid gap-3 pl-0 sm:grid-cols-[minmax(0,15rem)_1fr] sm:pl-[3.25rem]"><label><span className="form-label">Tipo de publicação</span><FormSelect value={composer.categoria} options={COURSE_WALL_CATEGORIES} isClearable={false} isSearchable={false} isDisabled={publishing} onChange={event=>setComposer(current=>({...current,categoria:event.target.value}))}/></label><div className="grid gap-2 sm:grid-cols-2"><label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3 text-sm"><input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={composer.fixarNoTopo} disabled={publishing} onChange={event=>setComposer(current=>({...current,fixarNoTopo:event.target.checked}))}/><span><strong className="block">Fixar no topo</strong><span className="text-xs text-text-muted">Destaque permanente</span></span></label><label className="flex cursor-pointer items-start gap-2 rounded-xl border border-border p-3 text-sm"><input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={composer.solicitarConfirmacao} disabled={publishing} onChange={event=>setComposer(current=>({...current,solicitarConfirmacao:event.target.checked}))}/><span><strong className="block">Pedir confirmação</strong><span className="text-xs text-text-muted">Exige ação do aluno</span></span></label></div></div>}
       {attachOpen&&<div className="mt-3 sm:pl-[3.25rem]"><AnnouncementAttachmentPicker value={attachments} onChange={setAttachments} disabled={publishing}/></div>}
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:pl-[3.25rem]"><button type="button" className="flex items-center gap-2 text-sm font-medium text-text-muted hover:text-primary" disabled={publishing} onClick={()=>setAttachOpen(value=>!value)}><Paperclip className="h-4 w-4"/>Fotos e arquivos{attachments.length?` (${attachments.length})`:''}</button><button className="btn btn-primary" disabled={publishing||composer.conteudo.trim().length<10}><Send className="h-4 w-4"/>{publishing?'Publicando…':'Publicar'}</button></div>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:pl-[3.25rem]"><button type="button" className="flex items-center gap-2 text-sm font-medium text-text-muted hover:text-primary" disabled={publishing} onClick={()=>setAttachOpen(value=>!value)}><Paperclip className="h-4 w-4"/>Fotos e arquivos{attachments.length?` (${attachments.length})`:''}</button><button className="btn btn-primary" disabled={publishing||richTextToPlainText(composer.conteudo).length<10}><Send className="h-4 w-4"/>{publishing?'Publicando…':'Publicar'}</button></div>
       <p className="mt-2 text-xs text-text-muted sm:pl-[3.25rem]">Visível somente para professor e alunos desta turma.</p>
     </form>:<div className="panel flex items-start gap-3 p-4 text-sm text-text-muted"><Users className="mt-0.5 h-5 w-5 shrink-0 text-primary"/><p>{isManager?'Visualização administrativa do mural. Publicações e interações permanecem sob responsabilidade do professor e dos alunos da turma.':<>O professor configurou este mural para publicações exclusivas dele. Você ainda pode acompanhar todo o conteúdo{permissions.comentar?' e participar dos comentários':''}.</>}</p></div>}
     {error&&<p role="alert" className="rounded-xl bg-danger/10 p-3 text-sm text-danger">{error}</p>}

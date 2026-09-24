@@ -228,6 +228,8 @@
     .editor-toolbar { @apply flex flex-wrap items-center gap-1 rounded-t-xl border border-border bg-surface-muted p-2; }
     .editor-tool { @apply inline-flex min-h-10 min-w-10 items-center justify-center gap-1.5 rounded-lg border border-transparent px-2.5 text-sm text-text-muted transition-colors hover:bg-surface-hover; }
     .editor-tool[aria-pressed='true'] { @apply border-primary/30 bg-primary/10 text-primary; }
+    .editor-tool:disabled { @apply cursor-not-allowed opacity-50; }
+    .rich-text-editor:empty::before { content: attr(data-placeholder); color: var(--color-text-muted); pointer-events: none; }
     .auth-brand { @apply hidden flex-col justify-between bg-primary p-10 text-white lg:flex; }
     .auth-brand .lucide { width: 1.125rem; height: 1.125rem; }
     .form-section-title { @apply mb-4 flex items-center gap-2 text-base font-semibold; }

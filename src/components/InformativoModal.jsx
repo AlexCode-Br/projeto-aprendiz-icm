@@ -1,8 +1,9 @@
-import { Bold, Italic, Underline, List, ListOrdered, Link2, Paperclip, FileText, X } from 'lucide-react';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Paperclip, FileText, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from './Modal';
 import FormSelect from './FormSelect';
 import FormCheckbox from './FormCheckbox';
+import RichTextEditor from './RichTextEditor';
 import { requiredTextError } from '../../shared/validation.mjs';
 
 const initialFormState = {
@@ -39,13 +40,6 @@ const dataUrlByteSize = value => {
     return Math.max(0, Math.floor(normalized.length * 3 / 4) - padding);
 };
 
-const escapeHtml = value => String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-
 const todayForInput = () => {
     const parts = Object.fromEntries(new globalThis.Intl.DateTimeFormat('en-CA', {
         timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -53,29 +47,13 @@ const todayForInput = () => {
     return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
-const initialFormatState = {
-    bold: false,
-    italic: false,
-    underline: false,
-    unorderedList: false,
-    orderedList: false,
-    link: false,
-};
-
 const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [errors, setErrors] = useState({});
-    const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-    const [linkText, setLinkText] = useState('');
-    const [linkUrl, setLinkUrl] = useState('');
-    const [linkError, setLinkError] = useState('');
     const [fileProcessing, setFileProcessing] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [uploadMessage, setUploadMessage] = useState('');
-    const [formatState, setFormatState] = useState(initialFormatState);
-    const editorRef = useRef(null);
     const fileInputRef = useRef(null);
-    const savedSelectionRef = useRef(null);
 
     useEffect(() => {
         if (draft) {
@@ -86,7 +64,6 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                 destinatarios: draft.destinatarios || { todos: false, professores: [], cursos: [], turmas: [] },
             };
             setFormData(nextForm);
-            if (editorRef.current) editorRef.current.innerHTML = nextForm.conteudo;
         } else if (informativo) {
             const nextForm = {
                 titulo: informativo.titulo || '',
@@ -100,54 +77,14 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                 destinatarios: informativo.destinatarios || { todos: false, professores: [], cursos: [], turmas: [] },
             };
             setFormData(nextForm);
-            if (editorRef.current) editorRef.current.innerHTML = nextForm.conteudo;
         } else {
             setFormData(initialFormState);
-            if (editorRef.current) editorRef.current.innerHTML = '';
         }
         setErrors({});
-        setLinkDialogOpen(false);
-        setLinkText('');
-        setLinkUrl('');
-        setLinkError('');
         setFileProcessing(false);
         setDragActive(false);
         setUploadMessage('');
-        setFormatState(initialFormatState);
-        savedSelectionRef.current = null;
     }, [draft, informativo, isOpen]);
-
-    const updateFormatState = useCallback(() => {
-        const editor = editorRef.current;
-        const selection = window.getSelection?.();
-        if (!editor || !selection?.rangeCount || !editor.contains(selection.anchorNode)) return;
-        savedSelectionRef.current = selection.getRangeAt(0).cloneRange();
-
-        const commandState = command => {
-            try {
-                return document.queryCommandState(command);
-            } catch {
-                return false;
-            }
-        };
-        const anchorElement = selection.anchorNode?.nodeType === 1
-            ? selection.anchorNode
-            : selection.anchorNode?.parentElement;
-
-        setFormatState({
-            bold: commandState('bold'),
-            italic: commandState('italic'),
-            underline: commandState('underline'),
-            unorderedList: commandState('insertUnorderedList'),
-            orderedList: commandState('insertOrderedList'),
-            link: Boolean(anchorElement?.closest('a')),
-        });
-    }, []);
-
-    useEffect(() => {
-        document.addEventListener('selectionchange', updateFormatState);
-        return () => document.removeEventListener('selectionchange', updateFormatState);
-    }, [updateFormatState]);
 
     const validate = () => {
         const newErrors = {};
@@ -186,80 +123,6 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
         onSave(formData);
     };
 
-    const syncEditor = () => {
-        if (!editorRef.current) return;
-        setFormData(prev => ({ ...prev, conteudo: editorRef.current.innerHTML }));
-        setErrors(prev => ({ ...prev, conteudo: null }));
-    };
-    const saveSelection = () => {
-        const selection = window.getSelection();
-        if (selection?.rangeCount && editorRef.current?.contains(selection.anchorNode)) savedSelectionRef.current = selection.getRangeAt(0).cloneRange();
-    };
-    const hasEditorSelection = () => {
-        const selection = window.getSelection();
-        return Boolean(selection?.rangeCount && editorRef.current?.contains(selection.anchorNode));
-    };
-    const restoreSelection = () => {
-        const editor = editorRef.current;
-        if (!editor) return;
-        editor.focus();
-        const selection = window.getSelection();
-        if (!selection) return;
-        const savedRange = savedSelectionRef.current;
-        const savedContainer = savedRange?.commonAncestorContainer;
-        const savedRangeIsValid = savedContainer && (savedContainer === editor || editor.contains(savedContainer));
-        selection.removeAllRanges();
-        if (savedRangeIsValid) {
-            selection.addRange(savedRange);
-            return;
-        }
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        range.collapse(false);
-        selection.addRange(range);
-        savedSelectionRef.current = range.cloneRange();
-    };
-    const format = command => {
-        // Manter a seleção viva preserva os estados de digitação aplicados por
-        // execCommand, permitindo combinar B + I + U antes ou durante a escrita.
-        if (!hasEditorSelection()) restoreSelection();
-        document.execCommand(command, false);
-        saveSelection();
-        syncEditor();
-        updateFormatState();
-    };
-    const openLinkDialog = () => {
-        saveSelection();
-        const selection = window.getSelection();
-        setLinkText(selection?.toString().trim() || '');
-        setLinkUrl('');
-        setLinkError('');
-        setLinkDialogOpen(true);
-    };
-    const applyLink = event => {
-        event.preventDefault();
-        const rawUrl = linkUrl.trim();
-        if (!rawUrl) return setLinkError('Informe o endereço do link.');
-        const value = /^[a-z][a-z\d+.-]*:\/\//i.test(rawUrl) ? rawUrl : `https://${rawUrl}`;
-        let parsedUrl;
-        try {
-            parsedUrl = new URL(value);
-        } catch {
-            return setLinkError('Informe uma URL válida, como google.com.');
-        }
-        if (parsedUrl.protocol !== 'https:' || !parsedUrl.hostname) return setLinkError('Use uma URL HTTPS válida.');
-        restoreSelection();
-        const selection = window.getSelection();
-        const selectedText = selection?.toString().trim() || '';
-        const displayText = linkText.trim() || selectedText || parsedUrl.hostname.replace(/^www\./i, '') || value;
-        const anchor = `<a href="${escapeHtml(parsedUrl.toString())}" target="_blank" rel="noopener noreferrer">${escapeHtml(displayText)}</a>`;
-        document.execCommand('insertHTML', false, anchor);
-        syncEditor();
-        updateFormatState();
-        setLinkDialogOpen(false);
-        setLinkText('');
-        setLinkUrl('');
-    };
     const readAsDataUrl = file => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => reject(new Error('Não foi possível ler o arquivo.'));
@@ -392,16 +255,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                         </div>}
                         <div>
                             <label htmlFor="info-content" className="form-label">Conteúdo</label>
-                                <div className="editor-toolbar" role="toolbar" aria-label="Formatação do conteúdo">
-                                    {[['bold','Negrito',Bold],['italic','Itálico',Italic],['underline','Sublinhado',Underline]].map(([command,label,icon]) => {
-                                        const active = formatState[command];
-                                        return <button key={command} type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format(command)} className="editor-tool" title={label} aria-label={label} aria-pressed={active}>{React.createElement(icon, { 'aria-hidden': true })}</button>;
-                                    })}
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertUnorderedList')} className="editor-tool" aria-label="Lista com marcadores" aria-pressed={formatState.unorderedList} title="Lista com marcadores"><List aria-hidden="true" /><span className="sr-only sm:not-sr-only">Lista</span></button>
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={() => format('insertOrderedList')} className="editor-tool" aria-label="Lista numerada" aria-pressed={formatState.orderedList} title="Lista numerada"><ListOrdered aria-hidden="true" /><span className="sr-only sm:not-sr-only">Lista</span></button>
-                                    <button type="button" onMouseDown={event => { event.preventDefault(); saveSelection(); }} onClick={openLinkDialog} className="editor-tool" aria-label="Inserir link" aria-pressed={formatState.link} title="Inserir ou editar link"><Link2 aria-hidden="true" />Link</button>
-                                </div>
-                                <div id="info-content" ref={editorRef} contentEditable role="textbox" aria-label="Conteúdo do informativo" aria-multiline="true" suppressContentEditableWarning onInput={event => { const value = event.currentTarget.innerHTML; setFormData(prev => ({ ...prev, conteudo: value })); setErrors(prev => ({ ...prev, conteudo: null })); updateFormatState(); }} onFocus={updateFormatState} onBlur={saveSelection} onKeyUp={updateFormatState} onMouseUp={updateFormatState} onSelect={updateFormatState} aria-invalid={Boolean(errors.conteudo)} className={`form-control announcement-content min-h-40 overflow-y-auto rounded-t-none ${errors.conteudo ? 'border-danger' : ''}`} />
+                                <RichTextEditor id="info-content" value={formData.conteudo} label="Conteúdo do informativo" invalid={Boolean(errors.conteudo)} onChange={value=>{setFormData(prev=>({...prev,conteudo:value}));setErrors(prev=>({...prev,conteudo:null}));}}/>
                                 <div className="mt-4">
                                     <p className="form-label">Anexos</p>
                                     <button
@@ -438,7 +292,6 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                             <FormCheckbox name="fixarNoTopo" checked={formData.fixarNoTopo} onChange={handleChange} label="Fixar no topo" />
                         </div>
                     </div>
-                    {linkDialogOpen && <div className="mt-4 rounded-lg border border-border bg-surface-muted p-3"><div className="grid gap-3 sm:grid-cols-2"><label><span className="form-label">Texto do link</span><input autoFocus type="text" value={linkText} onChange={event => { setLinkText(event.target.value); setLinkError(''); }} placeholder="Texto visível (opcional)" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label><label><span className="form-label">Link</span><input type="text" value={linkUrl} onChange={event => { setLinkUrl(event.target.value); setLinkError(''); }} placeholder="google.com" className={`form-control ${linkError ? 'border-danger' : ''}`} /></label></div><p className="mt-2 text-xs text-text-muted">Você pode digitar google.com; o endereço será convertido para HTTPS automaticamente.</p>{linkError && <p className="mt-2 text-xs text-danger">{linkError}</p>}<div className="mt-3 flex flex-wrap justify-end gap-2"><button type="button" onClick={applyLink} className="btn btn-primary">Aplicar</button><button type="button" onClick={() => setLinkDialogOpen(false)} className="btn btn-secondary">Cancelar</button></div></div>}
                     <div className="mt-6 flex border-t border-border pt-5 sm:justify-end">
                         <button type="submit" disabled={fileProcessing} className="btn btn-primary">{fileProcessing ? 'Processando arquivos…' : formData.modoEnvio === 'agendar' ? 'Revisar agendamento' : 'Revisar e enviar'}</button>
                     </div>
