@@ -117,7 +117,7 @@ test('exclusão de catálogos remove vínculos e preserva contatos sem autor', {
     assert.equal(contacts.status, 200, JSON.stringify(contacts.data));
     const retainedContact = contacts.data.find(contact => contact.note === 'Contato que deve sobreviver à exclusão do autor');
     assert.ok(retainedContact);
-    assert.equal(retainedContact.registeredBy, 'Usuário removido');
+    assert.equal(retainedContact.registeredBy, `Professor removido #${removedUserId}`);
 
     const verification = new DatabaseSync(databasePath);
     verification.exec('PRAGMA foreign_keys=ON');
@@ -125,7 +125,7 @@ test('exclusão de catálogos remove vínculos e preserva contatos sem autor', {
     assert.equal(verification.prepare('SELECT COUNT(*) AS total FROM locations WHERE id=?').get(locationId).total, 0);
     assert.equal(verification.prepare('SELECT COUNT(*) AS total FROM classes WHERE id IN (?,?)').get(courseClassId, locationClassId).total, 0);
     assert.equal(verification.prepare('SELECT COUNT(*) AS total FROM enrollments WHERE class_id IN (?,?)').get(courseClassId, locationClassId).total, 0);
-    assert.equal(verification.prepare('SELECT user_id FROM student_contacts WHERE note=?').get('Contato que deve sobreviver à exclusão do autor').user_id, null);
+    assert.equal(verification.prepare('SELECT user_id FROM student_contacts WHERE note=?').get('Contato que deve sobreviver à exclusão do autor').user_id, removedUserId);
     verification.close();
   } finally {
     if (server.exitCode === null) server.kill('SIGTERM');

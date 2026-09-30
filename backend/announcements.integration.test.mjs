@@ -10,7 +10,7 @@ import test from 'node:test';
 
 const projectRoot=join(dirname(fileURLToPath(import.meta.url)),'..');
 const dataUrl=(mime,buffer)=>`data:${mime};base64,${buffer.toString('base64')}`;
-const png=Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]),Buffer.from('test-image')]);
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
 const pdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF');
 const secondPdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n%%EOF');
 const replacementPdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Version/1.7>>endobj\n%%EOF');
@@ -129,6 +129,11 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
     assert.equal(pagedA.data.items.length,1);
     assert.equal(pagedA.data.items[0].id,announcementId);
     assert.ok(pagedA.data.total>=1);
+    const recentA=await call(professorA,'GET','/api/informativos?page=1&limit=3&order=recent');
+    assert.equal(recentA.status,200,JSON.stringify(recentA.data));
+    assert.ok(recentA.data.items.length<=3,'o painel deve receber apenas os três itens solicitados');
+    const recentIds=recentA.data.items.map(item=>item.id);
+    assert.ok(recentIds.indexOf(immediate.data.id)<recentIds.indexOf(announcementId),'a ordenação recente deve priorizar a data sem fixação');
     const managerPaged=await call(gestor,'GET','/api/informativos?page=1&limit=1&status=Publicado');
     assert.equal(managerPaged.status,200,JSON.stringify(managerPaged.data));
     assert.equal(managerPaged.data.items.length,1);
@@ -146,7 +151,7 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
     const openedPdf=await call(professorA,'GET',pdfAttachment.url,undefined,{binary:true});
     assert.equal(openedPdf.status,200);
     assert.equal(openedPdf.headers.get('content-type'),'application/pdf');
-    assert.match(openedPdf.headers.get('content-disposition'),/^inline/);
+    assert.match(openedPdf.headers.get('content-disposition'),/^attachment/);
     assert.deepEqual(openedPdf.data,pdf);
 
     const targeted=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Somente professor A',destinatarios:{todos:false,professores:[professorAProfile],cursos:[]},anexos:[payload.anexos[1]]});

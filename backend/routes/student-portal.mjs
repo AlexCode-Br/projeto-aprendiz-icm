@@ -238,7 +238,8 @@ export function createStudentPortalRoutes(context) {
           if (error || !data) return json(response,502,{message:'Não foi possível carregar o anexo.'});
           buffer=Buffer.from(await data.arrayBuffer());
         } else buffer=Buffer.from(String(file.data_url||'').split(',')[1]||'','base64');
-        response.writeHead(200,{...securityHeaders(file.mime_type),'Content-Disposition':`${url.searchParams.get('download')==='1'?'attachment':'inline'}; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','Content-Length':String(buffer.length)});
+        const disposition=file.mime_type==='application/pdf'||url.searchParams.get('download')==='1'?'attachment':'inline';
+        response.writeHead(200,{...securityHeaders(file.mime_type),'Content-Disposition':`${disposition}; filename*=UTF-8''${encodeURIComponent(file.filename)}`,'Cache-Control':'private, no-store','Content-Length':String(buffer.length)});
         return response.end(buffer);
       }
     }

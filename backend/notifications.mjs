@@ -1,4 +1,4 @@
-export const NOTIFICATION_DEFAULTS = Object.freeze({
+const NOTIFICATION_DEFAULTS = Object.freeze({
   newStudent: true,
   newTicket: true,
   courseUpdates: true,
@@ -42,7 +42,12 @@ export function createNotificationService({ db, sendEmail, sendPush = async () =
     const destination = options.destination || notificationDestination(preference, user.role);
     const [emailResult, pushResult] = await Promise.allSettled([
       channels.email?sendEmail(user.email, subject, `Olá, ${user.name}.\n\n${body}\n\nProjeto Aprendiz`, idempotencyKey):Promise.resolve({sent:false,reason:'channel_disabled'}),
-      channels.push?sendPush(user.id, { title: subject, body, tag: options.tag||idempotencyKey, url: destination }):Promise.resolve({sent:false,reason:'channel_disabled'}),
+      channels.push?sendPush(user.id, {
+        title: options.pushTitle || 'Projeto Aprendiz',
+        body: options.pushBody || 'Você recebeu uma nova atualização. Abra o aplicativo para consultar.',
+        tag: options.tag||idempotencyKey,
+        url: destination,
+      }):Promise.resolve({sent:false,reason:'channel_disabled'}),
     ]);
     if (channels.email&&emailResult.status === 'rejected') logger.error('preference_notification_failed', emailResult.reason, { userId: user.id, preference, channel: 'email' });
     if (channels.push&&pushResult.status === 'rejected') logger.error('preference_notification_failed', pushResult.reason, { userId: user.id, preference, channel: 'push' });

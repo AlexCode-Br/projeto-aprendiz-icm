@@ -4,6 +4,17 @@ import { invokeApi } from '../cloudflare/http-bridge.mjs';
 import { AuthRateLimiter, distributedAuthLimiter } from '../cloudflare/rate-limiter.mjs';
 import { readJson } from './security.mjs';
 
+const createStorage = () => {
+  const data = new Map();
+  return {
+    async get(key) { return data.get(key); },
+    async put(key, value) { data.set(key, value); },
+    async setAlarm() {},
+    async deleteAll() { data.clear(); },
+    async transaction(callback) { return callback(this); },
+  };
+};
+
 test('Fetch adapter preserves JSON, binary data, separate cookies and trusted client IP', async () => {
   const response = await invokeApi(new Request('https://example.com/api/photo?id=1', {
     method: 'POST', headers: { 'cf-connecting-ip': '192.0.2.1', 'x-forwarded-for': 'spoofed' }, body: JSON.stringify({ nome: 'João' }),
@@ -51,4 +62,16 @@ test('durable limiter survives instances, serializes simultaneous attempts and i
   assert.equal((await second.consume({ ...options, key: 'email:hash-two' })).blocked, false);
   assert.ok(attempts.at(-1).retryAfterMs > 0);
   await assert.rejects(distributedAuthLimiter().consume(options), /não está configurada/);
+});
+
+test('durable limiter consulta e limpa um contador sem registrar nova tentativa', async () => {
+  const storage = createStorage();
+  const limiter = new AuthRateLimiter({ storage });
+  const options = { limit: 1, windowMs: 60_000 };
+  assert.equal((await limiter.consume(options)).blocked, false);
+  const statusResponse = await limiter.fetch(new Request('https://internal/status', { method: 'POST', body: JSON.stringify({ action: 'status', ...options }) }));
+  assert.equal((await statusResponse.json()).blocked, true);
+  await limiter.fetch(new Request('https://internal/reset', { method: 'POST', body: JSON.stringify({ action: 'reset' }) }));
+  const resetStatus = await limiter.fetch(new Request('https://internal/status', { method: 'POST', body: JSON.stringify({ action: 'status', ...options }) }));
+  assert.equal((await resetStatus.json()).blocked, false);
 });

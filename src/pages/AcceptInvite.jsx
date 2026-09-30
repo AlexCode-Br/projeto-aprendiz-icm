@@ -1,15 +1,16 @@
 import PasswordInput from '../components/PasswordInput';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CheckCircle2, Circle, XCircle } from 'lucide-react';
 import AuthLayout from '../layouts/AuthLayout';
 import api from '../services/api';
+import { consumeSecureLinkParameters } from '../utils/secureLinkToken';
 
 export default function AcceptInvite() {
-    const [params] = useSearchParams();
     const navigate = useNavigate();
-    const token = params.get('token') || '';
-    const invitationPath = params.get('tipo') === 'aluno' ? '/api/student-invitations' : '/api/invitations';
+    const [link] = useState(consumeSecureLinkParameters);
+    const token = link.token;
+    const invitationPath = link.type === 'aluno' ? '/api/student-invitations' : '/api/invitations';
     const [invitation, setInvitation] = useState(null);
     const [password, setPassword] = useState('');
     const [confirmation, setConfirmation] = useState('');

@@ -52,6 +52,9 @@ test('períodos letivos atravessam anos, filtram dados e tornam o histórico imu
     const login = await call(null, 'POST', '/api/auth/login', { email: 'gestor@projetoaprendiz.local', password: 'Gestor@2026!' });
     assert.equal(login.status, 200, JSON.stringify(login.data));
     const manager = { cookie: String(login.headers.get('set-cookie')).split(';')[0], csrf: login.data.csrfToken };
+    const professorLogin = await call(null, 'POST', '/api/auth/login', { email: 'professor@projetoaprendiz.local', password: 'Professor@2026!' });
+    assert.equal(professorLogin.status, 200, JSON.stringify(professorLogin.data));
+    const professor = { cookie: String(professorLogin.headers.get('set-cookie')).split(';')[0], csrf: professorLogin.data.csrfToken };
 
     const initial = await call(manager, 'GET', '/api/school-years');
     assert.equal(initial.status, 200);
@@ -91,12 +94,12 @@ test('períodos letivos atravessam anos, filtram dados e tornam o histórico imu
     }, legacy.id)).status, 409);
 
     assert.ok((await call(manager, 'GET', '/cursos', undefined, legacy.id)).data.cursos.length > 0);
-    assert.equal((await call(manager, 'POST', '/cursos', {
-      nome: offering.nome, local: offering.local, professor: offering.professor,
-    }, legacy.id)).status, 409);
-    const newClass = await call(manager, 'POST', '/cursos', {
-      nome: offering.nome, local: offering.local, professor: offering.professor,
-    }, nextId);
+    const options = (await call(professor, 'GET', '/api/professores/me/turmas/opcoes')).data;
+    const courseOption = options.cursos.find(item => item.nome === offering.nome);
+    const locationOption = options.locais.find(item => item.nome === offering.local);
+    const offeringPayload = { courseId: courseOption.id, locationId: locationOption.id, horarios: [{ tipo: 'semanal', weekday: 'Domingo', start_time: '06:10' }] };
+    assert.equal((await call(professor, 'POST', '/api/professores/me/turmas', offeringPayload, legacy.id)).status, 409);
+    const newClass = await call(professor, 'POST', '/api/professores/me/turmas', offeringPayload, nextId);
     assert.equal(newClass.status, 201, JSON.stringify(newClass.data));
     assert.equal((await call(manager, 'GET', '/cursos', undefined, nextId)).data.cursos.length, 1);
 

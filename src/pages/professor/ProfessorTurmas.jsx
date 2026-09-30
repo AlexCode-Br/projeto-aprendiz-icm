@@ -1,82 +1,89 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, CalendarClock, MapPin, MessageSquareText, Users } from 'lucide-react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import PageSkeleton from '../../components/PageSkeleton';
-import ClassScheduleList from '../../components/ClassScheduleList';
-import ClassScheduleModal from '../../components/ClassScheduleModal';
-import Modal from '../../components/Modal';
 import ClassSettingsModal from '../../components/ClassSettingsModal';
+import ProfessorClassModal from '../../components/ProfessorClassModal';
 import CourseRoom from '../../components/CourseRoom';
-import CourseCommunity from '../../components/CourseCommunity';
 import { useToast } from '../../contexts/ToastContext';
-import { classScheduleConflicts, classSchedules } from '../../../shared/class-schedules.mjs';
+import { classScheduleConflicts } from '../../../shared/class-schedules.mjs';
 
 export default function ProfessorTurmas() {
-    const [searchParams]=useSearchParams();
-    const selectedId=Number(searchParams.get('turma'));
-    const [courses,setCourses] = useState([]);
-    const [loading,setLoading] = useState(true);
-    const [error,setError] = useState('');
-    const [editing,setEditing] = useState(null);
-    const [announcing,setAnnouncing] = useState(null);
-    const [configuring,setConfiguring]=useState(null),[presentation,setPresentation]=useState(null);
-    const loadPresentation=useCallback(async()=>{if(!selectedId){setPresentation(null);return;}try{setPresentation((await api.get(`/api/turmas/${selectedId}/configuracao`)).data);}catch{setPresentation(null);}},[selectedId]);
-    useEffect(()=>{setPresentation(null);setEditing(null);setAnnouncing(null);setConfiguring(null);void loadPresentation();window.addEventListener('class-presentation:updated',loadPresentation);return()=>window.removeEventListener('class-presentation:updated',loadPresentation);},[loadPresentation]);
-    const {showToast} = useToast();
-    const conflicts=useMemo(()=>classScheduleConflicts(courses),[courses]);
-    const selectedCourses=useMemo(()=>Number.isSafeInteger(selectedId)&&selectedId>0?courses.filter(course=>Number(course.id)===selectedId):courses,[courses,selectedId]);
-    const visibleConflicts=useMemo(()=>Number.isSafeInteger(selectedId)&&selectedId>0?conflicts.filter(conflict=>conflict.turmas.some(course=>Number(course.id)===selectedId)):conflicts,[conflicts,selectedId]);
-    const conflictingIds=useMemo(()=>new Set(conflicts.flatMap(conflict=>conflict.turmas.map(course=>String(course.id)))),[conflicts]);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const selectedId = Number(searchParams.get('turma'));
+    const createRequested = searchParams.get('nova') === '1';
+    const [courses, setCourses] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [configuring, setConfiguring] = useState(null);
+    const [offering, setOffering] = useState(undefined);
+    const [presentation, setPresentation] = useState(null);
+    const { showToast } = useToast();
+
     const load = useCallback(async () => {
         setLoading(true);
-        try { const {data}=await api.get('/professores/meus-cursos'); setCourses(data); setError(''); }
-        catch(error) { setError(error.message || 'Não foi possível carregar suas turmas.'); }
-        finally { setLoading(false); }
-    },[]);
-    useEffect(()=>{
-        load();
-        let active=true;
-        const refresh=()=>api.get('/professores/meus-cursos').then(({data})=>{if(active)setCourses(data);}).catch(()=>{});
-        window.addEventListener('class-schedules:updated',refresh);
-        return()=>{active=false;window.removeEventListener('class-schedules:updated',refresh);};
-    },[load]);
-    const save = async horarios => {
-        const {data}=await api.put(`/api/professores/me/turmas/${editing.id}/horarios`,{horarios});
-        setCourses(current=>current.map(course=>course.id===editing.id?{...course,horarios:data.horarios}:course));
-        showToast('Dias e horários salvos com sucesso!','success');
+        try {
+            const { data } = await api.get('/professores/meus-cursos');
+            setCourses(data);
+            setError('');
+        } catch (requestError) {
+            setError(requestError.message || 'Não foi possível carregar suas turmas.');
+        } finally { setLoading(false); }
+    }, []);
+    const loadPresentation = useCallback(async () => {
+        if (!selectedId) { setPresentation(null); return; }
+        try { setPresentation((await api.get(`/api/turmas/${selectedId}/configuracao`)).data); }
+        catch { setPresentation(null); }
+    }, [selectedId]);
+
+    useEffect(() => { void load(); }, [load]);
+    useEffect(() => {
+        const refresh = () => { void load(); };
+        window.addEventListener('class-schedules:updated', refresh);
+        window.addEventListener('classes:updated', refresh);
+        return () => { window.removeEventListener('class-schedules:updated', refresh); window.removeEventListener('classes:updated', refresh); };
+    }, [load]);
+    useEffect(() => {
+        setPresentation(null); setConfiguring(null); setOffering(undefined);
+        void loadPresentation();
+        window.addEventListener('class-presentation:updated', loadPresentation);
+        return () => window.removeEventListener('class-presentation:updated', loadPresentation);
+    }, [loadPresentation]);
+    useEffect(() => {
+        if (!createRequested) return;
+        setOffering(null);
+        const next = new URLSearchParams(searchParams);
+        next.delete('nova');
+        setSearchParams(next, { replace: true });
+    }, [createRequested, searchParams, setSearchParams]);
+
+    const conflicts = useMemo(() => classScheduleConflicts(courses), [courses]);
+    const selectedCourse = useMemo(() => Number.isSafeInteger(selectedId) && selectedId > 0 ? courses.find(course => Number(course.id) === selectedId) || null : null, [courses, selectedId]);
+    const visibleConflicts = useMemo(() => selectedCourse ? conflicts.filter(conflict => conflict.turmas.some(course => Number(course.id) === selectedId)) : conflicts, [conflicts, selectedCourse, selectedId]);
+    const classSaved = async (data, message) => {
+        setOffering(undefined);
+        await load();
+        await loadPresentation();
+        if (data?.id) setSearchParams({ turma: String(data.id) }, { replace: true });
+        window.dispatchEvent(new Event('classes:updated'));
+        showToast(message, 'success');
     };
-    if(loading)return <PageSkeleton label="Carregando suas turmas" />;
-    const selectedCourse=selectedCourses.length===1&&Number.isSafeInteger(selectedId)&&selectedId>0?selectedCourses[0]:null;
-    if(selectedCourse)return <>
-        {visibleConflicts.length>0&&<div role="alert" className="alert-warning mb-4">Há conflito de horários: {visibleConflicts.map(item=>item.descricao).join('; ')}.</div>}
-        <CourseRoom key={selectedCourse.id} course={selectedCourse} settings={presentation} onConfigure={()=>setConfiguring(selectedCourse)} onSchedule={()=>setEditing(selectedCourse)}/>
-        <ClassScheduleModal course={editing} onClose={()=>setEditing(null)} onSave={save}/>
-        {configuring&&<ClassSettingsModal course={configuring} onClose={()=>setConfiguring(null)} onSaved={async()=>{setConfiguring(null);await loadPresentation();window.dispatchEvent(new Event('class-presentation:updated'));}}/>}
+    const presentationSaved = async () => {
+        setConfiguring(null);
+        await loadPresentation();
+        window.dispatchEvent(new Event('class-presentation:updated'));
+    };
+
+    if (loading) return <PageSkeleton label="Carregando suas turmas" />;
+    if (error && selectedId) return <div className="panel empty-state"><p role="alert">{error}</p><button type="button" className="btn btn-secondary" onClick={load}>Tentar novamente</button></div>;
+
+    if (selectedCourse) return <>
+        <CourseRoom key={`${selectedCourse.id}-${selectedCourse.local}`} course={selectedCourse} settings={presentation} onConfigure={() => setConfiguring(selectedCourse)} onEdit={() => setOffering(selectedCourse)} notice={visibleConflicts.length > 0 && <div role="alert" className="alert-warning">Há conflito de horários: {visibleConflicts.map(item => item.descricao).join('; ')}.</div>} />
+        {offering !== undefined && <ProfessorClassModal course={offering} onClose={() => setOffering(undefined)} onSaved={data => classSaved(data, offering ? 'Turma atualizada com sucesso!' : 'Turma criada com sucesso!')} />}
+        {configuring && <ClassSettingsModal course={configuring} onClose={() => setConfiguring(null)} onSaved={presentationSaved} />}
     </>;
-    return <>
-        <div className="page-header"><div><h1 className="page-title">{selectedCourse?selectedCourse.nome:'Minhas turmas'}</h1><p className="page-description">{selectedCourse?`Informações da turma em ${selectedCourse.local}.`:'Defina os dias da semana e os horários das suas aulas.'}</p></div></div>
-        {visibleConflicts.length>0&&<div className="alert-warning mb-5" role="alert">
-            <div className="flex items-start gap-3"><AlertTriangle aria-hidden="true" className="mt-0.5 shrink-0"/><div><strong className="block text-text-default">Há conflito entre horários já cadastrados</strong><p className="mt-1 text-sm">Ajuste uma das turmas em cada horário: {visibleConflicts.map(conflict=>conflict.descricao).join('; ')}.</p></div></div>
-        </div>}
-        {error ? <div className="panel empty-state"><p role="alert">{error}</p><button type="button" className="btn btn-secondary" onClick={load}>Tentar novamente</button></div>
-            : <div className="grid gap-4 md:grid-cols-2">
-                {selectedCourses.map(course=>{const hasConflict=conflictingIds.has(String(course.id));return <article key={course.id} className={`panel flex min-w-0 flex-col overflow-hidden ${selectedCourse?'md:col-span-2':''} ${hasConflict?'border-warning/70':''}`}>
-                    <div className="flex-1 p-5">
-                        <div className="flex items-start justify-between gap-3"><h2 className="break-words text-lg font-semibold">{course.nome}</h2>{hasConflict&&<span className="rounded-full bg-warning/15 px-2.5 py-1 text-xs font-semibold text-warning">Conflito</span>}</div>
-                        <p className="mt-2 flex items-start gap-2 text-sm text-text-muted"><MapPin aria-hidden="true" className="shrink-0" /><span className="break-words">{course.local}</span></p>
-                        <p className="mt-2 flex items-center gap-2 text-sm text-text-muted"><Users aria-hidden="true" className="shrink-0"/><span>{Number(course.alunos||0)} {Number(course.alunos||0)===1?'aluno':'alunos'}</span></p>
-                        {course.label && course.label!==`${course.nome} — ${course.local}` && <p className="mt-1 text-sm text-text-muted">{course.label}</p>}
-                        <h3 className="mb-2 mt-5 text-xs font-semibold text-text-muted">Dias e horários</h3>
-                        <div className="text-sm leading-6"><ClassScheduleList course={course} /></div>
-                    </div>
-                    <div className="space-y-2 border-t border-border p-4"><button type="button" onClick={()=>setConfiguring(course)} className="btn btn-secondary w-full">Configurar endereço e banner</button><button type="button" onClick={()=>setEditing(course)} className="btn btn-secondary w-full" aria-label={`Editar horários de ${course.nome} em ${course.local}`}><CalendarClock aria-hidden="true" />{classSchedules(course).length?'Editar horários':'Definir horários'}</button>{!selectedCourse&&<button type="button" onClick={()=>setAnnouncing(course)} className="btn btn-secondary w-full"><MessageSquareText aria-hidden="true"/>Mural da turma</button>}</div>
-                </article>})}
-                {!selectedCourses.length && <div className="panel empty-state md:col-span-2"><strong className="text-text-default">{courses.length?'Turma não encontrada':'Nenhuma turma atribuída'}</strong><p>{courses.length?'Selecione uma das suas turmas no menu lateral.':'Suas turmas aparecerão aqui quando o gestor vinculá-las ao seu perfil.'}</p></div>}
-            </div>}
-        <ClassScheduleModal course={editing} onClose={()=>setEditing(null)} onSave={save} />
-        {selectedCourse&&<section className="mt-6"><h2 className="mb-4 text-xl font-semibold">Mural da turma</h2><CourseCommunity key={selectedCourse.id} course={selectedCourse}/></section>}
-        {configuring&&<ClassSettingsModal course={configuring} onClose={()=>setConfiguring(null)} onSaved={async()=>{setConfiguring(null);await loadPresentation();window.dispatchEvent(new Event('class-presentation:updated'));}}/>}
-        {announcing&&<Modal isOpen title={`Mural da turma — ${announcing.nome}`} maxWidth="max-w-4xl" onClose={()=>setAnnouncing(null)}><CourseCommunity course={announcing}/></Modal>}
-    </>;
+
+    if (createRequested || offering !== undefined) return <ProfessorClassModal course={offering ?? null} onClose={() => setOffering(undefined)} onSaved={data => classSaved(data, 'Turma criada com sucesso!')} />;
+
+    return <Navigate to="/professor/dashboard" replace />;
 }

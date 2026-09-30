@@ -3,7 +3,8 @@ import { initializeClassSchedules } from './class-schedules.mjs';
 import { initializeStudentSchema } from './student-schema.mjs';
 import { hashPassword, strongPassword } from './security.mjs';
 import { normalizeEmail } from '../shared/validation.mjs';
-import { CHURCH_SUGGESTIONS, catalogKey, churchName } from '../shared/catalog-options.mjs';
+import { catalogKey, churchName } from '../shared/catalog-options.mjs';
+import { ensureOfferingCatalog } from './offering-catalog.mjs';
 
 // Local/Node bootstrap only. Workers use the existing migrated production database.
 export async function initializeNodeApplication({ db, env = process.env }) {
@@ -30,6 +31,9 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       token_hash TEXT NOT NULL UNIQUE,
       csrf_token TEXT NOT NULL,
       expires_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      mfa_verified_at TEXT,
+      user_agent TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS password_resets (
@@ -40,6 +44,19 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       used_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS manager_login_challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      code_hash TEXT NOT NULL,
+      remember INTEGER NOT NULL DEFAULT 0 CHECK(remember IN (0,1)),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS manager_login_challenges_user_idx ON manager_login_challenges(user_id);
+    CREATE INDEX IF NOT EXISTS manager_login_challenges_expiry_idx ON manager_login_challenges(expires_at);
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       preferences_json TEXT NOT NULL DEFAULT '{}',
@@ -329,6 +346,10 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     CREATE INDEX IF NOT EXISTS notification_outbox_lease_idx ON notification_outbox(status,lease_until) WHERE status='processing';
   `);
   if (db.dialect === 'sqlite') {
+    const sessionColumns = await db.prepare('PRAGMA table_info(sessions)').all();
+    if(!sessionColumns.some(column=>column.name==='last_seen_at'))await db.exec('ALTER TABLE sessions ADD COLUMN last_seen_at TEXT; UPDATE sessions SET last_seen_at=created_at WHERE last_seen_at IS NULL; CREATE INDEX IF NOT EXISTS sessions_last_seen_at_idx ON sessions(last_seen_at);');
+    if(!sessionColumns.some(column=>column.name==='mfa_verified_at'))await db.exec('ALTER TABLE sessions ADD COLUMN mfa_verified_at TEXT;');
+    if(!sessionColumns.some(column=>column.name==='user_agent'))await db.exec('ALTER TABLE sessions ADD COLUMN user_agent TEXT;');
     const userColumns = await db.prepare('PRAGMA table_info(users)').all();
     if (!userColumns.some(column => column.name === 'auth_user_id')) {
       await db.exec('ALTER TABLE users ADD COLUMN auth_user_id TEXT; CREATE UNIQUE INDEX IF NOT EXISTS users_auth_user_id_unique ON users(auth_user_id);');
@@ -537,10 +558,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
   }
 
   // Keep the canonical church/locality directory available even without demo data.
-  for(const name of CHURCH_SUGGESTIONS){
-    await db.prepare('INSERT INTO locations (name,active) SELECT ?,1 WHERE NOT EXISTS (SELECT 1 FROM locations WHERE LOWER(name)=LOWER(?))').run(name,name);
-    await db.prepare('UPDATE locations SET active=1 WHERE LOWER(name)=LOWER(?)').run(name);
-  }
+  await ensureOfferingCatalog(db);
 
   const seedDemoData = env.SEED_DEMO_DATA === 'true' || !isProduction;
   if (seedDemoData) {
@@ -659,6 +677,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
   if (seedDemoData) await seedCommunicationData();
   await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
   await db.prepare('DELETE FROM password_resets WHERE expires_at <= ? OR used_at IS NOT NULL').run(new Date().toISOString());
+  await db.prepare('DELETE FROM manager_login_challenges WHERE expires_at <= ? OR consumed_at IS NOT NULL').run(new Date().toISOString());
 
   await initializeClassSchedules(db);
   await initializeStudentSchema(db);

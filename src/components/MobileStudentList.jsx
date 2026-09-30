@@ -6,7 +6,7 @@ import KebabMenu, { KebabMenuItem } from './KebabMenu';
 import FormCheckbox from './FormCheckbox';
 
 export default function MobileStudentList({ students, loading, error, onView, onEdit, onDelete, selectedIds, onToggleSelection, showAcademicSummary = false, showCourses = false, showAttendance = false }) {
-    return <section className="space-y-3 sm:hidden" aria-label="Lista de alunos" aria-busy={loading}>
+    return <section className="space-y-3 xl:hidden" aria-label="Lista de alunos" aria-busy={loading}>
         {loading ? Array.from({ length: 4 }, (_, index) => <div key={index} className="panel p-3"><div className="skeleton h-28 rounded-xl" /></div>)
             : error ? <p role="alert" className="panel p-4 text-sm text-danger">{error}</p>
                 : students.map(student => {
@@ -17,7 +17,7 @@ export default function MobileStudentList({ students, loading, error, onView, on
                         </button>
                         <span aria-hidden="true" className="w-px shrink-0 self-stretch bg-border" />
                         <div className="min-w-0 flex-1 py-0.5">
-                            <button type="button" onClick={() => onView(student)} className="max-w-full rounded text-left hover:text-primary" aria-label={`Ver dados de ${student.nome}`}>
+                            <button type="button" onClick={() => onView(student)} className="flex min-h-11 max-w-full items-center rounded text-left hover:text-primary" aria-label={`Ver dados de ${student.nome}`}>
                                 <span className="block break-words text-base font-semibold leading-5">{student.nome}</span>
                             </button>
                             {showAttendance ? <div className="mt-2 text-sm"><span className="block text-xs text-text-muted">Frequência</span><strong>{student.frequencia == null ? 'Sem chamadas' : `${student.frequencia}%`}</strong></div> : showAcademicSummary ? <div className="mt-2 grid min-w-0 grid-cols-2 gap-x-4 gap-y-1 text-[13px] leading-5">
@@ -32,16 +32,16 @@ export default function MobileStudentList({ students, loading, error, onView, on
                             </div>}
                         </div>
                         <div className="absolute right-2 top-2 flex items-center gap-1">
+                            {(onEdit || onDelete) && <KebabMenu label={`Ações de ${student.nome}`}>
+                                {onEdit && <KebabMenuItem icon={Pencil} tone="primary" onClick={() => onEdit(student)}>Editar cadastro</KebabMenuItem>}
+                                {onDelete && <KebabMenuItem icon={Trash2} tone="danger" onClick={() => onDelete(student)}>Excluir aluno</KebabMenuItem>}
+                            </KebabMenu>}
                             {onToggleSelection && <FormCheckbox
                                 checked={selected}
                                 onChange={() => onToggleSelection(student)}
                                 aria-label={`${selected ? 'Remover' : 'Adicionar'} ${student.nome} da seleção`}
                                 className="items-center p-2"
                             />}
-                            {(onEdit || onDelete) && <KebabMenu label={`Ações de ${student.nome}`}>
-                                {onEdit && <KebabMenuItem icon={Pencil} tone="primary" onClick={() => onEdit(student)}>Editar cadastro</KebabMenuItem>}
-                                {onDelete && <KebabMenuItem icon={Trash2} tone="danger" onClick={() => onDelete(student)}>Excluir aluno</KebabMenuItem>}
-                            </KebabMenu>}
                         </div>
                     </article>;
                 })}

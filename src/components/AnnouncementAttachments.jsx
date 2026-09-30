@@ -32,8 +32,8 @@ const AnnouncementAttachments = ({ attachments = [] }) => {
                             <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[0.7rem] text-text-muted"><span className="rounded bg-surface px-1.5 py-0.5 font-semibold uppercase">{isImage ? 'Imagem' : 'PDF'}</span><span className="truncate">{formatFileSize(attachment.tamanho)}</span></span>
                         </span>
                         {fileUrl && <span className="flex shrink-0 items-center gap-1">
-                            <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 w-9 items-center justify-center rounded-md text-primary hover:bg-surface" aria-label={`Abrir ${name}`} title="Abrir"><OpenIcon /></a>
-                            <a href={downloadUrl} download={name} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-text-muted hover:bg-surface hover:text-text-default" aria-label={`Baixar ${name}`} title="Baixar"><DownloadIcon /></a>
+                            <a href={fileUrl} target="_blank" rel="noreferrer" className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-primary hover:bg-surface" aria-label={`Abrir ${name}`} title="Abrir"><OpenIcon /></a>
+                            <a href={downloadUrl} download={name} className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-text-muted hover:bg-surface hover:text-text-default" aria-label={`Baixar ${name}`} title="Baixar"><DownloadIcon /></a>
                         </span>}
                     </div>;
                 })}

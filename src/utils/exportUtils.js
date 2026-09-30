@@ -1,7 +1,11 @@
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
-
 const projectLogoUrl = new URL('../assets/projeto-aprendiz-logo.png', import.meta.url).href;
+let pdfModulesPromise;
+
+const loadPdfModules = () => {
+  pdfModulesPromise ||= Promise.all([import('jspdf'), import('jspdf-autotable')])
+    .then(([pdfModule, tableModule]) => ({ jsPDF: pdfModule.jsPDF, autoTable: tableModule.default }));
+  return pdfModulesPromise;
+};
 
 const COLORS = {
   primary: [183, 28, 28],
@@ -75,24 +79,8 @@ const scheduleLabel = schedules => {
   return schedules.map(item => `${weekdays[item.weekday] || item.weekday} às ${String(item.start_time || '').slice(0, 5)}`).join(' | ');
 };
 
-/** Mantém a exportação tabular genérica usada por telas legadas. */
-export const exportToPdf = (title, headers, data) => {
-  const doc = new jsPDF();
-  doc.text(title, 14, 20);
-  autoTable(doc, {
-    startY: 30,
-    head: [headers],
-    body: data,
-    theme: 'striped',
-    headStyles: { fillColor: COLORS.primary },
-    styles: { font: 'helvetica', fontSize: 10 },
-  });
-  const fileName = `${title.toLowerCase().replace(/ /g, '_')}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.pdf`;
-  doc.save(fileName);
-};
-
 /** Monta o relatório completo de frequência com os recursos visuais já carregados. */
-export const buildAttendanceReportPdf = (report, { departmentLogo = '', projectLogo = '' } = {}) => {
+const buildAttendanceReportPdf = (report, { departmentLogo = '', projectLogo = '' } = {}, { jsPDF, autoTable }) => {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -400,9 +388,10 @@ export const buildAttendanceReportPdf = (report, { departmentLogo = '', projectL
 
 /** Carrega as identidades visuais e prepara o Blob usado na prévia/download do navegador. */
 export const createAttendanceReportPdf = async report => {
-  const [departmentLogo, projectLogo] = await Promise.all([
+  const [{ jsPDF, autoTable }, departmentLogo, projectLogo] = await Promise.all([
+    loadPdfModules(),
     readImageAsDataUrl('/departamento-louvor-logo.png'),
     readImageAsDataUrl(projectLogoUrl),
   ]);
-  return buildAttendanceReportPdf(report, { departmentLogo, projectLogo });
+  return buildAttendanceReportPdf(report, { departmentLogo, projectLogo }, { jsPDF, autoTable });
 };

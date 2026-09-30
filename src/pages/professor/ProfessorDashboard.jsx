@@ -36,11 +36,11 @@ const ProfessorDashboard = () => {
         if (!silent) setLoading(true);
         try {
             const [infoResponse, dashboardResponse] = await Promise.all([
-                api.get('/api/informativos'),
+                api.get('/api/informativos', { params: { page: 1, limit: 3, order: 'recent' } }),
                 api.get('/api/dashboard/professor', { params: agendaDate ? { date: agendaDate } : {} }),
             ]);
             setSummary({ ...emptySummary, ...dashboardResponse.data, stats: { ...emptySummary.stats, ...dashboardResponse.data.stats } });
-            setInformativos((Array.isArray(infoResponse.data) ? infoResponse.data : []).sort((a,b)=>new Date(b.data_publicacao)-new Date(a.data_publicacao)).slice(0,3));
+            setInformativos(infoResponse.data.items || []);
             setError('');
         } catch (requestError) {
             if (!silent) setError(requestError.message || 'Falha ao carregar os dados do dashboard.');
@@ -99,7 +99,7 @@ const ProfessorDashboard = () => {
                 {summary.frequenciaPorTurma.length?<ul className="divide-y divide-border">{summary.frequenciaPorTurma.map(item=><li key={item.id} className="p-4">
                     <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold text-text-default">{displayClassName(item)}</p><p className="mt-1 text-sm text-text-muted">{item.local} · {item.aulas} {item.aulas===1?'aula registrada':'aulas registradas'}</p></div><strong className={item.frequencia===null?'text-sm text-text-muted':'text-xl text-text-default'}>{item.frequencia===null?'Sem chamada':`${item.frequencia}%`}</strong></div>
                     {item.frequencia!==null&&<div className="mt-3 h-2 overflow-hidden rounded-full bg-surface-muted" role="progressbar" aria-label={`Frequência de ${displayClassName(item)}`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={item.frequencia}><div className="h-full rounded-full bg-primary" style={{width:`${item.frequencia}%`}}/></div>}
-                </li>)}</ul>:<div className="empty-state"><strong className="text-text-default">Nenhuma turma ativa</strong><p>As turmas vinculadas pelo gestor aparecerão aqui.</p></div>}
+                </li>)}</ul>:<div className="empty-state"><strong className="text-text-default">Nenhuma turma ativa</strong><p>Crie sua primeira oferta em Minhas turmas, informando curso, local e horários.</p></div>}
                 <div className="border-t border-border p-4"><Link to="/professor/frequencia" className="btn btn-secondary w-full">Registrar frequência <ChevronRight aria-hidden="true"/></Link></div>
             </section>
         </div>

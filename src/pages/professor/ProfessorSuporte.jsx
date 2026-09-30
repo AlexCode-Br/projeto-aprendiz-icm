@@ -5,6 +5,7 @@ import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import Modal from '../../components/Modal';
 import { SupportConversation, SupportTicketList } from '../../components/support/SupportUI';
+import useLiveRefresh from '../../hooks/useLiveRefresh';
 import api from '../../services/api';
 import { SUPPORT_CATEGORIES, validateSupportTicket } from '../../../shared/validation.mjs';
 
@@ -97,11 +98,10 @@ const ProfessorSuporte=()=>{
 
   useEffect(()=>{fetchTickets();},[fetchTickets]);
   useEffect(()=>()=>{selectedIdRef.current=null;detailRequestRef.current+=1;},[]);
-  useEffect(()=>{
-    const refresh=()=>{const ticketId=selectedIdRef.current;fetchTickets({silent:true});if(ticketId)fetchDetail(ticketId,{silent:true});};
-    const interval=setInterval(refresh,15000);window.addEventListener('focus',refresh);
-    return()=>{clearInterval(interval);window.removeEventListener('focus',refresh);};
-  },[fetchTickets,fetchDetail]);
+  useLiveRefresh(()=>{
+    const ticketId=selectedIdRef.current;
+    return Promise.all([fetchTickets({silent:true}),ticketId?fetchDetail(ticketId,{silent:true}):Promise.resolve()]);
+  },{intervalMs:15000});
 
   const openTicket=async ticketId=>{
     selectedIdRef.current=ticketId;
@@ -136,7 +136,7 @@ const ProfessorSuporte=()=>{
 
   return <>
     <div className="page-header"><div><h1 className="page-title">Suporte</h1><p className="page-description">Crie chamados, converse com a equipe gestora e acompanhe cada solicitação até a resolução.</p></div><button type="button" onClick={()=>setNewTicketOpen(true)} className="btn btn-primary w-full sm:w-auto"><Plus aria-hidden="true" />Novo chamado</button></div>
-    <div className="mb-4 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar seus chamados">{['Todos','Ativos','Resolvidos','Não lidos'].map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-10 whitespace-nowrap rounded-lg px-4 text-xs font-semibold ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}</div>
+    <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filtrar seus chamados">{['Todos','Ativos','Resolvidos','Não lidos'].map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-11 whitespace-nowrap rounded-lg px-4 text-xs font-semibold ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}</div>
     {error&&<div className="alert-error mb-4 flex items-center justify-between gap-3" role="alert"><span>{error}</span><button type="button" onClick={()=>fetchTickets()} className="font-semibold underline">Tentar novamente</button></div>}
     <div className="panel grid min-h-[38rem] overflow-hidden lg:grid-cols-[minmax(19rem,0.82fr)_minmax(0,1.7fr)]">
       <aside className={`${selectedId?'hidden lg:block':'block'} border-r-0 border-border lg:border-r`} aria-label="Meus chamados"><div className="border-b border-border px-5 py-4"><h2 className="font-bold text-text-default">Meus chamados</h2><p className="mt-1 text-xs text-text-muted">Respostas novas aparecem primeiro.</p></div><div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={tickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Você não possui respostas não lidas.':'Você ainda não possui chamados.'} role="professor"/></div>{!loading&&!tickets.length&&filter!=='Não lidos'&&<div className="border-t border-border p-4"><button type="button" onClick={()=>setNewTicketOpen(true)} className="btn btn-primary w-full">Criar primeiro chamado</button></div>}</aside>

@@ -61,3 +61,15 @@ test('limites por IP e e-mail permanecem independentes', () => {
   assert.equal(limiter.consume({ key: emailKey, limit: 5, windowMs: 60_000 }).blocked, true);
   assert.equal(limiter.consume({ key: ipKey, limit: 20, windowMs: 60_000 }).blocked, false);
 });
+
+test('consulta e limpeza do limitador permitem exigir desafio após falhas', () => {
+  const limiter = createSlidingWindowRateLimiter({ clock: () => 10_000 });
+  const policy = { key: 'email:teste', limit: 2, windowMs: 60_000 };
+  assert.equal(limiter.status(policy).remaining, 2);
+  limiter.consume(policy);
+  limiter.consume(policy);
+  assert.equal(limiter.status(policy).blocked, true);
+  limiter.reset({ key: policy.key });
+  assert.equal(limiter.status(policy).blocked, false);
+  assert.equal(limiter.status(policy).remaining, 2);
+});

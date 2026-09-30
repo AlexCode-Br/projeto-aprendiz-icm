@@ -234,7 +234,7 @@ const Professores = () => {
                 </div>
             </section>
 
-            <section className="space-y-3 md:hidden" aria-label="Professores encontrados">
+            <section className="space-y-3 xl:hidden" aria-label="Professores encontrados">
                 {paginatedProfessores.map(prof => <article key={prof.id} className="panel min-w-0 p-3.5" aria-label={prof.nome}>
                     <header className="flex items-center gap-2.5">
                         <button type="button" onClick={() => handleOpenDetailsModal(prof)} className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-lg text-left hover:text-primary" aria-label={`Ver detalhes de ${prof.nome}`}>
@@ -262,7 +262,7 @@ const Professores = () => {
                 {!filteredProfessores.length && <div className="panel p-6 text-center text-sm text-text-muted">Nenhum professor encontrado com estes filtros.</div>}
             </section>
 
-            <div className="panel hidden overflow-hidden md:block">
+            <div className="panel hidden overflow-hidden xl:block">
                 <div className="table-scroll" tabIndex={0} role="region" aria-label="Resultados">
                     <table className="data-table w-full text-sm text-left">
                         <thead className="bg-surface-muted text-xs uppercase text-text-muted">
@@ -276,7 +276,7 @@ const Professores = () => {
                         <tbody>
                             {paginatedProfessores.map(prof => (
                                 <tr key={prof.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-                                    <td className="px-6 py-4 font-medium"><button type="button" onClick={() => handleOpenDetailsModal(prof)} aria-label={`Ver dados de ${prof.nome}`} className="flex min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={prof.nome} src={prof.foto_url} className="h-10 w-10" /><span className="break-words">{prof.nome}</span></button></td>
+                                    <td className="px-6 py-4 font-medium"><button type="button" onClick={() => handleOpenDetailsModal(prof)} aria-label={`Ver dados de ${prof.nome}`} className="flex min-h-11 min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={prof.nome} src={prof.foto_url} className="h-10 w-10" /><span className="break-words">{prof.nome}</span></button></td>
                                     <td data-label="Cursos" className="px-6 py-4"><span className="inline-flex flex-wrap gap-1">{prof.cursos.map(course => <span key={course} className="badge">{course}</span>)}</span></td>
                                     <td className="px-6 py-4">
                                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${prof.acesso === 'Ativo' ? 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300' : prof.acesso === 'Desativado' ? 'bg-gray-100 text-text-default dark:bg-white/10 dark:text-gray-300' : 'bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'}`}>{prof.acesso}</span>

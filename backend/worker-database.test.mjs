@@ -31,6 +31,14 @@ test('Worker preserves SQL adapter semantics and numeric/text/date normalization
 });
 
 test('schema qualification preserves aliases, explicit schemas, literals and comments', () => {
+  assert.equal(
+    internals.qualifyApplicationTables('SELECT * FROM manager_login_challenges WHERE token_hash=$1'),
+    'SELECT * FROM projeto_aprendiz.manager_login_challenges WHERE token_hash=$1',
+  );
+  assert.equal(
+    internals.qualifyApplicationTables('UPDATE manager_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE id=$1'),
+    'UPDATE projeto_aprendiz.manager_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE id=$1',
+  );
   for(const table of ['student_accounts','student_invites','student_announcement_audiences','student_announcement_classes','student_notice_deliveries','student_email_changes','student_course_announcements']) {
     assert.equal(internals.qualifyApplicationTables(`SELECT * FROM ${table} WHERE 1=1`),`SELECT * FROM projeto_aprendiz.${table} WHERE 1=1`);
     assert.equal(internals.returningId(`INSERT INTO ${table} (user_id) VALUES ($1)`),`INSERT INTO ${table} (user_id) VALUES ($1)`);
@@ -103,7 +111,7 @@ test('successful transaction commits, nested transaction fails and connection fa
 
 test('student portal Worker bootstrap is idempotent, private and schema-qualified', async () => {
   const calls=[];
-  const database={exec:async sql=>{calls.push(sql);}};
+  const database={exec:async sql=>{calls.push(sql);},prepare:()=>({all:async()=>[],run:async()=>({changes:1})})};
   await Promise.all([internals.ensureStudentPortalSchema(database),internals.ensureStudentPortalSchema(database)]);
   assert.equal(calls.length,2);
   for(const table of ['class_presentation','course_post_likes','course_post_comments']){

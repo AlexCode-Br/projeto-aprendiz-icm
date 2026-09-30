@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { communityPostgresSchema } from './course-community-schema.mjs';
+import { ensureOfferingCatalog } from './offering-catalog.mjs';
 import { Client, types } from 'pg';
 
 // Keep these compatibility rules aligned with database.mjs. This module must
@@ -27,6 +28,7 @@ const tablesWithId = new Set([
   'school_years', 'churches', 'enrollments', 'attendance_sessions', 'attendance_records',
   'announcements', 'announcement_attachments', 'support_tickets', 'support_messages',
   'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos', 'push_subscriptions', 'notification_outbox',
+  'manager_login_challenges',
 ]);
 const applicationTables = new Set([
   'class_presentation', 'course_post_likes', 'course_post_comments',
@@ -366,7 +368,7 @@ export function ensureStudentPortalSchema(database) {
         projeto_aprendiz.student_announcement_audiences,projeto_aprendiz.student_announcement_classes,
         projeto_aprendiz.student_notice_deliveries,projeto_aprendiz.student_email_changes,
         projeto_aprendiz.student_course_announcements FROM PUBLIC, anon, authenticated;
-    `).then(() => database.exec(communityPostgresSchema)).then(() => { studentPortalSchemaReady = true; }).catch(error => {
+    `).then(() => database.exec(communityPostgresSchema)).then(() => ensureOfferingCatalog(database)).then(() => { studentPortalSchemaReady = true; }).catch(error => {
       studentPortalSchemaPromise = null;
       throw error;
     });

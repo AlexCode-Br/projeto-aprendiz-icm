@@ -98,7 +98,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, locations = []
                             {errors.local && <p className="mt-1 text-xs text-danger">{errors.local}</p>}
                         </div>
                     </div>
-                    <p className="rounded-xl border border-border bg-surface-muted/50 px-4 py-3 text-sm text-text-muted">Os cursos e as turmas deste professor são definidos exclusivamente na página <strong className="text-text-default">Turmas</strong>.</p>
+                    <p className="rounded-xl border border-border bg-surface-muted/50 px-4 py-3 text-sm text-text-muted">Após ativar o convite, o próprio professor escolherá os cursos que irá ofertar, a igreja ou modalidade e os dias e horários das aulas.</p>
                 </div>
             </form>
         </Modal>

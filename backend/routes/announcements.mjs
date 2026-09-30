@@ -22,6 +22,7 @@ export function createAnnouncementRoutes(context) {
     zonedScheduleIso,
     scheduleIsPast,
     logger,
+    richTextContentError,
   } = context;
 
   return async function announcementRoutes(request, response, url, ip) {
@@ -86,8 +87,11 @@ export function createAnnouncementRoutes(context) {
         if(readFilter==='nao-lidos'){filters.push('NOT EXISTS(SELECT 1 FROM announcement_reads filter_read WHERE filter_read.announcement_id=announcements.id AND filter_read.user_id=?)');filterParams.push(session.user_id);}
         if(readFilter==='fixados')filters.push('announcements.pinned=1');
         const filterSql=filters.length?` AND ${filters.join(' AND ')}`:'';
+        const orderBy=url.searchParams.get('order')==='recent'
+          ? 'announcements.scheduled_at DESC,announcements.id DESC'
+          : 'announcements.pinned DESC,announcements.scheduled_at DESC,announcements.id DESC';
         const visibilityParams=session.role==='professor'?[session.user_id,session.user_id]:[];
-        const rows=await db.prepare(`SELECT announcements.*,${readState} FROM announcements WHERE announcements.active=1 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor') AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)${visibility}${filterSql} ORDER BY announcements.pinned DESC,announcements.scheduled_at DESC,announcements.id DESC${paginated?' LIMIT ? OFFSET ?':''}`).all(...(session.role==='professor'?[session.user_id]:[]),...visibilityParams,...filterParams,...(paginated?[limit,(page-1)*limit]:[]));
+        const rows=await db.prepare(`SELECT announcements.*,${readState} FROM announcements WHERE announcements.active=1 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor') AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)${visibility}${filterSql} ORDER BY ${orderBy}${paginated?' LIMIT ? OFFSET ?':''}`).all(...(session.role==='professor'?[session.user_id]:[]),...visibilityParams,...filterParams,...(paginated?[limit,(page-1)*limit]:[]));
         const totalRow=paginated?await db.prepare(`SELECT COUNT(*) AS total FROM announcements WHERE announcements.active=1 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor') AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)${visibility}${filterSql}`).get(...visibilityParams,...filterParams):null;
         const attachmentsByAnnouncement = new Map();
         const recipientsByAnnouncement = new Map();
@@ -141,7 +145,7 @@ export function createAnnouncementRoutes(context) {
             OR EXISTS (SELECT 1 FROM announcement_recipients ar WHERE ar.announcement_id=announcements.id AND (
               (ar.recipient_type='professor' AND ar.recipient_id=(SELECT pp.id FROM professor_profiles pp WHERE pp.user_id=? AND pp.active=1))
               OR (ar.recipient_type='curso' AND ar.recipient_id IN (SELECT classes.course_id FROM classes JOIN professor_profiles pp ON pp.id=classes.professor_id WHERE pp.user_id=? AND pp.active=1 AND classes.active=1 AND EXISTS (SELECT 1 FROM school_years sy WHERE sy.id=classes.school_year_id AND sy.active=1 AND sy.closed_at IS NULL)))
-            )))` : '';
+            )))` : ` AND NOT EXISTS (SELECT 1 FROM student_course_announcements wall_link WHERE wall_link.announcement_id=announcements.id)`;
         const attachment=await db.prepare(`SELECT announcement_attachments.filename,announcement_attachments.mime_type,announcement_attachments.data_url,announcement_attachments.storage_path FROM announcement_attachments JOIN announcements ON announcements.id=announcement_attachments.announcement_id WHERE announcement_attachments.id=? AND announcement_attachments.announcement_id=? AND announcements.active=1${visibility}`).get(...([Number(attachmentMatch[2]),Number(attachmentMatch[1]),...(session.role==='professor' ? [session.user_id,session.user_id] : [])]));
         if(!attachment)return json(response,404,{message:'Anexo não encontrado.'});
         let buffer;
@@ -154,7 +158,7 @@ export function createAnnouncementRoutes(context) {
           const base64=String(attachment.data_url||'').split(',')[1] || '';
           buffer=Buffer.from(base64,'base64');
         }
-        const disposition=url.searchParams.get('download')==='1'?'attachment':'inline';
+        const disposition=attachment.mime_type==='application/pdf'||url.searchParams.get('download')==='1'?'attachment':'inline';
         response.writeHead(200,{...securityHeaders(attachment.mime_type),'Content-Disposition':`${disposition}; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,'Content-Length':String(buffer.length),'Cache-Control':'private, max-age=300'});
         return response.end(buffer);
       }
@@ -163,7 +167,7 @@ export function createAnnouncementRoutes(context) {
         const body=await readJson(request, 32 * 1024 * 1024),title=cleanText(body.titulo,120),content=sanitizeAnnouncementContent(body.conteudo),attachmentResult=normalizeAnnouncementAttachments(body.anexos),recipientResult=await normalizeAnnouncementRecipients(body.destinatarios);
         const scheduleRequested=body.modoEnvio==='agendar'||(!body.modoEnvio&&body.dataAgendamento&&body.horaAgendamento);
         const scheduled=scheduleRequested?zonedScheduleIso(body.dataAgendamento,body.horaAgendamento):new Date().toISOString();
-        const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),modoEnvio:body.modoEnvio&&!['agora','agendar'].includes(body.modoEnvio)?'Escolha enviar agora ou agendar.':'',dataAgendamento:scheduleRequested&&!/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'Informe uma data válida.':'',horaAgendamento:scheduleRequested&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'Informe uma hora válida.':'',anexos:attachmentResult.error || '',destinatarios:recipientResult.error || ''};
+        const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000)||richTextContentError(content),modoEnvio:body.modoEnvio&&!['agora','agendar'].includes(body.modoEnvio)?'Escolha enviar agora ou agendar.':'',dataAgendamento:scheduleRequested&&!/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'Informe uma data válida.':'',horaAgendamento:scheduleRequested&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'Informe uma hora válida.':'',anexos:attachmentResult.error || '',destinatarios:recipientResult.error || ''};
         if(scheduleRequested&&scheduleIsPast(body.dataAgendamento, body.horaAgendamento))errors.dataAgendamento='A data e hora devem ser futuras.';
         if(hasValidationErrors(errors)||!scheduled||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
         let result;
@@ -204,7 +208,7 @@ export function createAnnouncementRoutes(context) {
         const scheduleRequested=body.modoEnvio==='agendar'||(!body.modoEnvio&&body.dataAgendamento&&body.horaAgendamento);
         const previousSchedule=new Date(announcement.scheduled_at).toISOString();
         const scheduled=scheduleRequested?zonedScheduleIso(body.dataAgendamento,body.horaAgendamento):(Date.parse(previousSchedule)<=Date.now()?previousSchedule:new Date().toISOString());
-        const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),modoEnvio:body.modoEnvio&&!['agora','agendar'].includes(body.modoEnvio)?'Escolha enviar agora ou agendar.':'',dataAgendamento:scheduleRequested&&!/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'Informe uma data válida.':'',horaAgendamento:scheduleRequested&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'Informe uma hora válida.':'',anexos:attachmentResult.error || '',destinatarios:recipientResult.error || ''};
+        const errors={titulo:requiredTextError(title,'O título',3,120),categoria:['Geral','Inscrições','Eventos','Urgente'].includes(body.categoria)?'':'Selecione uma categoria válida.',conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000)||richTextContentError(content),modoEnvio:body.modoEnvio&&!['agora','agendar'].includes(body.modoEnvio)?'Escolha enviar agora ou agendar.':'',dataAgendamento:scheduleRequested&&!/^\d{4}-\d{2}-\d{2}$/.test(body.dataAgendamento||'')?'Informe uma data válida.':'',horaAgendamento:scheduleRequested&&!/^([01]\d|2[0-3]):[0-5]\d$/.test(body.horaAgendamento||'')?'Informe uma hora válida.':'',anexos:attachmentResult.error || '',destinatarios:recipientResult.error || ''};
         if(scheduleRequested&&scheduleIsPast(body.dataAgendamento, body.horaAgendamento)&&scheduled!==previousSchedule)errors.dataAgendamento='A data e hora devem ser futuras.';
         if(hasValidationErrors(errors)||!scheduled||Number.isNaN(Date.parse(scheduled)))return invalid(response,errors);
         const retainedIds=attachmentResult.existingItems.map(item=>Number(item.id));

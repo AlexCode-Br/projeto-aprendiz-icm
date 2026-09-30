@@ -172,8 +172,8 @@ const Informativos = () => {
                         </div>
                         <div className="px-4 py-3 border-t border-border flex flex-wrap gap-2 justify-end items-center text-xs text-text-muted">
                             <div className="hidden items-center space-x-2 md:flex">
-                                <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-primary hover:bg-primary/10">Editar</button>
-                                <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-10 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
+                                <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-11 rounded-md px-2 text-primary hover:bg-primary/10">Editar</button>
+                                <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-11 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
                             </div>
                         </div>
                     </article>

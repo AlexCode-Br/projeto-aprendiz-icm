@@ -13,6 +13,7 @@ const ResetPassword = React.lazy(() => import('./pages/ResetPassword.jsx'));
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword.jsx'));
 const AcceptInvite = React.lazy(() => import('./pages/AcceptInvite.jsx'));
 const ConfirmEmail = React.lazy(() => import('./pages/ConfirmEmail.jsx'));
+const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy.jsx'));
 const GestorDashboard = React.lazy(() => import('./pages/gestor/Dashboard.jsx'));
 const GestorTurmas = React.lazy(() => import('./pages/gestor/Turmas.jsx'));
 const Alunos = React.lazy(() => import('./pages/gestor/Alunos.jsx'));
@@ -26,8 +27,7 @@ const ProfessorFrequencia = React.lazy(() => import('./pages/professor/Professor
 const ProfessorRelatorios = React.lazy(() => import('./pages/professor/ProfessorRelatorios.jsx'));
 const ProfessorInformativos = React.lazy(() => import('./pages/professor/ProfessorInformativos.jsx'));
 const ProfessorSuporte = React.lazy(() => import('./pages/professor/ProfessorSuporte.jsx'));
-const Configuracoes = React.lazy(() => import('./pages/gestor/Configuracoes.jsx'));
-const ProfessorConfiguracoes = React.lazy(() => import('./pages/professor/ProfessorConfiguracoes.jsx'));
+const AccountSettings = React.lazy(() => import('./components/AccountSettings.jsx'));
 
 const PageLoading = () => <div className="space-y-5 py-8" role="status" aria-label="Carregando página"><div className="skeleton h-9 w-72 max-w-full" /><div className="skeleton h-4 w-96 max-w-full" /><div className="grid gap-4 sm:grid-cols-2"><div className="skeleton h-32 rounded-xl" /><div className="skeleton h-32 rounded-xl" /></div></div>;
 
@@ -59,7 +59,7 @@ const AppRoutes = () => {
 
     const commonRoutes = (
         <>
-            <Route path="/configuracoes" element={user?.role === 'gestor' ? <Configuracoes /> : <ProfessorConfiguracoes />} />
+            <Route path="/configuracoes" element={<AccountSettings />} />
         </>
     );
 
@@ -94,6 +94,7 @@ const AppRoutes = () => {
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
             <Route path="/confirm-email" element={<ConfirmEmail />} />
+            <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
             
             <Route 
                 path="/*"

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { sanitizeImageBuffer } from './media-security.mjs';
 
-export const PROFILE_PHOTO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const PROFILE_PHOTO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 export const PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 function detectedMime(buffer) {
@@ -21,7 +22,10 @@ export function normalizeProfilePhoto(value) {
   if (buffer.length > PROFILE_PHOTO_MAX_BYTES) return { error: 'A foto deve ter no máximo 5 MB.' };
   const mimeType = detectedMime(buffer);
   if (mimeType !== declaredMime) return { error: 'O conteúdo da foto não corresponde ao tipo do arquivo.' };
-  return { buffer, dataUrl, mimeType, sizeBytes: buffer.length, extension: mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg' };
+  let sanitized;try{sanitized=sanitizeImageBuffer(buffer,mimeType);}catch{return{error:'A foto está corrompida ou possui estrutura inválida.'};}
+  if(sanitized.error)return{error:sanitized.error};
+  const safeBuffer=sanitized.buffer;
+  return { buffer:safeBuffer, dataUrl:`data:${mimeType};base64,${safeBuffer.toString('base64')}`, mimeType, sizeBytes:safeBuffer.length, extension: mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg' };
 }
 
 export function createProfilePhotoStorage({ db, supabaseAdmin, logger = console, env = process.env }) {

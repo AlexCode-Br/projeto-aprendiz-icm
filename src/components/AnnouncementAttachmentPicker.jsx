@@ -5,7 +5,7 @@ const MAX_FILES=5;
 const TOTAL_LIMIT=20*1024*1024;
 const IMAGE_LIMIT=5*1024*1024;
 const PDF_LIMIT=10*1024*1024;
-const MIME_BY_EXTENSION={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',heic:'image/heic',heif:'image/heif',pdf:'application/pdf'};
+const MIME_BY_EXTENSION={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',pdf:'application/pdf'};
 
 const sizeLabel=bytes=>{
   const size=Number(bytes)||0;
@@ -33,7 +33,7 @@ export default function AnnouncementAttachmentPicker({value,onChange,disabled=fa
     try{
       for(const file of files){
         const tipo=fileMime(file),isImage=tipo.startsWith('image/'),isPdf=tipo==='application/pdf';
-        if(!isImage&&!isPdf)throw new Error('Use imagens PNG, JPG, WEBP, HEIC/HEIF ou arquivos PDF.');
+        if(!isImage&&!isPdf)throw new Error('Use imagens PNG, JPG, WEBP ou arquivos PDF.');
         if(file.size>(isPdf?PDF_LIMIT:IMAGE_LIMIT))throw new Error(isPdf?'Cada PDF deve ter no máximo 10 MB.':'Cada imagem deve ter no máximo 5 MB.');
         if(attachments.some(item=>item.nome===file.name&&Number(item.tamanho)===file.size)||next.some(item=>item.nome===file.name&&item.tamanho===file.size))throw new Error(`${file.name} já foi adicionado.`);
         next.push({localId:`${Date.now()}-${crypto.randomUUID?.()||Math.random()}`,nome:file.name,tipo,tamanho:file.size,dataUrl:await readFile(file)});
@@ -43,10 +43,10 @@ export default function AnnouncementAttachmentPicker({value,onChange,disabled=fa
     }catch(reason){setError(reason.message||'Não foi possível adicionar o arquivo.');}
   };
   return <div>
-    <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div><span className="form-label">Anexos</span><p className="text-xs text-text-muted">Até 5 imagens ou PDFs, total de 20 MB.</p></div>
-      <button type="button" className="btn btn-secondary" onClick={()=>inputRef.current?.click()} disabled={disabled||attachments.length>=MAX_FILES}><Paperclip aria-hidden="true"/>Adicionar arquivos</button>
-      <input ref={inputRef} className="sr-only" type="file" multiple accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf,.heic,.heif" onChange={addFiles} disabled={disabled}/>
+      <button type="button" className="btn btn-secondary w-full sm:w-auto" onClick={()=>inputRef.current?.click()} disabled={disabled||attachments.length>=MAX_FILES}><Paperclip aria-hidden="true"/>Adicionar arquivos</button>
+      <input ref={inputRef} className="sr-only" type="file" multiple accept="image/png,image/jpeg,image/webp,application/pdf" onChange={addFiles} disabled={disabled}/>
     </div>
     {error&&<p className="mt-2 text-sm text-danger" role="alert">{error}</p>}
     {attachments.length>0&&<ul className="mt-3 grid gap-2 sm:grid-cols-2">

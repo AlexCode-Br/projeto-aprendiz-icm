@@ -110,7 +110,13 @@ export function createNotificationOutbox({db,notificationService,logger=console,
     return {processed:rows.length,delivered};
   }
 
-  return {enqueueMany,drain};
-}
+  async function cleanup({ sentDays = 30, deadDays = 90 } = {}) {
+    const sentBefore=iso(Date.now()-Math.max(1,sentDays)*86400_000);
+    const deadBefore=iso(Date.now()-Math.max(1,deadDays)*86400_000);
+    const sent=await db.prepare("DELETE FROM notification_outbox WHERE status='sent' AND COALESCE(sent_at,updated_at)<?").run(sentBefore);
+    const dead=await db.prepare("DELETE FROM notification_outbox WHERE status='dead' AND updated_at<?").run(deadBefore);
+    return {sent:Number(sent.changes||0),dead:Number(dead.changes||0)};
+  }
 
-export const notificationOutboxInternals={retryDelay,mapConcurrent,MAX_ATTEMPTS,BATCH_SIZE,CONCURRENCY};
+  return {enqueueMany,drain,cleanup};
+}

@@ -1,10 +1,112 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 23 de setembro de 2026 (America/Sao_Paulo).
+Atualizado em 30 de setembro de 2026 (America/Sao_Paulo).
 
 Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de alterar o projeto e atualize-o depois de mudanças relevantes ou de um deploy.
 
 ## Ponto de retomada
+
+### Remediação integral da auditoria de segurança — publicada
+
+- Autenticação reforçada com verificação em duas etapas por e-mail obrigatória para gestores em produção, desafio de uso único, limite de tentativas e sessão criada somente após a validação. Recuperações de senha passaram a consumir o token atomicamente, e convites/recuperações usam fragmento de URL para reduzir vazamento em histórico, logs e cabeçalho `Referer`.
+- Sessões ganharam expiração por inatividade, prazo menor para gestores, inventário de dispositivos e revogação individual. Exclusão de conta exige e-mail completo e senha atual; a exclusão de professor preserva a trilha de auditoria com identidade anonimizada.
+- Limites distribuídos agora cobrem publicações, comentários, curtidas, chamados, respostas e testes de notificação, além do login. Turnstile valida hostname e idade do desafio. Conteúdo rico possui limite estrutural, e o acesso indevido a anexos do mural pela rota de informativos foi bloqueado.
+- Uploads aceitam somente PNG, JPEG, WebP e PDF, conferem assinatura real e extensão, limitam dimensões, removem metadados de imagem, rejeitam recursos ativos em PDFs e entregam PDFs como download. Notificações push não expõem conteúdo pessoal na tela bloqueada por padrão.
+- A migração `027_security_audit_remediation.sql` fecha RLS de fotos e desafios de MFA e adiciona os campos de sessão. O Worker não executa mais DDL durante requisições; o comando de deploy exige migrações antes da publicação. Rotina agendada remove sessões, desafios, resets e itens de outbox expirados.
+- Dependências vulneráveis foram atualizadas/forçadas para versões corrigidas. `pnpm audit --prod` e `pnpm audit --dev` não encontraram vulnerabilidades conhecidas. O plano de backup, restauração e resposta a incidentes está em `docs/DISASTER_RECOVERY.md`; ativação e ensaio do backup no painel do Supabase continuam sendo uma ação operacional externa.
+- Validação local concluída com `pnpm lint`, `pnpm check`, `git diff --check` e `pnpm cloudflare:build`: 102 testes aprovados, uma regressão PostgreSQL opcional ignorada sem `TEST_DATABASE_URL`, build do frontend e empacotamento seco do Worker concluídos. A migração `027_security_audit_remediation.sql` foi aplicada em produção por uma sessão remota temporária e transacional ligada ao Hyperdrive; o utilitário efêmero foi removido imediatamente após a confirmação. Publicado em 30/09/2026 na versão Cloudflare `dcb178bd-f651-40fd-aab6-2d5f80d5c87b`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` anônimo retornou 401, `www` redirecionou com 308 e o bundle publicado contém o fluxo de MFA.
+- Hotfix do MFA publicado na versão `da92a629-b993-41a7-9079-dc7f2e9f33a3`: o adaptador PostgreSQL do Worker passou a qualificar `manager_login_challenges` com o schema privado `projeto_aprendiz`. A ausência desse mapeamento causava HTTP 500 ao confirmar o código, embora a tabela e a migração estivessem corretas. Regressão adicionada para `SELECT` e `UPDATE`; teste integrado do MFA, testes do adaptador e lint aprovados. Após a publicação, `/api/health` retornou 200 e sessão anônima retornou 401.
+- Homologação posterior: o responsável confirmou o login real do gestor com o código recebido por e-mail. A decisão atual é manter esse segundo fator, sem migrar para aplicativo autenticador. A suíte completa foi repetida com 102 testes aprovados e uma regressão PostgreSQL opcional ignorada; lint, build e auditoria de dependências passaram. Em produção, login e política retornaram 200, rotas privadas sem sessão retornaram 401, origem externa foi bloqueada com 403, recuperação inexistente permaneceu genérica, tokens inválidos foram rejeitados e CSP/HSTS estavam presentes.
+
+### Seleção de alunos alinhada às ações — publicada
+
+- Na tabela administrativa, o checkbox de cada aluno agora fica depois de editar e excluir, na extremidade direita da coluna de ações. A lista móvel mantém o mesmo agrupamento visual, sem alterar seleção em massa ou acessibilidade.
+- Publicado em 30/09/2026 na versão Cloudflare `d47df33d-a430-4a5d-9a15-7b59edb7451e`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` anônimo retornou 401 e `www` redirecionou com 308.
+
+### Configurações reorganizadas — publicada
+
+- Página compartilhada usa a largura disponível e alinhamento à esquerda, com navegação Perfil, Notificações e Segurança. Dados pessoais permanecem no Perfil; dispositivos de push ficam junto às preferências, sem serem apresentados como sessões de login.
+- Aluno e professor usam um seletor `Atividades do mural` para publicações, comentários e curtidas. A interface salva os três campos existentes em uma única requisição, preserva preferências legadas mistas até escolha explícita e restaura o estado anterior em falhas. Gestor mantém somente os três tipos administrativos.
+- Lint, suíte automatizada e build verificados. Teste de regressão cobre seleção conjunta, preservação das outras preferências e estado misto. O switch unificado foi publicado em 30/09/2026 na versão Cloudflare `a2a587b5-1f20-4142-8f18-60bc0e48de0a`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` anônimo retornou 401 e `www` redirecionou com 308. O chunk publicado `AccountSettings-D4w-hINl.js` contém o switch das atividades do mural.
+
+### Página da turma responsiva — local, não publicada
+
+- No celular, as ações `Editar curso` e `Configurar turma` viraram ícones compactos no canto superior direito do banner, preservando a imagem e as áreas de toque. Os rótulos completos reaparecem no desktop e continuam disponíveis por acessibilidade.
+- Próxima aula e local dividem uma linha; participantes ocupa uma faixa curta abaixo. O editor usa barra de formatação em uma única linha com rolagem horizontal de segurança, espaçamento menor e botão de publicação adaptado à largura. Cards, avatares, reações e anexos também receberam medidas próprias para telas estreitas.
+- Validação concluída com `pnpm lint`, `pnpm check` e `git diff --check`: 98 testes aprovados, uma regressão PostgreSQL opcional ignorada e build concluído. Ainda não publicado.
+
+### Edição compacta do banner na configuração — publicada
+
+- A prévia do banner em `Configurar turma` concentra as opções de imagem em um único ícone de lápis no canto superior direito. O menu do ícone preserva a escolha de imagem, o ajuste de recorte e o retorno ao fundo vermelho, eliminando os três botões abaixo da prévia.
+- Publicado em 30/09/2026 na versão Cloudflare `0e0090c7-a625-4be1-920f-26f352894940`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` anônimo retornou 401 e `www` redirecionou com 308.
+
+### Ações integradas ao banner da turma — publicada
+
+- Professor e aluno abrem a página da turma diretamente pelo banner, que ocupa a largura disponível do conteúdo. Resumo, navegação, mural e demais seções acompanham a mesma largura, sem o limite lateral de 1100 px.
+- Para o professor, `Editar curso` e `Configurar turma` ficam dentro do banner, no canto inferior direito. Em telas estreitas, as ações se organizam em coluna. O botão `Visão geral` foi removido da página da turma. O modal de edição usa o mesmo nome e descreve somente os dados que podem ser alterados. Na sidebar do professor, `Dashboard` precede `Frequência`.
+- Publicado em 30/09/2026 na versão Cloudflare `83c6a698-5bbb-444f-a3f3-c4191bd31438`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` anônimo retornou 401 e `www` redirecionou com 308.
+
+### Alinhamento das páginas de turma — publicado
+
+- A página compartilhada de turma do professor e do aluno agora começa na margem esquerda do conteúdo, como as demais páginas dos respectivos painéis. O limite de 1100 px foi mantido para preservar a legibilidade do mural em telas largas.
+- Validação: `pnpm lint` e `pnpm check` concluídos; 98 testes aprovados, uma regressão PostgreSQL opcional ignorada e build concluído. Publicado em 30/09/2026 na versão Cloudflare `a6410d07-48d2-4f57-800b-56aa96ab8584`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` anônimo retornou 401 e `www` redirecionou com 308.
+
+### Cabeçalho unificado das turmas — publicado
+
+- Professor e aluno usam o mesmo limite de largura de 1100 px para navegação, banner e publicações. Removidos o título externo duplicado e a coluna lateral. Próxima aula, local e participantes (professor) ficam em uma faixa integrada ao cabeçalho; o nome do local abre o Maps quando houver link cadastrado.
+- Ações `Editar oferta` e `Configurar turma` ficam juntas, alinhadas ao cabeçalho, com o padrão de botões existente. Banner mantém a proporção panorâmica 6,4:1 com altura mínima para legibilidade no celular. Abas do aluno se distribuem em duas colunas em telas estreitas, sem esconder opções em rolagem horizontal.
+- Conferidos no navegador local os modais do professor e as quatro seções do aluno com conta demonstrativa no banco de QA. Verificadas larguras 320, 390, 768 e 1440 px sem overflow horizontal. Lint e build aprovados; suíte com 98 testes aprovados e uma regressão PostgreSQL opcional ignorada. Publicado em 30/09/2026 na versão Cloudflare `ea1f9f56-60eb-4d2e-9fe2-8a51bb189fc8`; `/login` e `/api/health` retornaram HTTP 200, PostgreSQL saudável, sessão anônima 401, `www` redirecionou com 308 e o bundle publicado contém o resumo e as ações reorganizadas.
+
+### Rota intermediária de turmas do professor removida — publicada
+
+- `/professor/turmas` não renderiza mais a antiga página agregadora. Sem uma turma selecionada ou o fluxo explícito de criação, a rota substitui a entrada atual pelo Dashboard; assim, o botão Voltar do navegador não expõe a tela que perdeu sua função.
+- `Adicionar turma` continua abrindo exclusivamente o modal de oferta. Ao salvar, a URL é substituída pela turma recém-criada; ao cancelar, o professor retorna ao Dashboard.
+- Validação concluída com `pnpm lint`, `pnpm check` e `git diff --check`: 98 testes aprovados, uma regressão PostgreSQL opcional ignorada, zero falhas e build concluído. Uma falha transitória de preparação SQLite apareceu na primeira execução completa; o teste afetado passou isoladamente e a suíte completa passou na repetição. O redirecionamento de `/professor/turmas` para `/professor/dashboard` foi confirmado no navegador local. Publicado em 30/09/2026 na versão Cloudflare `9e5c0dab-f10a-4502-925c-c66fd9ba4026`; `/login` e `/api/health` retornaram HTTP 200, PostgreSQL saudável, sessão anônima 401 e `www` redirecionou com 308. O chunk publicado contém o destino do Dashboard e não contém mais o texto da antiga página agregadora.
+
+### Navegação das turmas simplificada — publicada
+
+- As abas redundantes `Aulas` e `Informações` foram removidas da página da turma. O professor passa a ver somente `Mural` e `Arquivos`; o aluno mantém `Mural`, `Arquivos`, `Informativos` e `Frequência`, que representam conteúdos realmente distintos.
+- Próxima aula e local continuam disponíveis como resumos laterais, sem abrir telas duplicadas. Links antigos com `view=calendario` ou `view=informacoes` retornam com segurança ao Mural, e as próximas aulas da visão geral do aluno agora abrem diretamente o curso.
+- O card genérico `Sua turma` foi removido do aluno. Para o professor, foi substituído por `Participantes`, com quantidade de matriculados, período quando disponível e a ação compacta de configuração da turma.
+- Validação concluída com `pnpm lint`, `pnpm check` e `git diff --check`: 98 testes aprovados, uma regressão PostgreSQL opcional ignorada sem `TEST_DATABASE_URL`, zero falhas e build concluído. A página da turma do professor foi conferida no navegador local. Publicado em 30/09/2026 na versão Cloudflare `17883537-b3fd-439e-a098-ea18da113bfd`; `/login` e `/api/health` retornaram HTTP 200, a API confirmou PostgreSQL saudável, a sessão anônima retornou 401, `www` redirecionou com 308 e o bundle publicado foi confirmado sem as abas `Aulas` e `Informações`.
+
+### Mural reorganizado — publicado
+
+- Editor em largura completa com identificação do autor acima; ferramentas, anexos, fixação e publicação separados e alinhados. Removidos os seletores de tipo/categoria e pedido de confirmação tanto da criação quanto da edição. Novas publicações usam a categoria interna Aviso e não exigem confirmação; edições preservam os valores legados existentes.
+- Feed com cabeçalho e contagem, menu de ações reutilizado, imagens em galeria com download sem duplicação nos anexos, comentários multilinha e quebra de textos extensos. A coluna de apoio aparece ao lado somente a partir de 1280 px; conteúdo limitado a 1440 px para leitura em monitores amplos.
+- `pnpm lint` e `pnpm check` concluídos (98 aprovados, uma regressão PostgreSQL opcional ignorada, build concluído). Conferidos publicação, comentário, edição, anexo de imagem, nome de arquivo e texto longos; larguras 320, 390, 768 e 1440 px sem overflow horizontal da página e sem erros no console. Publicado em 30/09/2026 na versão Cloudflare `f1dd10ea-0be5-400a-a7bd-d80b8e5811ea`; o chunk `CourseRoom-B5DNiXJG.js` foi confirmado com o novo editor e sem Tipo de publicação ou Pedir confirmação.
+
+### Ação de adicionar turma na sidebar — publicada
+
+- Na área do professor, `Adicionar turma` agora aparece dentro da cascata `Minhas turmas`, imediatamente após a última turma vinculada. O botão abre diretamente o modal `Ofertar um curso` e remove o parâmetro transitório da URL após a abertura.
+- Os botões redundantes `Nova turma` e `Ofertar novo curso` foram retirados dos cabeçalhos; o estado vazio mantém sua chamada inicial para o professor que ainda não possui turmas.
+- Validação concluída com `pnpm lint`, `pnpm check` e `git diff --check`: 98 testes aprovados, um teste PostgreSQL opcional ignorado sem `TEST_DATABASE_URL`, zero falhas e build concluído. Posição, navegação e abertura do modal foram conferidas no navegador local, sem erros no console. Publicado junto ao mural na versão `f1dd10ea-0be5-400a-a7bd-d80b8e5811ea`; o bundle principal publicado contém a ação `Adicionar turma`.
+
+### Resumo compacto de horários na gestão — publicado
+
+- Em Turmas do gestor, dias que compartilham o mesmo horário agora aparecem em uma única linha curta, como `Ter e Sex às 03:30`. O card e a tabela mostram no máximo dois grupos inicialmente; quando existirem outros, um controle acessível `Ver mais` permite expandir e recolher a lista.
+- Validação concluída com `pnpm lint`, `pnpm check` e `git diff --check`: 98 testes aprovados, um teste PostgreSQL opcional ignorado sem `TEST_DATABASE_URL`, zero falhas e build concluído. O cenário de seis aulas distribuídas em três horários foi conferido no navegador em desktop e 390 px, incluindo expansão e recolhimento, sem erros no console. Publicado em 30/09/2026 na versão Cloudflare `abb5618f-2ae4-4ae4-868d-ff82ac2feee9`; `/login`, `/gestor/cursos` e `/api/health` retornaram HTTP 200, o bundle `index-CkAWE-f6.js` foi confirmado, a API reportou PostgreSQL saudável, a rota de sessão sem autenticação retornou 401 e `www` redirecionou com 308 para o domínio principal.
+
+### Catálogos completos e agenda simplificada — publicada
+
+- Node e Worker agora completam o mesmo catálogo permanente de cursos e igrejas/modalidades, incluindo Gaita, todas as igrejas de Salvador e EAD. A carga preserva IDs, nomes e entradas personalizadas, evita duplicação por acentos/caixa e reativa opções permanentes. Corrige a divergência da inicialização em produção que deixava o seletor de oferta incompleto.
+- A agenda compartilhada permite selecionar vários dias da semana com um horário comum, adicionar outros grupos de horários e datas avulsas. Horários existentes são agrupados ao editar sem alterar o contrato da API.
+- Validação: `pnpm lint`, `pnpm check` e `git diff --check` concluídos; 97 testes aprovados, um teste PostgreSQL opcional ignorado sem `TEST_DATABASE_URL`, zero falhas e build concluído. No navegador, conferidos 11 cursos e 29 locais/modalidades, criada turma local Gaita/EAD com segunda e quarta às 19:30 e reaberta a edição com os dados preservados. Layout verificado em desktop e 390 px, sem erros no console. Publicado em 30/09/2026 na versão Cloudflare `46fdc64d-ee0c-4085-bf9f-90316cdae90e`; `/login`, `/professor/turmas` e `/api/health` retornaram HTTP 200, a API confirmou PostgreSQL saudável, `/api/auth/me` sem sessão retornou 401 e `www` redirecionou com 308 para o domínio principal.
+
+### Oferta de turmas pelo professor — publicada
+
+- O gestor continua responsável por cadastrar e convidar professores, mas a página Turmas agora é somente de acompanhamento e exclusão. Os botões de criar, editar e abrir o Mural foram removidos; as APIs administrativas de criação e edição também respondem com bloqueio, evitando contorno pelo navegador.
+- Após ativar a conta, o professor sem turma recebe um fluxo inicial para escolher o curso ofertado, a igreja ou modalidade e ao menos um dia e horário. Ele pode criar outras ofertas em Minhas turmas e alterar posteriormente o local e a agenda das próprias turmas. O curso fica imutável depois da criação para preservar matrículas, frequência e histórico.
+- As operações conferem o professor autenticado, o período letivo gravável, os catálogos ativos e conflitos de horário dentro de uma transação. O gestor mantém somente a exclusão definitiva, com confirmação explícita, e recebe avisos administrativos quando uma oferta é criada ou atualizada.
+- O Mural passou a aceitar exclusivamente o professor responsável e os alunos com matrícula ativa. Gestores não recebem mais notificações do Mural nem possuem endpoint de leitura.
+- Validação concluída com `pnpm lint`, `pnpm check` e `git diff --check`: 96 testes aprovados, uma regressão PostgreSQL opcional ignorada sem `TEST_DATABASE_URL`, zero falhas e build do frontend concluído. Publicado em 30/09/2026 na versão Cloudflare `d7bcd4bf-9ecf-4139-b85e-5f1629c18c4a`; login, rota de Turmas, saúde da API e proteção de sessão foram conferidos em produção.
+
+### Política de Privacidade — publicada
+
+- Criada a rota pública `/politica-de-privacidade`, acessível pela tela de login na mesma aba. A página foi redigida para o funcionamento real do Projeto Aprendiz e cobre dados acadêmicos, dados potencialmente sensíveis ligados à igreja/localidade, menores e responsáveis, Mural, anexos, notificações, sessão, retenção, exclusão e direitos da LGPD.
+- O controlador é identificado por nome e canal de privacidade. O CPF completo informado pelo responsável não foi exposto na página pública por minimização e segurança. A política esclarece que a plataforma é uma iniciativa independente, não constitui canal oficial e não representa institucionalmente a Igreja Cristã Maranata.
+- A implementação foi conferida localmente em desktop e mobile, sem erros no console. A validação completa aprovou 96 testes, com uma regressão PostgreSQL opcional ignorada por ausência de `TEST_DATABASE_URL`, e o frontend compilou com sucesso.
+- Declaração institucional ajustada e publicada em 29/09/2026 na versão Cloudflare `aa99fb1e-5c81-4472-bb90-cec7f64dcb23`: removida a referência ao Portal do Presbitério e incluído que a plataforma não constitui canal oficial nem representa institucionalmente a Igreja Cristã Maranata. `/login`, `/politica-de-privacidade`, o bundle dedicado e `/api/health` retornaram HTTP 200; a API confirmou PostgreSQL, `/api/auth/me` retornou 401 sem sessão e `www` redirecionou com 308 para o domínio principal.
 
 ### Mural participativo, apresentação e notificações da turma — publicado
 
@@ -13,7 +115,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Alunos matriculados podem publicar textos, fotos/anexos, curtir e comentar no mural da turma. Editam somente as próprias publicações; professor pode excluir conteúdo e comentários da própria turma. Informativos administrativos continuam separados.
 - O professor escolhe por turma entre participação completa, somente comentários/reações ou mural somente leitura para alunos. A restrição é aplicada na API a publicações, edições, comentários e curtidas. O compositor do professor oferece categoria, destaque e confirmação de leitura sem abrir outro modal.
 - Publicações comuns registram visualização após permanecerem visíveis por 900 ms; itens que exigem confirmação continuam dependendo do botão explícito do aluno. Comentários carregam a página mais recente primeiro, as curtidas respondem de forma otimista e o feed verifica uma versão compacta a cada cinco segundos, recarregando apenas quando há mudança.
-- Notificações do Mural funcionam por evento: nova publicação e comentário avisam os demais alunos ativos da turma, o professor responsável e todos os gestores ativos; curtida avisa somente o autor da publicação, seja aluno ou professor. O autor da ação nunca recebe o próprio aviso. Preferências independentes (`wallPosts`, `wallComments` e `wallLikes`) controlam o push do aplicativo; mensagens do mural não geram e-mail. O clique abre diretamente a turma no perfil correto. O gestor possui acesso administrativo somente leitura ao mural pela página Turmas. Informativos da gestão continuam em fluxo e preferência separados, sem duplicar avisos do Mural.
+- Notificações do Mural funcionam por evento: nova publicação e comentário avisam os demais alunos ativos da turma e o professor responsável; curtida avisa somente o autor da publicação, seja aluno ou professor. O autor da ação nunca recebe o próprio aviso. Preferências independentes (`wallPosts`, `wallComments` e `wallLikes`) controlam o push do aplicativo; mensagens do mural não geram e-mail. O clique abre diretamente a turma no perfil correto. Gestores não acessam nem recebem notificações do Mural. Informativos da gestão continuam em fluxo e preferência separados, sem duplicar avisos do Mural.
 - Configuração inicial das turmas do professor solicita local e banner opcionais e pode ser reaberta depois. Sem imagem, o cabeçalho usa fundo vermelho. Ao escolher uma imagem, abre editor de recorte com arrasto, zoom, pinça de dois dedos e teclado; só aplica ao confirmar. A fonte otimizada é preservada para reenquadramentos posteriores pelo botão Ajustar recorte da imagem.
 - O card de configuração mostra os dias/horários existentes e permite ajustá-los pelo formulário compartilhado, preservando ajustes do banner. O usuário optou por colar o link compartilhado do Google Maps, dispensando Google Cloud: o servidor valida o domínio/protocolo, armazena em `class_presentation.address` e devolve `mapsUrl`; o aluno vê o botão para abrir o local. Nenhum redirecionamento é seguido pelo servidor.
 - Migrações `023_course_community.sql` e `024_course_wall_permissions.sql` adicionam apresentação, política de participação, curtidas e comentários em tabelas privadas com RLS. A API confere vínculo ativo para cada acesso, inclusive à imagem do banner; não há novas tabelas públicas.
@@ -35,7 +137,7 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - Produção: `https://aprendizicm.com.br`
 - Hospedagem: Cloudflare Workers; o Render não faz mais parte deste projeto.
 - Worker: `aprendiz-staging`
-- Versão Cloudflare verificada: `8a33b7cf-4f74-4cfd-b823-05744eff480a`
+- Versão Cloudflare verificada: `d7bcd4bf-9ecf-4139-b85e-5f1629c18c4a`
 - Banco, autenticação e armazenamento: Supabase; a API acessa o PostgreSQL por Cloudflare Hyperdrive.
 - Estado atual: produção saudável, reorganização do código-fonte publicada e endpoint `/api/health` respondendo com banco PostgreSQL conectado.
 
@@ -53,15 +155,15 @@ Este arquivo é o ponto de retomada para novas tarefas no Codex. Leia-o antes de
 - O professor controla a participação dos alunos no mural por turma (publicar/comentar/reagir, comentar/reagir ou somente visualizar). Publicações comuns geram leitura por visibilidade; confirmações obrigatórias permanecem explícitas. Regras e preservação da configuração foram cobertas por testes de API. Alteração publicada em 23/09/2026.
 - Informativos administrativos não exibem mais contagem ou lista de leitores ao gestor. O estado de leitura permanece privado para cada professor ou aluno controlar itens novos e para o sistema gerenciar notificações; as confirmações visíveis do Mural da turma continuam separadas. Alteração publicada em 23/09/2026.
 - Ao criar ou editar um informativo, o gestor escolhe entre envio imediato e agendamento. “Enviar agora” não solicita data ou hora e usa o horário confiável do servidor; “Agendar” revela os dois campos e exige um momento futuro. A edição de um item já publicado preserva o horário original para não alterar artificialmente sua posição. Alteração publicada em 23/09/2026.
-- Publicações e comentários do Mural notificam o grupo da turma, incluindo o professor e gestores, com exclusão do autor da ação; curtidas notificam somente o dono da publicação. As três categorias podem ser desligadas separadamente em Configurações. Alteração publicada em 23/09/2026.
+- Publicações e comentários do Mural notificam os alunos ativos da turma e o professor responsável, com exclusão do autor da ação; curtidas notificam somente o dono da publicação. Gestores ficam fora do Mural e dessas notificações. As três categorias podem ser desligadas separadamente em Configurações.
 - O compositor e a edição de publicações do Mural, para professor e aluno, reutilizam o editor dos Informativos com negrito, itálico, sublinhado, listas e links HTTPS. O servidor mantém somente HTML permitido e remove scripts, atributos executáveis e links inseguros. Alteração publicada em 23/09/2026.
 - Teste em massa reproduzível em `pnpm test:mass`: 5 professores, 25 alunos, 5 turmas, 60 chamadas, 71 publicações, 230 comentários, 300 curtidas, 29 anexos, 10 informativos, 2.526 eventos de notificação e 1.084 requisições, sem erro HTTP inesperado. Os dois P1 foram corrigidos: chamadas salvas preservam o elenco histórico e o Mural usa outbox assíncrona em lote, push agrupado por turma e nenhuma notificação por e-mail. Vinte comentários simultâneos na turma de 25 ficaram em p95 de 96,93 ms; a verificação leve do mural em concorrência 30 atingiu 1.366,71 req/s. Paginação de Informativos, consultas de leitores restritas ao professor e índices compostos também foram incluídos. Relatório em `docs/MASS_TEST_2026-09-23.md`. Alterações publicadas em 23/09/2026; o teste de carga permaneceu isolado e não inseriu dados falsos em produção.
 
 - A logo da página de login é estática; a animação experimental foi retirada por solicitação do usuário em 17/09/2026. Alteração publicada em 23/09/2026.
 
-- A antiga página “Cursos e igrejas” tornou-se “Turmas” e mostra somente as turmas ofertadas.
+- A antiga página “Cursos e igrejas” tornou-se “Turmas” e, para o gestor, mostra somente as turmas ofertadas pelos professores, com exclusão como única ação.
 - Cada turma combina curso, igreja ou modalidade EAD e professor. `EAD` substitui definitivamente `Remoto`.
-- O curso ofertado é definido na criação da turma e não pode ser alterado depois; na edição, o gestor modifica somente igreja/localidade e professor.
+- O professor escolhe o curso, a igreja ou modalidade e a agenda ao criar a própria turma. O curso não pode ser trocado depois; o professor responsável pode atualizar o local e os horários, enquanto o gestor não edita a oferta.
 - Excluir uma turma remove seus vínculos, mas nunca exclui o cadastro do aluno.
 - Igrejas de alunos e professores usam sugestões completas e também aceitam valores personalizados; EAD não é igreja principal. A sigla denominacional `ICM` não integra o nome do local e é removida de dados antigos e de novas entradas.
 - Horários aceitam múltiplos dias e horários semanais e detectam conflitos entre turmas do mesmo professor.
@@ -136,6 +238,29 @@ Depois do deploy, confirme:
 
 Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permanentes e qualquer pendência real.
 
+### Publicação — 25/09/2026
+
+- Revertida a atualização visual da área do aluno, restaurando os indicadores gerais e os resumos detalhados por curso. Versão Cloudflare: `d3105c96-cf4d-4e9e-8b96-62bbd61e4be6`; `/login`, `/api/health` e o bundle `StudentPortal-DS6Wrjpz.js` retornaram HTTP 200, banco PostgreSQL confirmado, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
+
+### Publicação — 24/09/2026
+
+- Revisão da visão do aluno publicada: indicadores gerais preservados, dados redundantes removidos dos cards por curso e acesso a avisos direcionado ao curso/origem mais recente.
+- Versão Cloudflare verificada: `9c0194f3-05fc-4272-b8b8-5b957209c54f`; `/login`, `/api/health` e o bundle `StudentPortal-CymSIPCB.js` retornaram HTTP 200, banco PostgreSQL confirmado, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
+
+- Redução de informações repetidas na área do aluno e atalhos de avisos separados por turma e origem publicados.
+- Versão Cloudflare verificada: `69976251-6026-494b-b2da-4e15fd2d9d0d`; `/login`, `/api/health` e o bundle atualizado `StudentPortal-hqg6hosT.js` retornaram HTTP 200, `/api/health` confirmou PostgreSQL, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
+
+- Refatorações da auditoria de redundância publicadas: painel do aluno com consulta de calendário reutilizada, painel do professor limitado aos três informativos exibidos e polling de suporte consolidado no hook compartilhado.
+- Versão Cloudflare verificada: `fcf37c12-f2fc-4a17-85ac-a2fe7f934483`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
+
+- Proteção de login com Cloudflare Turnstile publicada: após cinco credenciais inválidas para o mesmo e-mail, o desafio passa a ser obrigatório; o IP é bloqueado após vinte falhas em quinze minutos e o contador do e-mail é limpo após autenticação bem-sucedida.
+- A senha agora é verificada no Supabase exclusivamente pelo Worker; a antiga troca de token do navegador foi encerrada, o frontend deixou de receber a chave pública do Supabase e a sessão da aplicação continua em cookie seguro.
+- Widget `Projeto Aprendiz - Login` configurado para `aprendizicm.com.br` e `www.aprendizicm.com.br`, com segredo armazenado no Worker. O backend valida token, IP, hostname e a ação `login`.
+- Validação: `pnpm lint`, 96 testes aprovados (1 regressão PostgreSQL opcional ignorada), build React, empacotamento do Worker e `git diff --check` passaram.
+- Versão Cloudflare verificada: `be3ab223-4f70-4870-92de-0cb5e913d21e`; `/login`, `/forgot-password` e `/api/health` retornaram HTTP 200, PostgreSQL conectado, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308. Em produção, a quinta falha retornou `CAPTCHA_REQUIRED` e a tentativa seguinte sem token foi recusada com HTTP 403.
+- Hotfix Turnstile para PWA/WebView publicado na versão `061389c3-8dda-4155-9444-4e7ef7bd6857`: a CSP passou a liberar também `connect-src https://challenges.cloudflare.com`, conforme os requisitos móveis do Cloudflare, e falhas temporárias agora usam repetição automática em vez de bloquear o formulário no primeiro erro. `/login` e `/api/health` retornaram HTTP 200 e o cabeçalho CSP atualizado foi confirmado em produção.
+- Integração manual do widget substituída pelo componente React recomendado pelo Cloudflare e publicada na versão `2434512f-f33e-4018-ba7c-1bea98038a2a`. O teste em produção, com e-mail fictício já limitado, confirmou aprovação automática do Turnstile, botão de login habilitado e ausência do alerta após o token ser recebido.
+
 ### Publicação — 22/09/2026
 
 - Cascatas simplificadas e visualização exclusiva da turma selecionada publicadas no commit `0c70808`.
@@ -184,6 +309,8 @@ Registre neste arquivo o novo commit, a versão Cloudflare, as decisões permane
 - Versão Cloudflare verificada: `86891d12-8447-4e5f-bf54-e705170e9849`; `/login`, bundle principal e `/api/health` retornaram HTTP 200, PostgreSQL conectado, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz. Publicação correspondente ao commit `20db61b`.
 - Versão Cloudflare verificada: `8005b87d-313c-49c7-b694-7bca99df2f2b`; `/login`, bundle de Informativos e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão. Publicação correspondente ao commit `a8fe736`.
 - Versão Cloudflare verificada: `fc0fe834-2418-473c-9ca8-5ff72f833bc4`; `/login`, bundles do Portal do Aluno e Configurações e `/api/health` retornaram HTTP 200, PostgreSQL conectado e `/api/auth/me` retornou HTTP 401 sem sessão. Publicação correspondente ao commit `ce1fce7`.
+- Auditoria responsiva completa publicada após `pnpm check`, com 500 verificações de rota/viewport sem overflow horizontal, conteúdo de autenticação cortado ou alvos de toque inadequados.
+- Versão Cloudflare verificada: `dc996441-2e10-41b3-8d45-03d49123fd6f`; `/login` e `/api/health` retornaram HTTP 200, `/api/auth/me` retornou HTTP 401 sem sessão e `www` redirecionou com HTTP 308 para a raiz.
 
 ## Prompt curto para uma nova tarefa
 

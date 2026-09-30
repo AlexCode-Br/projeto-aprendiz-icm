@@ -14,7 +14,7 @@ const icons = {
     warning: <WarningIcon />,
 };
 
-export const ToastContext = createContext(null);
+const ToastContext = createContext(null);
 
 export const ToastProvider = ({ children }) => {
     const [toasts, setToasts] = useState([]);

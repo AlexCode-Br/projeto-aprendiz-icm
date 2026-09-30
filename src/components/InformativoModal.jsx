@@ -22,9 +22,9 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_PDF_SIZE = 10 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 20 * 1024 * 1024;
 const MAX_ATTACHMENT_COUNT = 5;
-const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif']);
+const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const FILE_TYPES = new Set([...IMAGE_TYPES, 'application/pdf']);
-const EXTENSION_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif', pdf: 'application/pdf' };
+const EXTENSION_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', pdf: 'application/pdf' };
 
 const formatFileSize = bytes => {
     const size = Number(bytes) || 0;
@@ -132,7 +132,6 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
 
     const compressImage = async (file, dataUrl, inputType) => {
         if (file.size <= MAX_IMAGE_SIZE) return { dataUrl, mime: inputType, name: file.name };
-        if (['image/heic', 'image/heif'].includes(inputType)) throw new Error('Imagens HEIC/HEIF acima de 5 MB não podem ser comprimidas neste navegador. Converta para JPG e tente novamente.');
         const image = new Image();
         await new Promise((resolve, reject) => {
             image.onload = resolve;
@@ -174,7 +173,7 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                 const extension = file.name.split('.').pop()?.toLowerCase() || '';
                 const extensionType = EXTENSION_MIME[extension] || '';
                 const inputType = FILE_TYPES.has(file.type) ? file.type : extensionType;
-                if (!inputType || extensionType !== inputType) throw new Error(`“${file.name}” não é PNG, JPG/JPEG, WEBP, HEIC/HEIF ou PDF válido.`);
+                if (!inputType || extensionType !== inputType) throw new Error(`“${file.name}” não é PNG, JPG/JPEG, WEBP ou PDF válido.`);
                 if (inputType === 'application/pdf' && file.size > MAX_PDF_SIZE) throw new Error(`“${file.name}” excede o limite de 10 MB para PDF.`);
                 const duplicate = [...current, ...additions].some(item => item.nome === file.name && Number(item.tamanho) === file.size);
                 if (duplicate) throw new Error(`“${file.name}” já foi adicionado.`);
@@ -271,8 +270,8 @@ const InformativoModal = ({ isOpen, onClose, onSave, informativo, draft }) => {
                                         <span className="font-semibold text-text-default flex items-center gap-2"><Paperclip aria-hidden="true" />Adicionar arquivos</span>
                                         <span className="mt-1 text-xs text-text-muted">Arraste aqui ou selecione até 5 arquivos</span>
                                     </button>
-                                    <input ref={fileInputRef} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,image/heic,image/heif,application/pdf,.png,.jpg,.jpeg,.webp,.heic,.heif,.pdf" onChange={handleFileInput} />
-                                    <p className="mt-1 text-xs text-text-muted">PNG, JPG/JPEG, WEBP ou HEIC/HEIF: até 5 MB. PDF: até 10 MB. Total: 20 MB. Imagens maiores serão comprimidas quando o navegador permitir.</p>
+                                    <input ref={fileInputRef} type="file" multiple className="hidden" accept="image/png,image/jpeg,image/webp,application/pdf,.png,.jpg,.jpeg,.webp,.pdf" onChange={handleFileInput} />
+                                    <p className="mt-1 text-xs text-text-muted">PNG, JPG/JPEG ou WEBP: até 5 MB. PDF: até 10 MB. Total: 20 MB. Imagens maiores serão comprimidas quando o navegador permitir.</p>
                                     {fileProcessing && <p className="mt-2 text-sm text-text-muted" role="status">Processando arquivos…</p>}
                                     {!fileProcessing && uploadMessage && <p className="mt-2 text-sm text-success" role="status">{uploadMessage}</p>}
                                 </div>

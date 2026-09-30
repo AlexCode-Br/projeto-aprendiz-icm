@@ -3,7 +3,7 @@ import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 // --- Componentes ---
-import { Plus, ListFilter, UserPlus, Trash2 } from 'lucide-react';
+import { Pencil as PencilIcon, Plus, ListFilter, UserPlus, Trash2, Trash2 as TrashIcon } from 'lucide-react';
 import SearchInput from '../../components/SearchInput';
 import Pagination from '../../components/Pagination';
 import AlunoFormModal from '../../components/AlunoFormModal';
@@ -12,7 +12,6 @@ import FormSelect from '../../components/FormSelect';
 import FormCheckbox from '../../components/FormCheckbox';
 import StudentDetailsModal from '../../components/StudentDetailsModal';
 import StudentBulkEnrollmentModal from '../../components/StudentBulkEnrollmentModal';
-import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
 import ProfileAvatar from '../../components/ProfileAvatar';
 import MobileStudentList from '../../components/MobileStudentList';
 import { STUDENT_CHURCH_SUGGESTIONS, catalogKey } from '../../../shared/catalog-options.mjs';
@@ -299,7 +298,7 @@ const Alunos = () => {
 
             {/* Tabela de Alunos */}
             <MobileStudentList students={alunos} loading={loading} error={error} onView={setDetailsAluno} onEdit={handleOpenFormModal} onDelete={handleOpenConfirmModal} selectedIds={selectedStudentIds} onToggleSelection={toggleStudentSelection} showAcademicSummary />
-            <div className="panel hidden overflow-x-auto sm:block">
+            <div className="panel hidden overflow-x-auto xl:block">
                 <table className="data-table min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
@@ -319,19 +318,19 @@ const Alunos = () => {
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className={`hover:bg-border/50 ${selectedStudentIds.has(Number(aluno.id)) ? 'bg-primary/5' : ''}`}>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
+                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-h-11 min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
                                 </td>
                                 <td data-label="Igreja" className="px-6 py-4 text-sm text-text-muted">{aluno.igreja || 'Não informada'}</td>
                                 <td data-label="Classe" className="px-6 py-4 text-sm text-text-muted">{aluno.classe || 'Não informada'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <div className="flex items-center justify-end gap-2">
-                                        <FormCheckbox checked={selectedStudentIds.has(Number(aluno.id))} onChange={() => toggleStudentSelection(aluno)} aria-label={`${selectedStudentIds.has(Number(aluno.id)) ? 'Remover' : 'Adicionar'} ${aluno.nome} da seleção`} className="items-center p-2" />
                                         <button type="button" aria-label={`Editar ${aluno.nome}`} onClick={() => handleOpenFormModal(aluno)} className="icon-button text-primary hover:text-primary-dark hover:bg-primary/10">
                                             <PencilIcon />
                                         </button>
                                         <button type="button" aria-label={`Excluir ${aluno.nome}`} onClick={() => handleOpenConfirmModal(aluno)} className="icon-button text-danger hover:text-red-700 hover:bg-danger/10">
                                             <TrashIcon />
                                         </button>
+                                        <FormCheckbox checked={selectedStudentIds.has(Number(aluno.id))} onChange={() => toggleStudentSelection(aluno)} aria-label={`${selectedStudentIds.has(Number(aluno.id)) ? 'Remover' : 'Adicionar'} ${aluno.nome} da seleção`} className="items-center p-2" />
                                     </div>
                                 </td>
                             </tr>

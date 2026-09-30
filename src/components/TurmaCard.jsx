@@ -1,10 +1,10 @@
 import React from 'react';
 import ClassScheduleList from './ClassScheduleList';
 import CourseIcon from './CourseIcon';
-import { CalendarClock, MapPin, MessageSquareText, Pencil, Trash2, UserRound, Users } from 'lucide-react';
+import { CalendarClock, MapPin, Trash2, UserRound, Users } from 'lucide-react';
 import KebabMenu, { KebabMenuItem } from './KebabMenu';
 
-export default function TurmaCard({ turma, onViewWall, onEdit, onDelete }) {
+export default function TurmaCard({ turma, onDelete }) {
     const alunos = Number(turma.alunos) || 0;
     const active = turma.status === 'Ativo';
     const titleId = `turma-card-${turma.id}`;
@@ -25,8 +25,6 @@ export default function TurmaCard({ turma, onViewWall, onEdit, onDelete }) {
                 <div className="flex shrink-0 items-center gap-1">
                     <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${active ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>{active ? 'Ativa' : 'Inativa'}</span>
                     <KebabMenu label={`Ações da turma ${turma.nome}`}>
-                        <KebabMenuItem icon={MessageSquareText} tone="primary" onClick={() => onViewWall(turma)}>Ver mural</KebabMenuItem>
-                        <KebabMenuItem icon={Pencil} tone="primary" onClick={() => onEdit(turma)}>Editar turma</KebabMenuItem>
                         <KebabMenuItem icon={Trash2} tone="danger" onClick={() => onDelete(turma)}>Excluir turma</KebabMenuItem>
                     </KebabMenu>
                 </div>
@@ -39,7 +37,7 @@ export default function TurmaCard({ turma, onViewWall, onEdit, onDelete }) {
                 </div>
                 <div className="min-w-0">
                     <dt className="flex items-center gap-1.5 text-xs text-text-muted"><CalendarClock aria-hidden="true" className="!h-4 !w-4" />Horário</dt>
-                    <dd className="mt-1.5 break-words text-sm leading-5"><ClassScheduleList course={turma} /></dd>
+                    <dd className="mt-1.5 break-words text-sm leading-5"><ClassScheduleList course={turma} compact maxVisible={2} /></dd>
                 </div>
             </dl>
 

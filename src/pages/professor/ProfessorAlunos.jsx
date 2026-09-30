@@ -55,7 +55,7 @@ const ProfessorAlunos = () => {
             setCurrentPage(page => Math.min(page, Math.max(1, Math.ceil(response.data.total / itemsPerPage))));
             setTotalAlunos(response.data.total);
             setError(null);
-        } catch (err) {
+        } catch {
             if (sequence !== requestSequence.current) return;
             setError("Não foi possível carregar os alunos.");
             showToast("Erro ao carregar seus alunos.", 'error');
@@ -126,7 +126,7 @@ const ProfessorAlunos = () => {
             
             {/* Tabela de Alunos */}
             <MobileStudentList students={alunos} loading={loading} error={error} onView={setDetailsAluno} showCourses showAttendance />
-            <div className="panel hidden overflow-x-auto sm:block">
+            <div className="panel hidden overflow-x-auto xl:block">
                 <table className="data-table min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
@@ -143,7 +143,7 @@ const ProfessorAlunos = () => {
                         ) : alunos.map((aluno) => (
                             <tr key={aluno.id} className="hover:bg-border/50">
                                 <td className="px-6 py-4">
-                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
+                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-h-11 min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
                                 </td>
                                 <td data-label="Frequência" className="px-6 py-4 text-sm font-semibold">{aluno.frequencia == null ? 'Sem chamadas' : `${aluno.frequencia}%`}</td>
                                 <td data-label="Cursos" className="px-6 py-4 whitespace-nowrap text-sm text-text-muted">{aluno.cursos?.map(c => c.nome).join(', ') || 'Sem turma vinculada'}</td>

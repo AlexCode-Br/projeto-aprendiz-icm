@@ -80,6 +80,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     const manager=await login('gestor@projetoaprendiz.local','Gestor@2026!');
     const professor=await login('professor@projetoaprendiz.local','Professor@2026!');
     db=new DatabaseSync(databasePath);
+    db.exec('PRAGMA busy_timeout=10000');
     const insertStudent=(name,email)=>Number(db.prepare("INSERT INTO students(name,email,age_group) VALUES (?,?,'Jovem')").run(name,email).lastInsertRowid);
     const aliceId=insertStudent('Alice Teste','alice@example.test'),bobId=insertStudent('Beto Teste','beto@example.test');
     const classes=db.prepare('SELECT id FROM classes WHERE active=1 ORDER BY id LIMIT 2').all().map(r=>r.id);
@@ -90,7 +91,8 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
       const result=await call(manager,`/api/student-access/${id}`,'POST',{});
       assert.equal(result.status,200,JSON.stringify(result));
       const email=db.prepare('SELECT body FROM dev_emails ORDER BY id DESC LIMIT 1').get();
-      return new URL(email.body.match(/http:\/\/\S+/)[0]).searchParams.get('token');
+      const link=new URL(email.body.match(/http:\/\/\S+/)[0]);
+      return new URLSearchParams(link.hash.slice(1)).get('token');
     };
     assert.equal((await call(professor,`/api/student-access/${aliceId}`,'POST',{})).status,403);
     let token=await requestInvite(aliceId);
@@ -177,8 +179,11 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal(multiCourse.find(item=>Number(item.id)===Number(classes[1])).frequencia.percentual,0);
     const coursePost=await call(professor,`/api/professores/me/turmas/${classes[0]}/mural`,'POST',{titulo:'Próxima aula',categoria:'Atividade',conteudo:'<p><strong>Traga seu instrumento</strong> para a próxima aula. <a href="https://example.com/partitura">Abrir partitura</a><script>alert(1)</script></p>',fixarNoTopo:true,solicitarConfirmacao:true,anexos:[]});
     assert.equal(coursePost.status,201,JSON.stringify(coursePost));
+    const wallAttachment=Number(db.prepare("INSERT INTO announcement_attachments(announcement_id,filename,mime_type,size_bytes,data_url) VALUES (?,'mural.pdf','application/pdf',3,'data:application/pdf;base64,YWJj')").run(coursePost.data.id).lastInsertRowid);
+    assert.equal((await call(manager,`/api/informativos/${coursePost.data.id}/anexos/${wallAttachment}`)).status,404,'gestor não pode ler anexos do mural pela rota de informativos');
+    assert.equal((await call(professor,`/api/informativos/${coursePost.data.id}/anexos/${wallAttachment}`)).status,200);
     const teacherPostRecipients=db.prepare("SELECT users.email AS recipient FROM notification_outbox JOIN users ON users.id=notification_outbox.user_id WHERE notification_outbox.subject LIKE 'Nova publicação — %' AND notification_outbox.body LIKE '%Marina Oliveira publicou%' AND notification_outbox.email_enabled=0 AND notification_outbox.push_enabled=1 ORDER BY users.email").all().map(item=>item.recipient);
-    assert.deepEqual(teacherPostRecipients,['alice@example.test','gestor@projetoaprendiz.local']);
+    assert.deepEqual(teacherPostRecipients,['alice@example.test']);
     assert.equal((await call(professor,'/api/informativos')).data.some(item=>item.id===coursePost.data.id),false,'mural da turma não pode aparecer nos informativos do professor');
     assert.equal((await call(manager,'/api/informativos')).data.some(item=>item.id===coursePost.data.id),false,'mural da turma não pode aparecer nos informativos do gestor');
     assert.equal((await call(professor,'/api/professores/me/turmas/999999/informativos','POST',{titulo:'Indevido',conteudo:'Não deve ser publicado.'})).status,404);
@@ -243,8 +248,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.ok((await call(professor,'/api/informativos')).data.some(item=>item.id===managerNotice.data.id),'o professor responsável deve receber o informativo da turma sem seleção manual');
     const communityBase=`/api/turmas/${classes[0]}`;
     const managerWall=await call(manager,`${communityBase}/mural`);
-    assert.equal(managerWall.status,200,JSON.stringify(managerWall));
-    assert.deepEqual(managerWall.data.permissoes,{mode:'post_and_comment',publicar:false,comentar:false,reagir:false});
+    assert.equal(managerWall.status,403,JSON.stringify(managerWall));
     assert.equal((await call(manager,`${communityBase}/mural`,'POST',{titulo:'Gestão',conteudo:'O gestor acompanha, mas não publica no mural.',anexos:[]})).status,403);
     assert.ok((await call(professor,'/api/turmas/configuracao-pendente')).data.items.some(item=>item.id===classes[0]));
     assert.equal((await call(alice,`${communityBase}/configuracao`,'PUT',{endereco:'Não autorizado'})).status,403);
@@ -278,7 +282,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     const studentPost=await call(alice,`${communityBase}/mural`,'POST',{titulo:'Material da Alice',conteudo:'<p><em>Material para estudar</em> com a turma.</p><ul><li>Exercício 1</li><li>Exercício 2</li></ul>',anexos:[],fixarNoTopo:true,solicitarConfirmacao:true});
     assert.equal(studentPost.status,201,JSON.stringify(studentPost));
     const studentPostRecipients=db.prepare("SELECT users.email AS recipient FROM notification_outbox JOIN users ON users.id=notification_outbox.user_id WHERE notification_outbox.subject LIKE 'Nova publicação — %' AND notification_outbox.body LIKE '%Alice Teste publicou%' ORDER BY users.email").all().map(item=>item.recipient);
-    assert.deepEqual(studentPostRecipients,['gestor@projetoaprendiz.local','professor@projetoaprendiz.local']);
+    assert.deepEqual(studentPostRecipients,['professor@projetoaprendiz.local']);
     const studentPostPath=`${communityBase}/mural/${studentPost.data.id}`;
     assert.equal((await call(manager,`${studentPostPath}/comentarios`,'POST',{conteudo:'Gestão não participa da conversa.'})).status,403);
     assert.equal((await call(alice,'/api/profile-photo','PUT',{dataUrl:bannerData})).status,200);
@@ -299,7 +303,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal(sharedPost.curtidas,1);assert.equal(sharedPost.curtiu,true);assert.equal('visualizacoes' in sharedPost,false);
     assert.equal((await call(alice,`${studentPostPath}/comentarios`,'POST',{conteudo:'Obrigada pelo material!'})).status,201);
     const studentCommentRecipients=db.prepare("SELECT users.email AS recipient FROM notification_outbox JOIN users ON users.id=notification_outbox.user_id WHERE notification_outbox.subject LIKE 'Nova mensagem — %' AND notification_outbox.body LIKE '%Alice Teste comentou%' ORDER BY users.email").all().map(item=>item.recipient);
-    assert.deepEqual(studentCommentRecipients,['gestor@projetoaprendiz.local','professor@projetoaprendiz.local']);
+    assert.deepEqual(studentCommentRecipients,['professor@projetoaprendiz.local']);
     assert.equal((await call(bob,`${studentPostPath}/comentarios`,'POST',{conteudo:'Não permitido'})).status,404);
     const comment=(await call(professor,`${studentPostPath}/comentarios`)).data.items[0];
     assert.equal(comment.autor,'Alice Teste');assert.equal(comment.podeExcluir,true);
@@ -370,7 +374,7 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal((await call(alice,'/api/aluno/perfil')).status,401);
     assert.equal((await call(null,'/api/auth/login','POST',{email:'alice@example.test',password:'Aluno@2026!'})).status,401);
     db.prepare('UPDATE students SET active=1 WHERE id=?').run(aliceId);
-    assert.equal((await call(bob,'/api/account/delete','POST',{confirmation:'beto@example.test'})).status,200);
+    assert.equal((await call(bob,'/api/account/delete','POST',{confirmation:'beto@example.test',currentPassword:'Aluno@2026!'})).status,200);
     assert.ok(db.prepare('SELECT id FROM students WHERE id=? AND active=1').get(bobId));
     assert.equal((await call(bob,'/api/auth/me')).status,401);
     assert.equal(db.prepare('SELECT COUNT(*) AS total FROM student_accounts WHERE user_id=?').get(bobUser).total,0);
@@ -385,7 +389,8 @@ test('área do aluno: convite, autorização, IDOR, frequência, calendário, co
     assert.equal((await call(alice,'/api/student-email/request','POST',{email:'new-alice@example.test',password:'Aluno@2026!'})).status,200);
     assert.equal(db.prepare('SELECT email FROM users WHERE id=?').get(alice.user.id).email,'alice@example.test');
     const confirmationMail=db.prepare('SELECT body FROM dev_emails ORDER BY id DESC LIMIT 1').get();
-    const emailToken=new URL(confirmationMail.body.match(/http:\/\/\S+/)[0]).searchParams.get('token');
+    const emailLink=new URL(confirmationMail.body.match(/http:\/\/\S+/)[0]);
+    const emailToken=new URLSearchParams(emailLink.hash.slice(1)).get('token');
     assert.equal((await call(null,`/api/student-email/validate?token=${emailToken}`)).data.email,'new-alice@example.test');
     assert.equal((await call(null,'/api/student-email/confirm','POST',{token:emailToken})).status,200);
     assert.equal((await call(null,'/api/student-email/confirm','POST',{token:emailToken})).status,400);

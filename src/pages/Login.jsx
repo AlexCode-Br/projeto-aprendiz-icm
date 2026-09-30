@@ -1,10 +1,11 @@
 import { Eye as EyeIcon, EyeOff as EyeOffIcon } from 'lucide-react';
-import React, { useContext, useState } from 'react';
+import React, { useCallback, useContext, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import FormCheckbox from '../components/FormCheckbox';
+import TurnstileChallenge from '../components/TurnstileChallenge';
 import { AuthContext } from '../contexts/AuthContext';
 import AuthLayout from '../layouts/AuthLayout';
-import { Mail, LockKeyhole, Check, ArrowRight, LoaderCircle } from 'lucide-react';
+import { Mail, LockKeyhole, Check, ArrowRight, LoaderCircle, ShieldCheck } from 'lucide-react';
 
 
 
@@ -18,7 +19,12 @@ const Login = () => {
     const [errorMessage, setErrorMessage] = useState('');
     const [showSuccess, setShowSuccess] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const { login } = useContext(AuthContext);
+    const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
+    const [turnstileToken, setTurnstileToken] = useState('');
+    const [turnstileVersion, setTurnstileVersion] = useState(0);
+    const [mfa, setMfa] = useState(null);
+    const [mfaCode, setMfaCode] = useState('');
+    const { login, verifyMfa } = useContext(AuthContext);
     const navigate = useNavigate();
 
     const handleSubmit = async event => {
@@ -29,14 +35,54 @@ const Login = () => {
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return setErrorMessage('Informe um e-mail válido.');
         setSubmitting(true);
         try {
-            const user = await login(email.trim(), password, remember);
+            const result = await login(email.trim(), password, remember, turnstileToken);
+            if (result?.mfaRequired) {
+                setMfa(result);
+                setPassword('');
+                setSubmitting(false);
+                return;
+            }
+            const user = result;
             setShowSuccess(true);
             setTimeout(() => navigate(`/${user.role}/dashboard`, { replace: true }), 800);
         } catch (error) {
             setErrorMessage(error.message || 'Credenciais incorretas. Tente novamente.');
+            if (error.response?.data?.code === 'CAPTCHA_REQUIRED' && error.response.data.siteKey) {
+                setTurnstileSiteKey(error.response.data.siteKey);
+                setTurnstileToken('');
+                setTurnstileVersion(version => version + 1);
+            }
             setSubmitting(false);
         }
     };
+
+    const handleMfaSubmit = async event => {
+        event.preventDefault();
+        if (submitting || !/^\d{6}$/.test(mfaCode)) return;
+        setSubmitting(true);
+        setErrorMessage('');
+        try {
+            const user = await verifyMfa(mfa.challengeToken, mfaCode, remember);
+            setShowSuccess(true);
+            setTimeout(() => navigate(`/${user.role}/dashboard`, { replace: true }), 800);
+        } catch (error) {
+            setErrorMessage(error.message || 'Não foi possível validar o código.');
+            setSubmitting(false);
+        }
+    };
+
+    const handleTurnstileToken = useCallback(token => {
+        setTurnstileToken(token);
+        if (token) setErrorMessage('');
+    }, []);
+    const handleTurnstileError = useCallback(code => {
+        if (code === 'unsupported') {
+            setErrorMessage('Este navegador não é compatível com a verificação de segurança. Atualize o navegador ou use outro dispositivo.');
+            return;
+        }
+        const diagnostic = code && code !== 'unknown' ? ` Código: ${code}.` : '';
+        setErrorMessage(`Não foi possível iniciar a verificação de segurança.${diagnostic} Atualize a página e tente novamente.`);
+    }, []);
 
     return (
         <AuthLayout isLogin title="Bem-vindo!">
@@ -46,6 +92,18 @@ const Login = () => {
                     <p className="mt-4 text-lg font-bold text-text-default">Login realizado</p>
                     <p className="mt-1 text-sm text-text-muted">Redirecionando para seu painel...</p>
                 </div>
+            ) : mfa ? (
+                <form onSubmit={handleMfaSubmit} className="space-y-5" noValidate>
+                    <div className="text-center">
+                        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><ShieldCheck aria-hidden="true" /></span>
+                        <p className="mt-3 font-semibold text-text-default">Verificação em duas etapas</p>
+                        <p className="mt-1 text-sm leading-6 text-text-muted">Enviamos um código de 6 dígitos para {mfa.destination}.</p>
+                    </div>
+                    {errorMessage && <div className="alert-error" role="alert">{errorMessage}</div>}
+                    <label className="block" htmlFor="mfa-code"><span className="form-label">Código de verificação</span><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} value={mfaCode} onChange={event => setMfaCode(event.target.value.replace(/\D/g, '').slice(0, 6))} className="form-control text-center text-xl tracking-[0.35em]" autoFocus required /></label>
+                    <button type="submit" disabled={submitting || mfaCode.length !== 6} className="submit-btn w-full">{submitting ? <><LoaderCircle className="animate-spin" aria-hidden="true" />Verificando...</> : <>Confirmar acesso<ArrowRight aria-hidden="true" /></>}</button>
+                    <button type="button" onClick={() => { setMfa(null); setMfaCode(''); setErrorMessage(''); }} className="btn btn-secondary w-full">Voltar</button>
+                </form>
             ) : (
                 <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                     {errorMessage && <div className="alert-error" role="alert">{errorMessage}</div>}
@@ -74,11 +132,21 @@ const Login = () => {
                             label="Permanecer conectado"
                             className="items-center min-h-11"
                         />
-                        <Link to="/forgot-password" className="font-semibold text-primary hover:text-primary-dark hover:underline">Esqueceu a senha?</Link>
+                        <Link to="/forgot-password" className="inline-flex min-h-11 items-center rounded-lg px-2 font-semibold text-primary hover:bg-primary/10 hover:text-primary-dark hover:underline">Esqueceu a senha?</Link>
                     </div>
 
-                    <button type="submit" disabled={submitting} className="submit-btn w-full">{submitting ? <><LoaderCircle className="animate-spin" aria-hidden="true" />Entrando...</> : <>Entrar<ArrowRight aria-hidden="true" /></>}</button>
+                    {turnstileSiteKey && <TurnstileChallenge key={turnstileVersion} siteKey={turnstileSiteKey} onToken={handleTurnstileToken} onError={handleTurnstileError} />}
+
+                    <button type="submit" disabled={submitting || Boolean(turnstileSiteKey && !turnstileToken)} className="submit-btn w-full">{submitting ? <><LoaderCircle className="animate-spin" aria-hidden="true" />Entrando...</> : <>Entrar<ArrowRight aria-hidden="true" /></>}</button>
                 </form>
+            )}
+            {!showSuccess && (
+                <p className="mt-5 text-center text-xs leading-5 text-text-muted">
+                    Saiba como protegemos e utilizamos seus dados na{' '}
+                    <Link to="/politica-de-privacidade" className="font-semibold text-primary hover:underline">
+                        Política de Privacidade
+                    </Link>.
+                </p>
             )}
         </AuthLayout>
     );

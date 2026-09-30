@@ -51,6 +51,9 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     const login = await call(null, 'POST', '/api/auth/login', { email: 'gestor@projetoaprendiz.local', password: 'Gestor@2026!' });
     assert.equal(login.status, 200, JSON.stringify(login.data));
     const manager = { cookie: String(login.headers.get('set-cookie')).split(';')[0], csrf: login.data.csrfToken };
+    const professorLogin = await call(null, 'POST', '/api/auth/login', { email: 'professor@projetoaprendiz.local', password: 'Professor@2026!' });
+    assert.equal(professorLogin.status, 200, JSON.stringify(professorLogin.data));
+    const professorSession = { cookie: String(professorLogin.headers.get('set-cookie')).split(';')[0], csrf: professorLogin.data.csrfToken };
 
     const catalogs = await call(manager, 'GET', '/api/catalogos');
     assert.equal(catalogs.status, 200, JSON.stringify(catalogs.data));
@@ -95,10 +98,15 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     });
     assert.equal(virtualChurch.status, 400);
     assert.match(virtualChurch.data.errors.local, /igreja física/i);
-    const customOffering = await call(manager, 'POST', '/cursos', {
-      nome: 'Clarinete',
-      local: 'EAD',
-      professor: offering.professor,
+    const clarinetCatalog = await call(manager, 'POST', '/api/catalogos/cursos', { nome: 'Clarinete' });
+    assert.equal(clarinetCatalog.status, 201, JSON.stringify(clarinetCatalog.data));
+    const professorOptions = (await call(professorSession, 'GET', '/api/professores/me/turmas/opcoes')).data;
+    const clarinetOption = professorOptions.cursos.find(item => item.nome === 'Clarinete');
+    const eadOption = professorOptions.locais.find(item => item.nome === 'EAD');
+    const customOffering = await call(professorSession, 'POST', '/api/professores/me/turmas', {
+      courseId: clarinetOption.id,
+      locationId: eadOption.id,
+      horarios: [{ tipo: 'semanal', weekday: 'Domingo', start_time: '05:00' }],
     });
     assert.equal(customOffering.status, 201, JSON.stringify(customOffering.data));
     const createdOffering = (await call(manager, 'GET', '/cursos')).data.cursos.find(item => item.id === customOffering.data.id);
@@ -107,16 +115,17 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     const catalogsAfterCreate = (await call(manager, 'GET', '/api/catalogos')).data;
     assert.equal(catalogsAfterCreate.cursos.some(item => item.nome === 'Clarinete' && item.ativo), true);
     assert.equal(catalogsAfterCreate.locais.some(item => item.nome === 'EAD' && item.ativo), true);
-    const forbiddenCourseUpdate = await call(manager, 'PUT', `/cursos/${customOffering.data.id}`, {
-      nome: 'Oboé',
-      local: 'Mirantes de Periperi',
-      professor: offering.professor,
+    const alternateCourse = professorOptions.cursos.find(item => item.id !== clarinetOption.id);
+    const mirantesOption = professorOptions.locais.find(item => item.nome === 'Mirantes de Periperi');
+    const forbiddenCourseUpdate = await call(professorSession, 'PUT', `/api/professores/me/turmas/${customOffering.data.id}`, {
+      courseId: alternateCourse.id, locationId: mirantesOption.id,
+      horarios: [{ tipo: 'semanal', weekday: 'Domingo', start_time: '05:00' }],
     });
     assert.equal(forbiddenCourseUpdate.status, 400);
     assert.match(forbiddenCourseUpdate.data.message, /não pode ser alterado/i);
-    const customUpdate = await call(manager, 'PUT', `/cursos/${customOffering.data.id}`, {
-      local: 'Mirantes de Periperi',
-      professor: offering.professor,
+    const customUpdate = await call(professorSession, 'PUT', `/api/professores/me/turmas/${customOffering.data.id}`, {
+      courseId: clarinetOption.id, locationId: mirantesOption.id,
+      horarios: [{ tipo: 'semanal', weekday: 'Domingo', start_time: '05:00' }],
     });
     assert.equal(customUpdate.status, 200, JSON.stringify(customUpdate.data));
     const updatedOffering = (await call(manager, 'GET', '/cursos')).data.cursos.find(item => item.id === customOffering.data.id);
@@ -173,29 +182,31 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     });
     assert.equal(validTeen.status, 201, JSON.stringify(validTeen.data));
 
-    const parallel = await call(manager, 'POST', '/cursos', {
-      nome: offering.nome,
-      local: offering.local,
-      professor: offering.professor,
-      label: 'Turma B',
-      capacity: 1,
+    const offeringCourseOption = professorOptions.cursos.find(item => item.nome === offering.nome);
+    const offeringLocationOption = professorOptions.locais.find(item => item.nome === offering.local);
+    const parallel = await call(professorSession, 'POST', '/api/professores/me/turmas', {
+      courseId: offeringCourseOption.id, locationId: offeringLocationOption.id,
+      horarios: [{ tipo: 'semanal', weekday: 'Domingo', start_time: '05:20' }],
     });
     assert.equal(parallel.status, 201, JSON.stringify(parallel.data));
     const parallelId = Number(parallel.data.id);
+    const capacityDb = new DatabaseSync(databasePath);
+    capacityDb.prepare('UPDATE classes SET capacity=1,label=? WHERE id=?').run('Turma B', parallelId);
+    capacityDb.close();
     const fullStudent = await call(manager, 'POST', '/alunos', studentPayload('Aluno Ocupa Última Vaga', parallelId));
     assert.equal(fullStudent.status, 201, JSON.stringify(fullStudent.data));
     const rejected = await call(manager, 'POST', '/alunos', studentPayload('Aluno Excede Capacidade', parallelId));
     assert.equal(rejected.status, 400);
     assert.match(rejected.data.errors.curso, /capacidade máxima/i);
 
-    const destination = await call(manager, 'POST', '/cursos', {
-      nome: offering.nome,
-      local: offering.local,
-      professor: offering.professor,
-      label: 'Turma C',
-      capacity: 10,
+    const destination = await call(professorSession, 'POST', '/api/professores/me/turmas', {
+      courseId: offeringCourseOption.id, locationId: offeringLocationOption.id,
+      horarios: [{ tipo: 'semanal', weekday: 'Domingo', start_time: '05:40' }],
     });
     assert.equal(destination.status, 201, JSON.stringify(destination.data));
+    const destinationDb = new DatabaseSync(databasePath);
+    destinationDb.prepare('UPDATE classes SET capacity=10,label=? WHERE id=?').run('Turma C', destination.data.id);
+    destinationDb.close();
     const updated = await call(manager, 'PUT', `/alunos/${first.data.id}`, studentPayload('Aluno Sem Email Um', destination.data.id));
     assert.equal(updated.status, 200, JSON.stringify(updated.data));
     const editNotifications = await (await fetch(`${baseUrl}/dev-mail`)).text();
@@ -224,9 +235,6 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(deleted.data.anonymized, true);
 
     assert.equal((await call(manager, 'GET', '/api/audit-log?limit=50')).status, 404);
-    const professorLogin = await call(null, 'POST', '/api/auth/login', { email: 'professor@projetoaprendiz.local', password: 'Professor@2026!' });
-    assert.equal(professorLogin.status, 200, JSON.stringify(professorLogin.data));
-    const professorSession = { cookie: String(professorLogin.headers.get('set-cookie')).split(';')[0], csrf: professorLogin.data.csrfToken };
     assert.equal((await call(professorSession, 'GET', '/api/audit-log')).status, 404);
     const anonymousDropout = await call(manager, 'GET', '/api/relatorios/evasao?motivo=outro');
     assert.equal(anonymousDropout.status, 200, JSON.stringify(anonymousDropout.data));

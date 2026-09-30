@@ -7,6 +7,7 @@ export function createCourseAnnouncementRoutes(context){
     db,json,authorize,readJson,cleanText,sanitizeAnnouncementContent,requiredTextError,
     hasValidationErrors,invalid,normalizeAnnouncementAttachments,prepareStoredAttachments,
     insertAnnouncementAttachments,removeStoredAttachments,notificationService,notificationOutbox,logger,
+    consumeActionRateLimit,rateLimitResponse,richTextContentError,
   }=context;
 
   const postForProfessor=(classId,announcementId,userId)=>db.prepare(`SELECT a.id,a.scheduled_at
@@ -102,7 +103,7 @@ export function createCourseAnnouncementRoutes(context){
     const errors={
       titulo:requiredTextError(title,'O título',3,120),
       categoria:COURSE_WALL_CATEGORIES.includes(body.categoria)?'':'Selecione uma categoria válida.',
-      conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000),
+      conteudo:requiredTextError(content.replace(/<[^>]+>/g,' '),'O conteúdo',10,5000)||richTextContentError(content),
       anexos:attachmentResult.error||'',
     };
     return {body,title,content,attachmentResult,errors};
@@ -112,14 +113,14 @@ export function createCourseAnnouncementRoutes(context){
     const shared=url.pathname.startsWith('/api/turmas/');
     const versionMatch=url.pathname.match(/^\/api\/turmas\/(\d+)\/mural\/versao$/);
     if(versionMatch&&request.method==='GET'){
-      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
+      const session=await authorize(request,response,['professor','aluno']);if(!session)return;
       const classId=Number(versionMatch[1]),course=await communityClass(db,classId,session);
       if(!course)return json(response,404,{message:'Turma não encontrada.'});
       return json(response,200,{version:await wallVersion(classId)});
     }
     const match=url.pathname.match(/^\/api\/(?:professores\/me\/)?turmas\/(\d+)\/(?:mural|informativos)(?:\/(\d+))?$/);
     if(!match)return json(response,404,{message:'Rota não encontrada.'});
-    const session=await authorize(request,response,shared?['gestor','professor','aluno']:['professor']);if(!session)return;
+    const session=await authorize(request,response,shared?['professor','aluno']:['professor']);if(!session)return;
     const classId=Number(match[1]),announcementId=match[2]?Number(match[2]):0;
     const course=await communityClass(db,classId,session);
     if(!course)return json(response,404,{message:'Turma não encontrada.'});
@@ -133,6 +134,8 @@ export function createCourseAnnouncementRoutes(context){
 
     if(!announcementId&&request.method==='POST'){
       if(!permissions.publicar)return json(response,403,{message:'O professor configurou este mural somente para comentários ou visualização.'});
+      const actionLimit=await consumeActionRateLimit({route:'wall_post',userId:session.user_id,ip,limit:10});
+      if(actionLimit.blocked)return rateLimitResponse(response,actionLimit);
       const {body,title,content,attachmentResult,errors}=await normalizedBody(request);
       if(session.role==='aluno'){body.fixarNoTopo=false;body.solicitarConfirmacao=false;}
       if(hasValidationErrors(errors))return invalid(response,errors);

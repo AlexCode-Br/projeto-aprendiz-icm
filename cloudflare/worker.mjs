@@ -1,5 +1,5 @@
 import { createApplication, isApiPath } from '../backend/application.mjs';
-import { createWorkerDatabase, ensureClassScheduleDatesSchema, ensureNotificationOutboxSchema, ensurePushSubscriptionsSchema, ensureStudentPortalSchema } from '../backend/worker-database.mjs';
+import { createWorkerDatabase } from '../backend/worker-database.mjs';
 import { createHttpSecurity } from '../backend/security.mjs';
 import { createStructuredLogger } from '../backend/logger.mjs';
 import { invokeApi } from './http-bridge.mjs';
@@ -11,7 +11,6 @@ const logger = createStructuredLogger({ write: line => console.error(line), incl
 async function drainNotificationOutbox(env){
   const db=createWorkerDatabase(env,{logger});
   try{
-    await ensureNotificationOutboxSchema(db);
     return await createApplication({db,env,logger}).deliverNotificationOutbox({limit:100});
   }finally{await db.close();}
 }
@@ -22,11 +21,10 @@ export default {
     ctx.waitUntil((async()=>{
       const db=createWorkerDatabase(env,{logger});
       try {
-        await ensureStudentPortalSchema(db);
-        await ensureNotificationOutboxSchema(db);
         const application=createApplication({db,env,logger});
         await application.deliverStudentNotices();
         await application.deliverNotificationOutbox({limit:200});
+        await application.cleanupSecurityData();
       }
       finally { await db.close(); }
     })());
@@ -39,6 +37,9 @@ export default {
     }
     const { securityHeaders } = createHttpSecurity({ isProduction: true, appOrigin: env.APP_URL, env });
     const json = (status, message) => new Response(JSON.stringify({ message }), { status, headers: securityHeaders() });
+    if (request.method === 'GET' && url.pathname === '/api/health') {
+      return new Response(JSON.stringify({ status: 'ok' }), { status: 200, headers: securityHeaders() });
+    }
     if (!isApiPath(url.pathname) && url.pathname !== '/api') {
       if (!['GET', 'HEAD'].includes(request.method)) return json(405, 'Método não permitido.');
       let path;
@@ -60,10 +61,6 @@ export default {
     let db;
     try {
       db = createWorkerDatabase(env, { logger });
-      await ensurePushSubscriptionsSchema(db);
-      await ensureClassScheduleDatesSchema(db);
-      await ensureStudentPortalSchema(db);
-      await ensureNotificationOutboxSchema(db);
       const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER), scheduleNotificationDrain:()=>ctx.waitUntil(drainNotificationOutbox(env).catch(error=>logger.error('notification_outbox_background_failed',error))) });
       return await invokeApi(request, application.handler);
     } catch (error) {

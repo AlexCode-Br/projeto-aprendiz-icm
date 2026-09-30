@@ -47,7 +47,7 @@ const ProfessorFrequencia = () => {
                     const schedule = slots.length === 1 ? ' · ' + scheduleText(slots[0]) : slots.length ? ` · ${slots.length} horários semanais` : '';
                     return { value: c.id, label: `${c.nome}${customLabel} · ${c.local}${schedule}` };
                 }));
-            } catch (error) {
+            } catch {
                 showToast('Erro ao carregar seus cursos.', 'error');
             }
         };

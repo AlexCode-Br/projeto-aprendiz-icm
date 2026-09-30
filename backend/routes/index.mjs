@@ -48,6 +48,10 @@ export function createApiHandler(context) {
     supabaseAdmin,
     requireSupabaseAdmin,
     randomBytes,
+    verifyUserPassword,
+    consumeActionRateLimit,
+    rateLimitResponse,
+    managerMfaRequired,
   } = context;
   const pushDeviceView = row => ({
     id: Number(row.id),
@@ -82,7 +86,7 @@ export function createApiHandler(context) {
   
     if (request.method === 'GET' && url.pathname === '/api/health') {
       await db.prepare('SELECT 1 AS ready').get();
-      return json(response, 200, { status: 'ok', database: db.dialect });
+      return json(response, 200, { status: 'ok' });
     }
   
     if (url.pathname.startsWith('/api/student-email/')) return studentEmailRoutes(request,response,url,ip);
@@ -105,7 +109,21 @@ export function createApiHandler(context) {
       }
       if(session.role==='aluno'){photoOwnerType='student';photoOwnerId=session.student_id;}
       const photo=photoOwnerId?await db.prepare('SELECT updated_at FROM profile_photos WHERE owner_type=? AND owner_id=?').get(photoOwnerType,photoOwnerId):null;
-      return json(response,200,{user:publicUser({id:session.user_id,...session}),preferences,photoUrl:photo?`/api/profile-photo?v=${encodeURIComponent(photo.updated_at)}`:''});
+      return json(response,200,{user:publicUser({id:session.user_id,...session}),preferences,photoUrl:photo?`/api/profile-photo?v=${encodeURIComponent(photo.updated_at)}`:'',mfaVerified:Boolean(session.mfa_verified_at)});
+    }
+    if(request.method==='GET'&&url.pathname==='/api/account/sessions'){
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
+      const rows=await db.prepare('SELECT id,user_agent,created_at,last_seen_at,expires_at FROM sessions WHERE user_id=? AND expires_at>? ORDER BY last_seen_at DESC,id DESC').all(session.user_id,new Date().toISOString());
+      return json(response,200,{items:rows.map(row=>({id:Number(row.id),userAgent:row.user_agent||'',createdAt:row.created_at,lastSeenAt:row.last_seen_at||row.created_at,expiresAt:row.expires_at,current:Number(row.id)===Number(session.id)}))});
+    }
+    const sessionDeleteMatch=url.pathname.match(/^\/api\/account\/sessions\/(\d+)$/);
+    if(request.method==='DELETE'&&sessionDeleteMatch){
+      const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
+      const sessionId=Number(sessionDeleteMatch[1]);
+      const removed=await db.prepare('DELETE FROM sessions WHERE id=? AND user_id=? AND id<>?').run(sessionId,session.user_id,session.id);
+      if(!removed.changes)return json(response,404,{message:'Sessão não encontrada ou já encerrada.'});
+      await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`session_revoked:${sessionId}`,ip);
+      return json(response,200,{success:true,message:'Sessão encerrada.'});
     }
     if(request.method==='PUT'&&url.pathname==='/api/account/profile'){
       const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
@@ -143,6 +161,8 @@ export function createApiHandler(context) {
     }
     if(request.method==='POST'&&url.pathname==='/api/account/preferences/test'){
       const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
+      const actionLimit=await consumeActionRateLimit({route:'notification_email_test',userId:session.user_id,ip,limit:3,windowMs:15*60_000});
+      if(actionLimit.blocked)return rateLimitResponse(response,actionLimit);
       try{
         await context.sendEmail(session.email,'Teste de notificações — Projeto Aprendiz',`Olá, ${session.name}.\n\nAs notificações por e-mail da sua conta estão funcionando corretamente.\n\nProjeto Aprendiz`,`notification-test/${session.user_id}/${Date.now()}`);
         return json(response,200,{message:'E-mail de teste enviado com sucesso.'});
@@ -191,6 +211,8 @@ export function createApiHandler(context) {
     }
     if(request.method==='POST'&&url.pathname==='/api/account/push/test'){
       const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
+      const actionLimit=await consumeActionRateLimit({route:'notification_push_test',userId:session.user_id,ip,limit:3,windowMs:15*60_000});
+      if(actionLimit.blocked)return rateLimitResponse(response,actionLimit);
       const result=await webPushService.sendToUser(session.user_id,{title:'Teste de notificações — Projeto Aprendiz',body:'As notificações deste dispositivo estão funcionando corretamente.',tag:`push-test/${session.user_id}/${Date.now()}`,url:'/configuracoes'});
       if(!result.sent)return json(response,result.reason==='not_configured'?503:409,{message:result.reason==='not_subscribed'?'Ative as notificações neste dispositivo antes de testar.':'Não foi possível entregar a notificação de teste neste dispositivo.'});
       return json(response,200,{message:`Notificação enviada para ${result.delivered} ${result.delivered===1?'dispositivo':'dispositivos'}.`});
@@ -211,6 +233,8 @@ export function createApiHandler(context) {
       const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
       const body=await readJson(request);
       if(cleanEmail(body.confirmation)!==cleanEmail(session.email))return invalid(response,{confirmation:'Digite o e-mail completo da conta para confirmar.'});
+      if(!await verifyUserPassword(session.user_id,String(body.currentPassword||'')))return invalid(response,{currentPassword:'Informe a senha atual corretamente para confirmar.'});
+      if(session.role==='gestor'&&managerMfaRequired&&!session.mfa_verified_at)return json(response,403,{message:'Entre novamente e conclua a verificação em duas etapas antes de excluir esta conta.'});
       if(usesSupabaseAuth&&!requireSupabaseAdmin(response))return;
       if(session.role==='gestor'){
         const managers=await db.prepare("SELECT COUNT(*) AS total FROM users WHERE role='gestor' AND active=1").get();
@@ -360,6 +384,7 @@ export function createApiHandler(context) {
     }
   
     if (/^\/api\/professores\/me\/turmas\/\d+\/(?:mural|informativos)(?:\/\d+)?$/.test(url.pathname)) return courseAnnouncementRoutes(request,response,url,ip);
+    if (url.pathname === '/api/professores/me/turmas' || url.pathname === '/api/professores/me/turmas/opcoes' || /^\/api\/professores\/me\/turmas\/\d+$/.test(url.pathname)) return classRoutes(request,response,url,ip);
     if (url.pathname.startsWith('/api/professores/me/turmas/')) return scheduleRoutes(request,response,url,ip);
 
     if (url.pathname === '/cursos' || url.pathname.startsWith('/cursos/') || url.pathname.startsWith('/api/catalogos/')) {

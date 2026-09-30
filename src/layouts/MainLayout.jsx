@@ -50,7 +50,7 @@ const MainLayout = ({ children }) => {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col" {...(sidebarOpen ? { inert: '' } : {})}>
                 <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-                <main ref={mainRef} id="main-content" tabIndex="-1" className="app-main-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 outline-none sm:p-6 lg:p-8">
+                <main ref={mainRef} id="main-content" tabIndex="-1" className="app-main-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-3 outline-none sm:p-6 lg:p-8">
                     <div className="page-shell">{user?.role==='professor'&&<TeacherClassSetup key={user.id}/>}<React.Suspense fallback={<PageSkeleton />}>{children}</React.Suspense></div>
                 </main>
             </div>

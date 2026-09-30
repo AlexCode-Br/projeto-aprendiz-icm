@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { courseWallDestination, notifyCourseWallGroup, notifyCourseWallLike } from './course-wall-notifications.mjs';
 
-test('destino do mural abre a turma correta para cada perfil',()=>{
+test('destino do mural abre a turma correta somente para participantes',()=>{
   assert.equal(courseWallDestination('aluno',12),'/aluno/cursos/12?view=mural');
   assert.equal(courseWallDestination('professor',12),'/professor/turmas?turma=12');
-  assert.equal(courseWallDestination('gestor',12),'/gestor/cursos?turma=12');
+  assert.equal(courseWallDestination('gestor',12),'/configuracoes');
 });
 
 test('nova publicação e comentário notificam o grupo, menos quem realizou a ação',async()=>{
@@ -20,14 +20,12 @@ test('nova publicação e comentário notificam o grupo, menos quem realizou a a
   await notifyCourseWallGroup({db,notificationService,logger,classId:8,courseName:'Canto Coral',actorUserId:2,actorName:'Ana',event:'post',eventId:41});
   assert.deepEqual(deliveries.map(item=>[item[0],item[1],item[5].destination]),[
     [1,'wallPosts','/professor/turmas?turma=8'],
-    [3,'wallPosts','/gestor/cursos?turma=8'],
   ]);
   assert.ok(deliveries.every(item=>item[2]==='Nova publicação — Canto Coral'&&item[3].includes('Ana')));
   deliveries.length=0;
   await notifyCourseWallGroup({db,notificationService,logger,classId:8,courseName:'Canto Coral',actorUserId:1,actorName:'Prof. Bruno',event:'comment',eventId:'comment-1'});
   assert.deepEqual(deliveries.map(item=>[item[0],item[1],item[5].destination]),[
     [2,'wallComments','/aluno/cursos/8?view=mural'],
-    [3,'wallComments','/gestor/cursos?turma=8'],
   ]);
 });
 

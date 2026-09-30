@@ -1,6 +1,6 @@
 // Permanent registration suggestions, independent of demo accounts and database seeds.
 export const COURSE_SUGGESTIONS = Object.freeze([
-  'Bateria', 'Canto Coral', 'Contrabaixo', 'Flauta Transversal', 'Saxofone',
+  'Bateria', 'Canto Coral', 'Contrabaixo', 'Flauta Transversal', 'Gaita', 'Saxofone',
   'Teclado', 'Teoria Musical', 'Violino', 'Violão I', 'Violão II',
 ]);
 export const SALVADOR_CHURCHES = Object.freeze([

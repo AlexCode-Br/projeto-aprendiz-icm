@@ -13,7 +13,6 @@ export async function communityClass(db,id,session){
     LEFT JOIN class_presentation cp ON cp.class_id=c.id
     WHERE c.id=? AND c.active=1`).get(id);
   if(!row)return null;
-  if(session.role==='gestor')return row;
   if(session.role==='professor')return Number(row.teacher_user_id)===Number(session.user_id)?row:null;
   if(session.role!=='aluno')return null;
   const enrollment=await db.prepare(`SELECT e.id FROM enrollments e JOIN students s ON s.id=e.student_id AND s.active=1
@@ -22,9 +21,9 @@ export async function communityClass(db,id,session){
 }
 
 export function createCommunityRoutes(context){
-  const {db,json,authorize,readJson,cleanText,securityHeaders,profilePhotoStorage,notificationService,notificationOutbox,logger}=context;
-  return async(request,response,url)=>{
-    const session=await authorize(request,response,['gestor','professor','aluno']);if(!session)return;
+  const {db,json,authorize,readJson,cleanText,securityHeaders,profilePhotoStorage,notificationService,notificationOutbox,logger,consumeActionRateLimit,rateLimitResponse}=context;
+  return async(request,response,url,ip)=>{
+    const session=await authorize(request,response,['professor','aluno']);if(!session)return;
     if(url.pathname==='/api/turmas/configuracao-pendente'&&request.method==='GET'){
       if(session.role!=='professor')return json(response,403,{message:'Acesso restrito ao professor.'});
       const items=await db.prepare(`SELECT c.id,co.name AS nome,l.name AS local FROM classes c
@@ -33,7 +32,11 @@ export function createCommunityRoutes(context){
         LEFT JOIN class_presentation cp ON cp.class_id=c.id
         WHERE c.active=1 AND pp.active=1 AND pp.user_id=? AND (cp.class_id IS NULL OR cp.configured_by<>pp.user_id OR cp.configured_by IS NULL)
         ORDER BY c.id`).all(session.user_id);
-      return json(response,200,{items});
+      const classCount=await db.prepare(`SELECT COUNT(*) AS total FROM classes c
+        JOIN professor_profiles pp ON pp.id=c.professor_id AND pp.active=1
+        JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
+        WHERE c.active=1 AND pp.user_id=?`).get(session.user_id);
+      return json(response,200,{items,needsOffering:Number(classCount?.total||0)===0});
     }
     const match=url.pathname.match(/^\/api\/turmas\/(\d+)\/(configuracao|banner|mural\/\d+\/(?:foto|curtida|comentarios(?:\/[a-f0-9-]+(?:\/foto)?)?))$/);
     if(!match)return json(response,404,{message:'Rota não encontrada.'});
@@ -101,6 +104,8 @@ export function createCommunityRoutes(context){
     }
     if(kind==='curtida'&&['PUT','DELETE'].includes(request.method)){
       if(!permissions.reagir)return json(response,403,{message:'As interações dos alunos estão desativadas nesta turma.'});
+      const actionLimit=await consumeActionRateLimit({route:'wall_like',userId:session.user_id,ip,limit:60});
+      if(actionLimit.blocked)return rateLimitResponse(response,actionLimit);
       if(request.method==='PUT'){
         const result=await db.prepare('INSERT INTO course_post_likes(announcement_id,user_id) VALUES (?,?) ON CONFLICT DO NOTHING').run(post.id,session.user_id);
         if(result.changes)try{await notifyCourseWallLike({notificationService,notificationOutbox,classId:id,courseName:course.nome,postId:post.id,ownerUserId:post.author_user_id,ownerRole:post.author_role,actorUserId:session.user_id,actorName:session.name});}
@@ -125,6 +130,8 @@ export function createCommunityRoutes(context){
     }
     if(kind==='comentarios'&&!commentId&&request.method==='POST'){
       if(!permissions.comentar)return json(response,403,{message:'Os comentários dos alunos estão desativados nesta turma.'});
+      const actionLimit=await consumeActionRateLimit({route:'wall_comment',userId:session.user_id,ip,limit:30});
+      if(actionLimit.blocked)return rateLimitResponse(response,actionLimit);
       const body=await readJson(request),content=cleanText(body.conteudo,2001);
       if(!content||content.length>2000)return json(response,400,{message:'Escreva um comentário de até 2000 caracteres.'});
       const createdId=randomUUID();

@@ -22,8 +22,8 @@ export default function BannerCropper({source,initial,onApply,onClose}) {
   return <Modal isOpen onClose={onClose} title="Ajustar imagem do banner" maxWidth="max-w-4xl">
     <p id="banner-crop-help" className="mb-4 text-sm text-text-muted">Arraste a imagem para enquadrar. No celular, use dois dedos para ampliar ou reduzir. O quadro indica a área visível do banner.</p>
     <div ref={frame} role="group" aria-label="Área de recorte do banner" aria-describedby="banner-crop-help" tabIndex={0}
-      className="relative w-full touch-none select-none overflow-hidden rounded-xl bg-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-primary"
-      style={{aspectRatio:'6.4 / 1',minHeight:120,cursor:ready?'grab':'wait'}}
+      className="relative h-[clamp(7.5rem,15.625vw,15rem)] w-full min-w-0 touch-none select-none overflow-hidden rounded-xl bg-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      style={{cursor:ready?'grab':'wait'}}
       onPointerDown={event=>{if(!ready)return;event.currentTarget.setPointerCapture(event.pointerId);pointers.current.set(event.pointerId,{x:event.clientX,y:event.clientY});}}
       onPointerMove={move} onPointerUp={event=>pointers.current.delete(event.pointerId)} onPointerCancel={event=>pointers.current.delete(event.pointerId)} onLostPointerCapture={event=>pointers.current.delete(event.pointerId)}
       onKeyDown={event=>{const offsets={ArrowLeft:{x:-10,y:0},ArrowRight:{x:10,y:0},ArrowUp:{x:0,y:-10},ArrowDown:{x:0,y:10}};if(offsets[event.key]){event.preventDefault();setCrop(current=>moveBannerCrop(current,offsets[event.key],size.current,frame.current.getBoundingClientRect()));}}}>

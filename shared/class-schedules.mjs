@@ -30,6 +30,31 @@ export function scheduleText(slot) {
   return (slot.tipo === 'data' ? new Date(`${slot.date}T12:00:00Z`).toLocaleDateString('pt-BR') : slot.weekday) + ' às ' + slot.start_time;
 }
 
+const SHORT_WEEKDAYS = new Map(CLASS_WEEKDAYS.map((day, index) => [day, ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'][index]]));
+
+function joinScheduleDays(days) {
+  if (days.length < 2) return days[0] || '';
+  return `${days.slice(0, -1).join(', ')} e ${days.at(-1)}`;
+}
+
+export function compactClassScheduleRows(course) {
+  const weeklyByTime = new Map();
+  const rows = [];
+  for (const slot of classSchedules(course)) {
+    if (slot.tipo === 'data') {
+      rows.push({ key: `data/${slot.date}/${slot.start_time}`, text: scheduleText(slot) });
+      continue;
+    }
+    const group = weeklyByTime.get(slot.start_time) || { key: `weekly/${slot.start_time}`, time: slot.start_time, days: [] };
+    group.days.push(SHORT_WEEKDAYS.get(slot.weekday) || slot.weekday);
+    if (!weeklyByTime.has(slot.start_time)) {
+      weeklyByTime.set(slot.start_time, group);
+      rows.push(group);
+    }
+  }
+  return rows.map(row => row.days ? ({ key: row.key, text: `${joinScheduleDays(row.days)} às ${row.time}` }) : row);
+}
+
 export function classScheduleConflicts(classes) {
   const bySlot = new Map();
   for (const course of classes) {

@@ -2,7 +2,7 @@ import React, { useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 import api from '../services/api';
-import { LayoutDashboard, BookOpen, Users, GraduationCap, ChartNoAxesCombined, Megaphone, MessagesSquare, CalendarCheck2, Settings, PanelLeftClose, PanelLeftOpen, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, GraduationCap, ChartNoAxesCombined, Megaphone, MessagesSquare, CalendarCheck2, Settings, PanelLeftClose, PanelLeftOpen, ChevronDown, Plus } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
@@ -97,7 +97,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
     ];
 
     if (userRole === 'professor') {
-        navLinks.splice(2, 0, {
+        navLinks.splice(3, 0, {
             path: '/frequencia',
             icon: <CalendarCheck2 aria-hidden="true" />,
             label: 'Frequência',
@@ -122,14 +122,14 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
             <button
                 type="button"
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="absolute right-0 top-[18px] z-50 hidden h-10 w-10 translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-primary shadow-md transition-colors hover:bg-surface-hover lg:flex"
+                className="absolute right-0 top-4 z-50 hidden h-11 w-11 translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-primary shadow-md transition-colors hover:bg-surface-hover lg:flex"
                 aria-label={isCollapsed ? "Expandir menu" : "Recolher menu"}
                 title={isCollapsed ? "Expandir" : "Recolher"}
             >
                 {isCollapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
             </button>
 
-            <div className={`flex h-[76px] shrink-0 items-center border-b border-white/10 px-4 ${isCollapsed ? 'lg:justify-center justify-between' : 'justify-between'}`}>
+            <div className={`flex h-16 shrink-0 items-center border-b border-white/10 px-4 sm:h-[76px] ${isCollapsed ? 'lg:justify-center justify-between' : 'justify-between'}`}>
                 <div className={`flex flex-col items-start overflow-hidden transition-all duration-300 ${isCollapsed ? 'lg:w-0 lg:opacity-0 w-full opacity-100' : 'w-full opacity-100'}`}>
                     <img src="/departamento-louvor-logo.png" width="205" height="58" alt="Departamento de Louvor" className="h-auto w-[11.75rem] max-w-full object-contain brightness-0 invert" />
                 </div>
@@ -166,6 +166,10 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
                                         </NavLink>;
                                     })}
                                     {!linkedClassesLoading&&!linkedClasses.length&&<p className="px-3 py-2 text-xs text-white/60">Nenhuma turma vinculada.</p>}
+                                    {userRole==='professor'&&<NavLink to="/professor/turmas?nova=1" className="mt-1 flex min-h-11 items-center gap-2 rounded-lg border border-dashed border-white/30 px-3 py-2 text-xs font-semibold text-white/90 transition-colors hover:border-white/60 hover:bg-white/10 hover:text-white" onClick={()=>setSidebarOpen(false)}>
+                                        <Plus aria-hidden="true" className="h-4 w-4 shrink-0" />
+                                        <span>Adicionar turma</span>
+                                    </NavLink>}
                                 </div>}
                             </div>;
                         }

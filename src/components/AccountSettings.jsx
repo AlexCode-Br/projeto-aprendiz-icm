@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-    Bell, CheckCircle2, ChevronDown, FileText, Heart, Info, Laptop, LockKeyhole, LogOut,
+    AlertCircle, Bell, CheckCircle2, LoaderCircle, ChevronDown, FileText, Headphones, Info, Laptop, LockKeyhole,
     Mail, MessageSquare, Send, ShieldCheck, Smartphone, Trash2, UserRound, UsersRound,
 } from 'lucide-react';
 import AccountDeletionModal from './AccountDeletionModal';
@@ -16,9 +16,10 @@ import {
     removePushDevice, testPushNotifications,
 } from '../services/pushNotifications';
 import { describeDevice } from '../utils/deviceInfo';
+import { wallPreferenceValue, updateWallPreferences } from '../utils/wallPreferences.mjs';
 import { personNameError } from '../../shared/validation.mjs';
 
-const preferenceIcons = { newStudent: Mail, newTicket: MessageSquare, courseUpdates: UsersRound, systemAlerts: ShieldCheck, systemNews: FileText, wallPosts: Bell, wallComments: MessageSquare, wallLikes: Heart };
+const preferenceIcons = { newStudent: Mail, newTicket: Headphones, courseUpdates: UsersRound, systemAlerts: ShieldCheck, systemNews: FileText };
 
 function formatAccessDate(value) {
     if (!value) return 'Acesso recente';
@@ -29,8 +30,8 @@ function formatAccessDate(value) {
 
 function SectionHeader({ icon: Icon, title, description, expanded, onToggle, collapsible = true }) {
     const content = <>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center text-text-default">{React.createElement(Icon, { 'aria-hidden': true, className: 'h-7 w-7' })}</span>
-        <span className="min-w-0 flex-1"><span className="block text-lg font-bold text-text-default">{title}</span><span className="mt-0.5 block text-sm text-text-muted">{description}</span></span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/5 text-primary">{React.createElement(Icon, { 'aria-hidden': true, className: 'h-5 w-5' })}</span>
+        <span className="min-w-0 flex-1"><span className="block text-base font-semibold text-text-default">{title}</span><span className="mt-1 block text-sm leading-6 text-text-muted">{description}</span></span>
         {collapsible && <ChevronDown aria-hidden="true" className={`h-5 w-5 shrink-0 text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />}
     </>;
     return collapsible
@@ -50,18 +51,21 @@ export default function AccountSettings() {
     const [saving, setSaving] = useState('');
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [section, setSection] = useState('profile');
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [expanded, setExpanded] = useState({ security: true, notifications: true, devices: true, deletion: false });
+    const [expanded, setExpanded] = useState({ deletion: false });
     const [pushState, setPushState] = useState(() => ({ ...pushCapability(), configured: false, active: false, devices: [], loading: true }));
+    const [loginSessions, setLoginSessions] = useState([]);
 
     const loadAccount = useCallback(async () => {
         setLoading(true);
         setLoadError('');
         try {
-            const { data } = await api.get('/api/account');
+            const [{ data }, { data: sessionData }] = await Promise.all([api.get('/api/account'), api.get('/api/account/sessions')]);
             setProfile({ nome: data.user.nome });
             setPhotoUrl(data.photoUrl || '');
             setPreferences(previous => ({ ...previous, ...data.preferences }));
+            setLoginSessions(sessionData.items || []);
         } catch (error) { setLoadError(error.message || 'Não foi possível carregar sua conta.'); }
         finally { setLoading(false); }
     }, []);
@@ -132,7 +136,7 @@ export default function AccountSettings() {
     const updatePreference = async (key, checked) => {
         if (saving) return;
         const previous = preferences;
-        const next = { ...preferences, [key]: checked };
+        const next = key === 'wall' ? updateWallPreferences(preferences, checked) : { ...preferences, [key]: checked };
         setPreferences(next);
         setPreferenceStatus('saving');
         setSaving('preferences');
@@ -172,6 +176,17 @@ export default function AccountSettings() {
         finally { setSaving(''); }
     };
 
+    const revokeLoginSession = async session => {
+        if (saving || session.current || !window.confirm(`Encerrar a sessão em ${describeDevice(session.userAgent).label}?`)) return;
+        setSaving(`session-${session.id}`);
+        try {
+            await api.delete(`/api/account/sessions/${session.id}`);
+            setLoginSessions(items => items.filter(item => Number(item.id) !== Number(session.id)));
+            showToast('Sessão encerrada com sucesso.', 'success');
+        } catch (error) { showToast(error.message, 'error'); }
+        finally { setSaving(''); }
+    };
+
     const testDeviceNotification = async () => {
         if (saving || pushState.loading) return;
         setSaving('test-push');
@@ -180,11 +195,11 @@ export default function AccountSettings() {
         finally { setSaving(''); }
     };
 
-    const deleteAccount = async confirmation => {
+    const deleteAccount = async (confirmation, currentPassword) => {
         if (saving) return;
         setSaving('delete');
         try {
-            const { data } = await api.post('/api/account/delete', { confirmation });
+            const { data } = await api.post('/api/account/delete', { confirmation, currentPassword });
             showToast(data.message, 'success', 7000);
             setDeleteOpen(false);
             await logout();
@@ -198,17 +213,11 @@ export default function AccountSettings() {
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
     ] : user?.role === 'aluno' ? [
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da própria conta.'],
-        ['wallPosts', 'Novas publicações no mural', 'Receber mensagens publicadas nas suas turmas.'],
-        ['wallComments', 'Comentários no mural', 'Receber novas respostas e conversas das suas turmas.'],
-        ['wallLikes', 'Curtidas nas suas publicações', 'Avisar quando alguém curtir uma publicação sua.'],
         ['systemNews', 'Informativos da gestão', 'Receber informativos destinados às suas turmas.'],
     ] : [
         ['newStudent', 'Novos alunos', 'Avisar quando um aluno entrar em uma de suas turmas.'],
         ['newTicket', 'Respostas do suporte', 'Avisar quando houver uma resposta em seus chamados.'],
         ['courseUpdates', 'Alterações nas turmas', 'Receber mudanças de curso, local ou horário.'],
-        ['wallPosts', 'Novas publicações no mural', 'Receber mensagens publicadas nas suas turmas.'],
-        ['wallComments', 'Comentários no mural', 'Receber novas respostas e conversas das suas turmas.'],
-        ['wallLikes', 'Curtidas nas suas publicações', 'Avisar quando alguém curtir uma publicação sua.'],
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
         ['systemNews', 'Comunicados do sistema', 'Receber novidades e atualizações do projeto.'],
     ];
@@ -217,50 +226,75 @@ export default function AccountSettings() {
     if (loading) return <PageSkeleton />;
     if (loadError) return <div className="space-y-6"><h1 className="page-title">Configurações da conta</h1><div className="panel p-6"><p role="alert" className="text-danger">{loadError}</p><button type="button" onClick={loadAccount} className="btn btn-secondary mt-4">Tentar novamente</button></div></div>;
 
-    return <div className="mx-auto max-w-6xl space-y-5 pb-8">
+    return <div className="w-full min-w-0 space-y-6 pb-8">
         <header><h1 className="page-title">Configurações da conta</h1><p className="page-description">Gerencie suas informações, preferências e segurança em um só lugar.</p></header>
-
+        <nav aria-label="Seções das configurações" className="grid grid-cols-3 gap-1 rounded-xl border border-border bg-surface p-1 sm:flex sm:gap-2">
+            {[[ 'profile', 'Perfil', UserRound ], [ 'notifications', 'Notificações', Bell ], [ 'security', 'Segurança', ShieldCheck ]].map(([key, label, Icon]) => <button key={key} type="button" aria-current={section === key ? 'page' : undefined} aria-controls={`settings-${key}`} onClick={() => setSection(key)} className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary sm:px-5 sm:text-sm ${section === key ? 'bg-primary/10 text-primary' : 'text-text-muted hover:bg-surface-muted'}`}>{React.createElement(Icon, { 'aria-hidden': true, className: 'hidden h-4 w-4 shrink-0 min-[400px]:block' })}{label}</button>)}
+        </nav>
+        <div id="settings-profile" hidden={section !== 'profile'} className="space-y-5">
         <form onSubmit={saveProfile} className="panel p-5 sm:p-7">
             <SectionHeader icon={UserRound} title="Perfil" description="Suas informações pessoais e como você aparece no sistema." collapsible={false} />
             <div className="mt-6 grid items-center gap-6 border-t border-border pt-6 md:grid-cols-[10rem_minmax(0,1fr)_auto]">
                 <ProfilePhotoPicker compact name={profile.nome} currentUrl={photoUrl ? `${photoUrl}${photoUrl.includes('?') ? '&' : '?'}view=${photoVersion}` : ''} value={photoChange} onChange={savePhoto} disabled={Boolean(saving)} saving={saving === 'photo'} />
                 <label className="block text-sm font-semibold text-text-default" htmlFor="settings-name">Nome completo<input id="settings-name" required maxLength="100" autoComplete="name" value={profile.nome} onChange={event => setProfile({ nome: event.target.value })} className="form-control mt-2" /><span className="mt-2 block text-xs font-normal text-text-muted">Este nome será exibido no sistema.</span></label>
-                <button disabled={Boolean(saving)} className="submit-btn w-full md:w-auto">{saving === 'profile' ? 'Salvando…' : 'Salvar'}</button>
+                <button disabled={Boolean(saving) || profile.nome === user?.nome} className="btn btn-primary w-full md:w-auto">{saving === 'profile' ? 'Salvando…' : 'Salvar nome'}</button>
             </div>
         </form>
 
         {user?.role === 'aluno' && <StudentPersonalSettings />}
+        </div>
+        <div id="settings-security" hidden={section !== 'security'} className="space-y-5">
 
         <section className="panel p-5 sm:p-7">
-            <SectionHeader icon={LockKeyhole} title="Segurança da conta" description="Mantenha sua conta segura com uma senha forte." expanded={expanded.security} onToggle={() => setExpanded(value => ({ ...value, security: !value.security }))} />
-            {expanded.security && <div className="mt-6 border-t border-border pt-6">
-                <div className="grid items-center gap-5 rounded-xl bg-danger/5 p-5 sm:grid-cols-[4.5rem_minmax(0,1fr)_auto]">
-                    <span className="flex h-14 w-14 items-center justify-center rounded-full bg-danger/10 text-danger"><Mail aria-hidden="true" className="h-7 w-7" /></span>
+            <SectionHeader icon={LockKeyhole} title="Segurança da conta" description="Mantenha sua conta segura com uma senha forte." collapsible={false} />
+            <div className="mt-6 border-t border-border pt-6">
+                <div className="grid items-center gap-5 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <div><h3 className="font-bold text-text-default">Senha</h3><p className="mt-1 text-sm leading-6 text-text-muted">A alteração é feita por um link seguro enviado para seu e-mail.</p></div>
-                    <button type="button" onClick={requestPasswordReset} disabled={Boolean(saving)} className="btn btn-secondary border-danger text-danger hover:bg-danger/5"><Send aria-hidden="true" />{saving === 'password' ? 'Enviando…' : 'Alterar senha'}</button>
+                    <button type="button" onClick={requestPasswordReset} disabled={Boolean(saving)} className="btn btn-secondary"><Send aria-hidden="true" />{saving === 'password' ? 'Enviando…' : 'Alterar senha'}</button>
                 </div>
                 <p className="mt-4 flex items-start gap-2 text-xs leading-5 text-text-muted"><Info aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />Você receberá um e-mail com um link temporário para definir sua nova senha.</p>
-            </div>}
+            </div>
         </section>
 
         <section className="panel p-5 sm:p-7">
-            <SectionHeader icon={Bell} title="Notificações" description={user?.role === 'gestor' ? 'Escolha os avisos administrativos que deseja receber.' : 'Escolha os avisos da conta. Interações do mural usam notificações do aplicativo, sem gerar um e-mail por mensagem.'} expanded={expanded.notifications} onToggle={() => setExpanded(value => ({ ...value, notifications: !value.notifications }))} />
-            {expanded.notifications && <div className="mt-5 border-t border-border pt-2">
+            <SectionHeader icon={Laptop} title="Sessões conectadas" description="Revise onde sua conta está aberta e encerre acessos que não reconhece." collapsible={false} />
+            <div className="mt-5 divide-y divide-border border-t border-border">
+                {loginSessions.map(session => {
+                    const info=describeDevice(session.userAgent);
+                    const DeviceIcon=info.mobile?Smartphone:Laptop;
+                    return <div key={session.id} className="flex items-center gap-4 py-4">
+                        <DeviceIcon aria-hidden="true" className="h-7 w-7 shrink-0 text-text-default" />
+                        <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><strong className="text-sm">{info.label}</strong>{session.current&&<span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-semibold text-success">Sessão atual</span>}</div><p className="mt-1 text-xs text-text-muted">{formatAccessDate(session.lastSeenAt)}</p></div>
+                        {!session.current&&<button type="button" onClick={()=>revokeLoginSession(session)} disabled={Boolean(saving)} className="icon-button text-danger" aria-label={`Encerrar sessão em ${info.label}`} title="Encerrar sessão"><Trash2 aria-hidden="true" /></button>}
+                    </div>;
+                })}
+            </div>
+        </section>
+
+        </div>
+        <div id="settings-notifications" hidden={section !== 'notifications'} className="space-y-5">
+        <section className="panel p-5 sm:p-7">
+            <SectionHeader icon={Bell} title="O que você recebe" description={user?.role === 'gestor' ? 'Escolha os avisos administrativos que deseja receber.' : 'Escolha os avisos da conta. Interações do mural usam notificações do aplicativo, sem gerar um e-mail por mensagem.'} collapsible={false} />
+            <div className="mt-5 border-t border-border pt-2">
+                {user?.role !== 'gestor' && <div className="grid gap-4 border-b border-border py-5 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-center">
+                    <div className="flex min-w-0 items-start gap-3"><MessageSquare aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-primary" /><div><label htmlFor="wall-notifications" className="text-sm font-semibold">Atividades do mural</label><p id="wall-notifications-help" className="mt-1 text-sm leading-6 text-text-muted">Publicações, comentários e curtidas nas suas publicações. Válido para todas as suas turmas.</p></div></div>
+                    <FormSwitch checked={wallPreferenceValue(preferences) === 'all'} onChange={event => updatePreference('wall', event.target.checked ? 'all' : 'none')} disabled={Boolean(saving)} label={<span className="sr-only">Atividades do mural</span>} />
+                </div>}
                 <div className="divide-y divide-border">{options.map(([key, title, description]) => {
                     const Icon = preferenceIcons[key];
                     return <div key={key} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-3.5 sm:grid-cols-[2.5rem_minmax(0,1fr)_auto]">
                         <Icon aria-hidden="true" className="hidden h-6 w-6 text-primary sm:block" />
                         <span className="min-w-0"><span className="block text-sm font-semibold text-text-default">{title}</span><span className="mt-1 block text-sm leading-6 text-text-muted">{description}</span></span>
-                        <FormSwitch checked={Boolean(preferences[key])} onChange={event => updatePreference(key, event.target.checked)} disabled={saving === 'preferences'} label={<span className="sr-only">{title}</span>} />
+                        <FormSwitch checked={Boolean(preferences[key])} onChange={event => updatePreference(key, event.target.checked)} disabled={Boolean(saving)} label={<span className="sr-only">{title}</span>} />
                     </div>;
                 })}</div>
-                <div className={`mt-3 flex items-center gap-2 rounded-lg px-4 py-3 text-sm ${preferenceStatus === 'error' ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'}`}><CheckCircle2 aria-hidden="true" className="h-5 w-5" />{preferenceStatus === 'saving' ? 'Salvando suas preferências…' : preferenceStatus === 'error' ? 'Não foi possível salvar a última alteração.' : 'Suas preferências são salvas automaticamente.'}</div>
-            </div>}
+                <div role="status" aria-live="polite" className={`mt-3 flex items-center gap-2 border-t border-border pt-4 text-xs ${preferenceStatus === 'error' ? 'text-danger' : 'text-text-muted'}`}>{React.createElement(preferenceStatus === 'saving' ? LoaderCircle : preferenceStatus === 'error' ? AlertCircle : CheckCircle2, { 'aria-hidden': true, className: `h-4 w-4 shrink-0 ${preferenceStatus === 'saving' ? 'animate-spin' : ''}` })}{preferenceStatus === 'saving' ? 'Salvando suas preferências…' : preferenceStatus === 'error' ? 'Não foi possível salvar. A seleção anterior foi mantida.' : 'Suas preferências são salvas automaticamente.'}</div>
+            </div>
         </section>
 
         <section className="panel p-5 sm:p-7">
-            <SectionHeader icon={Laptop} title="Dispositivos conectados" description="Gerencie os dispositivos autorizados a receber notificações." expanded={expanded.devices} onToggle={() => setExpanded(value => ({ ...value, devices: !value.devices }))} />
-            {expanded.devices && <div className="mt-5 border-t border-border pt-2">
+            <SectionHeader icon={Laptop} title="Onde você recebe" description="Autorize notificações em cada dispositivo. Esta lista não representa suas sessões de login." collapsible={false} />
+            <div className="mt-5 border-t border-border pt-2">
                 {devices.length ? <div className="divide-y divide-border">{devices.map(device => {
                     const info = describeDevice(device.userAgent);
                     const current = Number(device.id) === Number(pushState.currentDeviceId);
@@ -272,16 +306,20 @@ export default function AccountSettings() {
                     </div>;
                 })}</div> : <div className="py-5 text-sm text-text-muted">Nenhum dispositivo está autorizado a receber notificações.</div>}
                 <div className="mt-3 flex flex-col gap-3 rounded-xl bg-surface-muted/50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <button type="button" onClick={togglePush} disabled={Boolean(saving) || pushState.loading || !rememberedSession || !pushState.supported || !pushState.configured || pushState.requiresInstall || pushState.permission === 'denied'} className={`btn ${pushState.active ? 'btn-danger' : 'btn-primary'} w-full sm:w-auto disabled:opacity-50`}><LogOut aria-hidden="true" />{saving === 'push' ? 'Aguarde…' : pushState.active ? 'Desativar neste dispositivo' : 'Ativar neste dispositivo'}</button>
-                    <div className="min-w-0 text-sm leading-6 text-text-muted">{pushState.loading ? 'Verificando este dispositivo…' : !rememberedSession ? 'Entre marcando “Permanecer conectado” para ativar.' : pushState.error || (pushState.active ? 'Este dispositivo receberá avisos mesmo com o aplicativo fechado.' : 'Ative para receber avisos na barra de notificações.')}{pushState.active && <button type="button" onClick={testDeviceNotification} disabled={Boolean(saving)} className="mt-1 block font-semibold text-primary hover:underline">{saving === 'test-push' ? 'Enviando teste…' : 'Enviar teste ao dispositivo'}</button>}</div>
+                    <button type="button" onClick={togglePush} disabled={Boolean(saving) || pushState.loading || !rememberedSession || !pushState.supported || !pushState.configured || pushState.requiresInstall || pushState.permission === 'denied'} className={`btn ${pushState.active ? 'btn-danger' : 'btn-primary'} w-full sm:w-auto disabled:opacity-50`}><Bell aria-hidden="true" />{saving === 'push' ? 'Aguarde…' : pushState.active ? 'Desativar neste dispositivo' : 'Ativar neste dispositivo'}</button>
+                    <div className="min-w-0 text-sm leading-6 text-text-muted">{pushState.loading ? 'Verificando este dispositivo…' : !rememberedSession ? 'Entre marcando “Permanecer conectado” para ativar.' : pushState.error || (!pushState.supported ? 'Este navegador não oferece suporte a notificações.' : pushState.permission === 'denied' ? 'Notificações bloqueadas. Permita o envio nas configurações do navegador.' : pushState.requiresInstall ? 'Instale o aplicativo na tela inicial para ativar as notificações.' : !pushState.configured ? 'As notificações deste dispositivo estão indisponíveis no momento.' : pushState.active ? 'Este dispositivo receberá avisos mesmo com o aplicativo fechado.' : 'Ative para receber avisos na barra de notificações.')}{pushState.active && <button type="button" onClick={testDeviceNotification} disabled={Boolean(saving)} className="mt-1 inline-flex min-h-11 items-center rounded-lg px-2 font-semibold text-primary hover:bg-primary/10 hover:underline">{saving === 'test-push' ? 'Enviando teste…' : 'Enviar teste ao dispositivo'}</button>}</div>
                 </div>
-            </div>}
+            </div>
         </section>
 
+        </div>
+        <div hidden={section !== 'security'}>
         <section className="panel p-5 sm:p-7">
             <SectionHeader icon={Trash2} title="Excluir conta" description={user.role === 'aluno' ? 'Encerrar o acesso à área do aluno.' : 'Ação permanente. Seus dados pessoais serão removidos.'} expanded={expanded.deletion} onToggle={() => setExpanded(value => ({ ...value, deletion: !value.deletion }))} />
             {expanded.deletion && <div className="mt-5 border-t border-border pt-5"><p className="max-w-3xl text-sm leading-6 text-text-muted">{user.role === 'aluno' ? 'Sua conta de acesso será excluída e as sessões serão encerradas. O cadastro acadêmico e a foto permanecem sob responsabilidade da gestão. Para solicitar a remoção desses dados, procure o gestor.' : 'A conta será desativada, todas as sessões serão encerradas e os dados pessoais serão anonimizados. Registros acadêmicos e de auditoria permanecem sem identificação pessoal.'}</p><button type="button" onClick={() => setDeleteOpen(true)} className="btn btn-danger mt-4"><Trash2 aria-hidden="true" />Excluir minha conta</button></div>}
         </section>
+
+        </div>
 
         <AccountDeletionModal studentAccount={user.role === 'aluno'} isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} email={user.email} onConfirm={deleteAccount} loading={saving === 'delete'} />
     </div>;

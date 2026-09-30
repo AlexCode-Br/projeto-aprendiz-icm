@@ -70,7 +70,7 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
     }, [dropdownOpen]);
 
     return (
-        <header className="sticky top-0 z-20 flex h-[76px] shrink-0 items-center justify-between border-b border-border bg-surface/95 px-3 backdrop-blur-md sm:px-5 lg:px-6">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b border-border bg-surface/95 px-3 backdrop-blur-md sm:h-[76px] sm:px-5 lg:px-6">
             <button id="menu-button" type="button" aria-label={sidebarOpen ? 'Fechar menu de navegação' : 'Abrir menu de navegação'} aria-controls="sidebar" aria-expanded={sidebarOpen} className={`icon-button mr-2 lg:hidden ${sidebarOpen ? 'menu-open' : ''}`} onClick={() => setSidebarOpen(!sidebarOpen)}>
                 {sidebarOpen ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
             </button>

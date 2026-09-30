@@ -35,7 +35,7 @@ Os testes locais cobrem senha incorreta, manutenção do endereço antigo antes 
 
 O cron do Worker executa a cada minuto. Informativos da gestão continuam processando até 50 pares informativo/conta por execução, com lease de cinco minutos, até três tentativas e chave de entrega idempotente. A mesma execução recupera lotes pendentes da outbox do Mural. O público é revalidado após obter o lease e as mensagens não expõem frequência ou outros dados acadêmicos na tela bloqueada.
 
-A preferência `systemNews`, apresentada ao aluno como **Informativos da gestão**, é desativada por padrão e processada pelo cron. O Mural usa preferências próprias, ativas por padrão: `wallPosts`, `wallComments` e `wallLikes`. Publicações e comentários são avisados imediatamente aos demais membros da turma, professor e gestores; curtidas avisam apenas o autor da publicação. E-mail/push respeitam essas escolhas, e push também exige autorização do dispositivo. O conteúdo continua visível no portal mesmo se os avisos forem desligados. O clique abre a turma e a aba Mural exatas.
+A preferência `systemNews`, apresentada ao aluno como **Informativos da gestão**, é desativada por padrão e processada pelo cron. O Mural usa preferências próprias, ativas por padrão: `wallPosts`, `wallComments` e `wallLikes`. Publicações e comentários são avisados imediatamente aos demais alunos ativos da turma e ao professor responsável; curtidas avisam apenas o autor da publicação. Gestores não participam do Mural nem recebem esses eventos. E-mail/push respeitam essas escolhas, e push também exige autorização do dispositivo. O conteúdo continua visível no portal mesmo se os avisos forem desligados. O clique abre a turma e a aba Mural exatas.
 
 ## Validação e limites
 

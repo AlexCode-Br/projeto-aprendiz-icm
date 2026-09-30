@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import AuthLayout from '../layouts/AuthLayout';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { consumeSecureLinkParameters } from '../utils/secureLinkToken';
 
 export default function ConfirmEmail(){
   const {logout}=useAuth();
-  const [params]=useSearchParams(),token=params.get('token')||'';
+  const [token]=useState(()=>consumeSecureLinkParameters().token);
   const [email,setEmail]=useState(''),[error,setError]=useState(''),[done,setDone]=useState(false),[busy,setBusy]=useState(false);
   useEffect(()=>{let active=true;api.get('/api/student-email/validate',{params:{token}}).then(({data})=>{if(active)setEmail(data.email);}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[token]);
   const confirm=async()=>{setBusy(true);setError('');try{await api.post('/api/student-email/confirm',{token});setDone(true);}catch(e){setError(e.message);}finally{setBusy(false);}};

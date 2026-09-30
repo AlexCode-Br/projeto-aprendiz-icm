@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import Modal from '../../components/Modal';
 import { SupportConversation, SupportTicketList } from '../../components/support/SupportUI';
 import Pagination from '../../components/Pagination';
+import useLiveRefresh from '../../hooks/useLiveRefresh';
 import api from '../../services/api';
 import { SUPPORT_STATUSES } from '../../../shared/validation.mjs';
 
@@ -79,12 +80,10 @@ const Suporte = () => {
   useEffect(()=>{const timer=setTimeout(()=>fetchTickets(),250);return()=>clearTimeout(timer);},[fetchTickets]);
   useEffect(()=>{setCurrentPage(1);},[search,filter]);
   useEffect(()=>()=>{selectedIdRef.current=null;detailRequestRef.current+=1;},[]);
-  useEffect(()=>{
-    const refresh=()=>{const ticketId=selectedIdRef.current;fetchTickets({silent:true});if(ticketId)fetchDetail(ticketId,{silent:true});};
-    const interval=setInterval(refresh,15000);
-    window.addEventListener('focus',refresh);
-    return()=>{clearInterval(interval);window.removeEventListener('focus',refresh);};
-  },[fetchTickets,fetchDetail]);
+  useLiveRefresh(()=>{
+    const ticketId=selectedIdRef.current;
+    return Promise.all([fetchTickets({silent:true}),ticketId?fetchDetail(ticketId,{silent:true}):Promise.resolve()]);
+  },{intervalMs:15000});
 
   const openTicket=async ticketId=>{
     selectedIdRef.current=ticketId;
@@ -178,8 +177,8 @@ const Suporte = () => {
     <section className="panel mb-4 p-3 sm:p-4" aria-label="Busca e filtros de chamados">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
         <label className="flex-1"><span className="sr-only">Buscar chamados</span><SearchInput value={search} onChange={event=>setSearch(event.target.value)} placeholder="Buscar por professor, assunto, conteúdo ou número..." className="form-control"/></label>
-        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar chamados">
-          {filters.map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-10 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar chamados">
+          {filters.map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-11 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}
         </div>
       </div>
     </section>

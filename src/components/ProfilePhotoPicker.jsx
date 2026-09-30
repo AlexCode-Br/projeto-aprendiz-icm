@@ -38,11 +38,11 @@ export default function ProfilePhotoPicker({ name, currentUrl = '', value, onCha
             {preview ? <button type="button" disabled={saving} onClick={() => setViewerOpen(true)} className="block rounded-full transition-transform hover:scale-[1.02] disabled:cursor-wait" aria-label="Ver foto de perfil ampliada">
                 <ProfileAvatar name={name} src={preview} className="h-28 w-28 sm:h-32 sm:w-32" textClassName="text-3xl" />
             </button> : <ProfileAvatar name={name} className="h-28 w-28 sm:h-32 sm:w-32" textClassName="text-3xl" />}
-            <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="absolute bottom-0 right-0 flex h-10 w-10 items-center justify-center rounded-full border-4 border-surface bg-slate-700 text-white shadow-md transition-colors hover:bg-slate-800 disabled:opacity-60" aria-label={preview ? 'Trocar foto' : 'Adicionar foto'} title={preview ? 'Trocar foto' : 'Adicionar foto'}><Camera aria-hidden="true" className="h-4 w-4" /></button>
+            <button type="button" disabled={disabled} onClick={() => inputRef.current?.click()} className="absolute bottom-0 right-0 flex h-11 w-11 items-center justify-center rounded-full border-4 border-surface bg-slate-700 text-white shadow-md transition-colors hover:bg-slate-800 disabled:opacity-60" aria-label={preview ? 'Trocar foto' : 'Adicionar foto'} title={preview ? 'Trocar foto' : 'Adicionar foto'}><Camera aria-hidden="true" className="h-4 w-4" /></button>
         </div>
         <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={selectFile} className="hidden" />
         <p className="text-center text-xs text-text-muted">{saving ? 'Salvando foto…' : 'Clique na câmera para alterar'}</p>
-        {preview && <button type="button" disabled={disabled} onClick={async () => { setError(''); try { await onChange(null); setViewerOpen(false); } catch (cause) { setError(cause.message || 'Não foi possível remover a foto.'); } }} className="text-xs font-semibold text-danger hover:underline">Remover foto</button>}
+        {preview && <button type="button" disabled={disabled} onClick={async () => { setError(''); try { await onChange(null); setViewerOpen(false); } catch (cause) { setError(cause.message || 'Não foi possível remover a foto.'); } }} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-semibold text-danger hover:bg-danger/10 hover:underline">Remover foto</button>}
         {error && <p role="alert" className="max-w-56 text-center text-xs text-danger">{error}</p>}
         {dialogs}
     </div>;

@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 
-test('professor gerencia somente seus horários; gestor consulta sem sobrescrever', {timeout:40000}, async () => {
+test('professor cria e configura as próprias turmas; gestor apenas consulta e exclui', {timeout:40000}, async () => {
   const directory=await mkdtemp(join(tmpdir(),'aprendiz-schedules-'));
   const databasePath=join(directory,'schedules.db');
   const port=56000+(process.pid%1000);
@@ -54,10 +54,27 @@ test('professor gerencia somente seus horários; gestor consulta sem sobrescreve
     assert.deepEqual(current.horarios,saved.data.horarios);
     const update={nome:current.nome,local:current.local,professor:current.professor,label:current.label,capacity:current.capacity};
     const managerUpdate=await call(manager,'PUT','/cursos/'+course.id,update);
-    assert.equal(managerUpdate.status,200,JSON.stringify(managerUpdate.data));
+    assert.equal(managerUpdate.status,403,JSON.stringify(managerUpdate.data));
     assert.deepEqual((await call(professor,'GET','/professores/meus-cursos')).data.find(item=>item.id===course.id).horarios,saved.data.horarios);
     assert.equal((await call(manager,'PUT','/cursos/'+course.id,{...update,weekday:'Sexta-feira',start_time:'12:00'})).status,403);
-    assert.equal((await call(manager,'POST','/cursos',{...update,label:'Nova',horarios})).status,403);
+    assert.equal((await call(manager,'POST','/cursos',update)).status,403);
+    const options=await call(professor,'GET','/api/professores/me/turmas/opcoes');
+    assert.equal(options.status,200,JSON.stringify(options.data));
+    assert.ok(options.data.cursos.length&&options.data.locais.length);
+    assert.ok(options.data.cursos.some(item=>item.nome==='Gaita'));
+    assert.ok(options.data.locais.some(item=>item.nome==='EAD'));
+    assert.ok(options.data.locais.some(item=>item.nome==='Vista Alegre'));
+    const courseOption=options.data.cursos.find(item=>item.nome===course.nome)||options.data.cursos[0];
+    const locationOption=options.data.locais.find(item=>item.nome!==course.local)||options.data.locais[0];
+    const created=await call(professor,'POST','/api/professores/me/turmas',{courseId:courseOption.id,locationId:locationOption.id,horarios:[{tipo:'semanal',weekday:'Domingo',start_time:'06:40'}]});
+    assert.equal(created.status,201,JSON.stringify(created.data));
+    const createdClass=(await call(professor,'GET','/professores/meus-cursos')).data.find(item=>item.id===created.data.id);
+    assert.ok(createdClass);
+    assert.deepEqual(createdClass.horarios,[{weekday:'Domingo',start_time:'06:40'}]);
+    assert.equal((await call(manager,'PUT','/cursos/'+created.data.id,update)).status,403);
+    assert.equal((await call(professor,'PUT','/api/professores/me/turmas/'+foreign.id,{courseId:courseOption.id,locationId:locationOption.id,horarios})).status,404);
+    const changedCourse=options.data.cursos.find(item=>Number(item.id)!==Number(courseOption.id));
+    if(changedCourse)assert.equal((await call(professor,'PUT','/api/professores/me/turmas/'+created.data.id,{courseId:changedCourse.id,locationId:locationOption.id,horarios:[{tipo:'semanal',weekday:'Domingo',start_time:'06:40'}]})).status,400);
     await stop();await start();
     assert.deepEqual((await call(professor,'GET','/professores/meus-cursos')).data.find(item=>item.id===course.id).horarios,saved.data.horarios);
     assert.equal((await call(professor,'PUT',path,{horarios:[]})).status,200);

@@ -80,7 +80,7 @@ test('rotas sensíveis bloqueiam por e-mail e IP e registram auditoria', { timeo
     assert.equal(emailBlocked.data.message, blockedMessage);
     assert.ok(Number(emailBlocked.retryAfter) > 0);
 
-    for (let attempt = 0; attempt < 14; attempt += 1) {
+    for (let attempt = 0; attempt < 15; attempt += 1) {
       assert.equal((await post('/api/auth/login', { email: `pessoa-${attempt}@example.com`, password: 'incorreta' })).status, 401);
     }
     const ipBlocked = await post('/api/auth/login', { email: 'ultima-pessoa@example.com', password: 'incorreta' });

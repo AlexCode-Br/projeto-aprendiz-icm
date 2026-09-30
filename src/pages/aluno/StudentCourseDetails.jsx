@@ -32,12 +32,9 @@ export default function StudentCourseDetails() {
   );
   if (!course) return <PageSkeleton />;
   const requestedView=searchParams.get('view');
-  const initialView=['mural','calendario','arquivos','informacoes','informativos','frequencia'].includes(requestedView)?requestedView:'mural';
+  const initialView=['mural','arquivos','informativos','frequencia'].includes(requestedView)?requestedView:'mural';
 
   return (
-    <div className="space-y-5">
-      <Link className="text-sm font-semibold text-primary hover:underline" to="/aluno/dashboard">← Visão geral</Link>
       <CourseRoom key={`${id}/${initialView}`} course={course} settings={settings} student initialView={initialView} renderView={view=><StudentPortal key={`${id}/${view}`} page={view} courseId={id} initialPeriod={String(course.periodId)}/>}/>
-    </div>
   );
 }

@@ -68,7 +68,8 @@ test('uma falha no e-mail não impede a entrega da notificação push', async ()
   assert.equal(result.sent, true);
   assert.deepEqual(result.channels, { email: false, push: true });
   assert.equal(pushed[0][0], 7);
-  assert.equal(pushed[0][1].title, 'Aviso');
+  assert.equal(pushed[0][1].title, 'Projeto Aprendiz');
+  assert.doesNotMatch(pushed[0][1].body, /Conteúdo/);
   assert.equal(pushed[0][1].url, '/configuracoes');
   await service.notifyUser(7, 'courseUpdates', 'Mural', 'Conteúdo', 'mural/7', '/aluno/cursos/12?view=mural');
   assert.equal(pushed[1][1].url, '/aluno/cursos/12?view=mural');

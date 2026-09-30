@@ -6,7 +6,7 @@ Para retomar o desenvolvimento em uma nova tarefa, consulte [PROJECT_STATUS.md](
 
 ## Recursos
 
-- Login e recuperação de senha com Supabase Auth, seguido de sessão própria em cookie `HttpOnly`, `Secure` e proteção CSRF.
+- Login e recuperação de senha com Supabase Auth exclusivamente pelo backend, seguido de sessão própria em cookie `HttpOnly`, `Secure` e proteção CSRF. Após cinco credenciais inválidas, o login exige Cloudflare Turnstile validado no servidor.
 - Papéis de Gestor e Professor autorizados no backend, sem confiar em metadados editáveis do usuário.
 - Convites com tokens temporários, de uso único e armazenados somente como hash.
 - E-mails reais via Resend em produção e caixa local em `/dev-mail` durante o desenvolvimento.
@@ -49,7 +49,7 @@ pnpm cloudflare:build
 pnpm cloudflare:deploy
 ```
 
-O arquivo `wrangler.jsonc` é a fonte de verdade da infraestrutura pública. Os segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `RESEND_API_KEY`, `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` devem ser cadastrados com `wrangler secret put`, nunca versionados. Consulte [cloudflare/OPERATIONS.md](cloudflare/OPERATIONS.md) antes de publicar.
+O arquivo `wrangler.jsonc` é a fonte de verdade da infraestrutura pública. Os segredos `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `TURNSTILE_SECRET_KEY`, `RESEND_API_KEY`, `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` devem ser cadastrados com `wrangler secret put`, nunca versionados. Consulte [cloudflare/OPERATIONS.md](cloudflare/OPERATIONS.md) antes de publicar.
 
 As tabelas ficam no schema privado `projeto_aprendiz` e não são acessadas diretamente pelo navegador. O bucket privado `announcement-attachments` é criado sob demanda pelo backend; professores acessam os arquivos somente pela rota autenticada e autorizada da aplicação.
 
@@ -59,9 +59,10 @@ As tabelas ficam no schema privado `projeto_aprendiz` e não são acessadas dire
 |---|---|
 | `DATABASE_URL` | Conexão Supavisor Session para execução Node local/alternativa. No Worker, o Hyperdrive fornece a conexão. |
 | `AUTH_PROVIDER` | Deve ser `supabase` na web. |
-| `SUPABASE_URL` / `VITE_SUPABASE_URL` | URL pública do projeto Supabase. |
-| `SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` | Chave pública; nunca use `service_role` ou chave secreta no frontend. |
+| `SUPABASE_URL` | URL pública do projeto Supabase, usada somente pelo backend. |
+| `SUPABASE_PUBLISHABLE_KEY` | Chave pública usada pelo backend para autenticação por senha; não é injetada no bundle do navegador. |
 | `SUPABASE_SECRET_KEY` | Chave secreta disponível somente no backend para Auth administrativo e Storage privado. |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | Identificação pública do widget e segredo exclusivo do Worker para validar desafios após falhas repetidas de login. |
 | `SUPABASE_ANNOUNCEMENT_BUCKET` | Bucket privado de anexos; padrão `announcement-attachments`. |
 | `BOOTSTRAP_ADMIN_EMAIL` | E-mail confirmado no Supabase Auth que receberá o papel Gestor. |
 | `RESEND_API_KEY` | Credencial para recuperação de senha e convites. |
