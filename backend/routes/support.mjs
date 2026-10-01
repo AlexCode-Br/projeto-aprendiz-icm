@@ -20,6 +20,8 @@ export function createSupportRoutes(context) {
     SUPPORT_STATUSES,
     supportStatusFromDatabase,
     notificationService,
+    consumeActionRateLimit,
+    rateLimitResponse,
   } = context;
 
   return async function supportRoutes(request, response, url, ip) {
@@ -45,6 +47,8 @@ export function createSupportRoutes(context) {
       }
       if(request.method==='POST'&&url.pathname==='/api/suporte'){
         const session=await authorize(request,response,['professor']);if(!session)return;
+        const actionLimit=await consumeActionRateLimit({route:'support_create',userId:session.user_id,ip,limit:10,windowMs:15*60_000});
+        if(actionLimit.blocked)return rateLimitResponse(response,actionLimit);
         const body=await readJson(request),rawSubject=String(body.assunto||''),rawMessage=String(body.mensagem||''),category=cleanText(body.categoria,40);
         const subject=cleanText(rawSubject,120),message=rawMessage.trim();
         const suppliedClientId=String(body.client_message_id||'').trim(),clientMessageId=suppliedClientId||`server_${randomBytes(18).toString('base64url')}`;
@@ -126,6 +130,8 @@ export function createSupportRoutes(context) {
       const replyMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/responder$/);
       if(replyMatch&&request.method==='POST'){
         const session=await authorize(request,response,['gestor','professor']);if(!session)return;
+        const actionLimit=await consumeActionRateLimit({route:'support_reply',userId:session.user_id,ip,limit:30,windowMs:15*60_000});
+        if(actionLimit.blocked)return rateLimitResponse(response,actionLimit);
         const ticketId=Number(replyMatch[1]),ticket=await supportTicketForSession(ticketId,session);
         if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
         if(ticket.status==='Resolvido'&&session.role==='gestor')return json(response,409,{message:'Reabra o chamado antes de responder.'});

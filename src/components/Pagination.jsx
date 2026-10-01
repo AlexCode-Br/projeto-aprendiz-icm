@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import React from 'react';
 
-const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange }) => {
+const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange, compact = false, className = '' }) => {
     const totalPages = Math.ceil(totalItems / itemsPerPage);
 
     if (totalPages <= 1) {
@@ -23,8 +23,26 @@ const Pagination = ({ currentPage, totalItems, itemsPerPage, onPageChange }) => 
     const startItem = (currentPage - 1) * itemsPerPage + 1;
     const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 
+    if (compact) {
+        return (
+            <nav className={`flex items-center justify-between gap-3 border-t border-border px-4 py-3 ${className}`} aria-label="Paginação">
+                <span className="text-xs text-text-muted">
+                    Página <span className="font-semibold text-text-default">{currentPage}</span> de {totalPages}
+                </span>
+                <div className="flex items-center gap-2">
+                    <button type="button" onClick={handlePrevious} disabled={currentPage === 1} className="icon-button h-9 w-9" aria-label="Página anterior" title="Página anterior">
+                        <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                    <button type="button" onClick={handleNext} disabled={currentPage === totalPages} className="icon-button h-9 w-9" aria-label="Próxima página" title="Próxima página">
+                        <ChevronRight aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                </div>
+            </nav>
+        );
+    }
+
     return (
-        <nav className="mt-4 flex flex-col items-center justify-between gap-4 sm:flex-row" aria-label="Paginação">
+        <nav className={`mt-4 flex flex-col items-center justify-between gap-4 sm:flex-row ${className}`} aria-label="Paginação">
             {/* Informações de Contagem */}
             <div className="text-xs text-text-muted mb-2 sm:mb-0">
                 Mostrando <span className="font-semibold text-text-default">{startItem}</span> a <span className="font-semibold text-text-default">{endItem}</span> de <span className="font-semibold text-text-default">{totalItems}</span> resultados

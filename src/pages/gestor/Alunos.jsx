@@ -3,15 +3,15 @@ import api from '../../services/api';
 import { useToast } from '../../contexts/ToastContext';
 
 // --- Componentes ---
-import { Plus, Eye, ListFilter } from 'lucide-react';
+import { Pencil as PencilIcon, Plus, ListFilter, UserPlus, Trash2, Trash2 as TrashIcon } from 'lucide-react';
 import SearchInput from '../../components/SearchInput';
 import Pagination from '../../components/Pagination';
 import AlunoFormModal from '../../components/AlunoFormModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import FormSelect from '../../components/FormSelect';
+import FormCheckbox from '../../components/FormCheckbox';
 import StudentDetailsModal from '../../components/StudentDetailsModal';
-import ContactLink from '../../components/ContactLink';
-import { PencilIcon, TrashIcon } from '../../components/icons'; // Ícones genéricos
+import StudentBulkEnrollmentModal from '../../components/StudentBulkEnrollmentModal';
 import ProfileAvatar from '../../components/ProfileAvatar';
 import MobileStudentList from '../../components/MobileStudentList';
 import { STUDENT_CHURCH_SUGGESTIONS, catalogKey } from '../../../shared/catalog-options.mjs';
@@ -25,7 +25,7 @@ const Alunos = () => {
     // Estados de Paginação
     const [currentPage, setCurrentPage] = useState(1);
     const [totalAlunos, setTotalAlunos] = useState(0);
-    const [itemsPerPage] = useState(10);
+    const [itemsPerPage] = useState(5);
     const [offerings, setOfferings] = useState([]);
     const [churches, setChurches] = useState([]);
 
@@ -34,6 +34,10 @@ const Alunos = () => {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
     const [selectedAluno, setSelectedAluno] = useState(null);
     const [detailsAluno, setDetailsAluno] = useState(null);
+    const [selectedStudentIds, setSelectedStudentIds] = useState(() => new Set());
+    const [isBulkEnrollmentModalOpen, setIsBulkEnrollmentModalOpen] = useState(false);
+    const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
+    const [bulkSaving, setBulkSaving] = useState(false);
 
     // Estado de Busca
     const [searchTerm, setSearchTerm] = useState('');
@@ -41,6 +45,7 @@ const Alunos = () => {
     const requestSequence = useRef(0);
     const courseOptions = useMemo(() => [...new Set(offerings.map(item => item.nome))].sort((a,b) => a.localeCompare(b)), [offerings]);
     const classOptions = useMemo(() => offerings.filter(item => !filters.curso || item.nome === filters.curso).map(item => ({ value: item.id, label: `${item.nome} — ${item.local}${item.professor ? ` · ${item.professor}` : ''}` })), [offerings, filters.curso]);
+    const bulkClassOptions = useMemo(() => offerings.map(item => ({ value: item.id, label: `${item.nome} — ${item.local}${item.professor ? ` · ${item.professor}` : ''}` })), [offerings]);
     const churchOptions = useMemo(() => {
         const registered = new Set(churches.map(item => catalogKey(item.label)));
         const suggestedNames = [...new Map(
@@ -56,6 +61,10 @@ const Alunos = () => {
         ].sort((left, right) => left.label.localeCompare(right.label, 'pt-BR'));
     }, [churches, offerings]);
     const hasFilters = Boolean(searchTerm || Object.values(filters).some(Boolean));
+    const visibleStudentIds = alunos.map(aluno => Number(aluno.id));
+    const allVisibleSelected = visibleStudentIds.length > 0 && visibleStudentIds.every(id => selectedStudentIds.has(id));
+    const someVisibleSelected = visibleStudentIds.some(id => selectedStudentIds.has(id));
+    const selectedCount = selectedStudentIds.size;
 
     const { showToast } = useToast();
 
@@ -93,6 +102,12 @@ const Alunos = () => {
         return () => { clearTimeout(timer); requestSequence.current += 1; };
     }, [fetchAlunos]);
 
+    useEffect(() => {
+        if (loading) return;
+        const totalPages = Math.max(1, Math.ceil(totalAlunos / itemsPerPage));
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, itemsPerPage, loading, totalAlunos]);
+
     const fetchAcademicOptions = useCallback(async () => {
         try {
             const [classesResponse, churchesResponse] = await Promise.all([api.get('/cursos'), api.get('/api/churches')]);
@@ -128,11 +143,15 @@ const Alunos = () => {
     const handleSaveAluno = async (formData, alunoId, photoChange) => {
         try {
             let savedId = alunoId;
+            let invitation = null;
+            let emailConfirmation = null;
             if (alunoId) {
-                await api.put(`/alunos/${alunoId}`, formData);
+                const response = await api.put(`/alunos/${alunoId}`, formData);
+                emailConfirmation = response.data.emailConfirmation;
             } else {
                 const response = await api.post('/alunos', formData);
                 savedId = response.data.id;
+                invitation = response.data.invitation;
             }
             let photoFailed = false;
             try {
@@ -141,7 +160,15 @@ const Alunos = () => {
             } catch {
                 photoFailed = true;
             }
-            showToast(photoFailed ? 'Aluno salvo, mas não foi possível atualizar a foto.' : alunoId ? 'Aluno atualizado com sucesso!' : 'Aluno adicionado com sucesso!', photoFailed ? 'warning' : 'success', photoFailed ? 6000 : undefined);
+            const warning = photoFailed || (!alunoId && invitation?.sent === false) || (alunoId && emailConfirmation?.sent === false);
+            const message = photoFailed
+                ? 'Aluno salvo, mas não foi possível atualizar a foto.'
+                : alunoId && emailConfirmation?.sent === true ? emailConfirmation.message
+                    : alunoId && emailConfirmation?.sent === false ? `Aluno atualizado, mas ${emailConfirmation.message}`
+                    : alunoId ? 'Aluno atualizado com sucesso!'
+                    : invitation?.sent === false ? `Aluno adicionado, mas o convite não foi enviado. ${invitation.message}`
+                        : 'Aluno adicionado e convite de acesso enviado!';
+            showToast(message, warning ? 'warning' : 'success', warning ? 7000 : undefined);
             handleCloseModals();
             await Promise.all([fetchAlunos(), fetchAcademicOptions()]);
         } catch (error) {
@@ -156,12 +183,70 @@ const Alunos = () => {
         try {
             const response = await api.delete(`/alunos/${selectedAluno.id}`);
             showToast(response.data?.message || 'Dados pessoais do aluno anonimizados com sucesso!', 'success');
+            setSelectedStudentIds(current => {
+                const next = new Set(current);
+                next.delete(Number(selectedAluno.id));
+                return next;
+            });
             await fetchAlunos();
         } catch (error) {
             showToast('Erro ao excluir aluno.', 'error');
             console.error("Erro ao excluir aluno:", error);
         } finally {
             handleCloseModals();
+        }
+    };
+
+    const toggleStudentSelection = aluno => {
+        const id = Number(aluno.id);
+        setSelectedStudentIds(current => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleVisibleStudents = () => {
+        setSelectedStudentIds(current => {
+            const next = new Set(current);
+            if (allVisibleSelected) visibleStudentIds.forEach(id => next.delete(id));
+            else visibleStudentIds.forEach(id => next.add(id));
+            return next;
+        });
+    };
+
+    const clearStudentSelection = () => setSelectedStudentIds(new Set());
+
+    const handleBulkEnrollment = async classId => {
+        if (!selectedCount) return;
+        setBulkSaving(true);
+        try {
+            const response = await api.post('/api/alunos/bulk/enroll', { student_ids: [...selectedStudentIds], class_id: classId });
+            showToast(response.data?.message || 'Alunos adicionados à turma com sucesso!', 'success');
+            setIsBulkEnrollmentModalOpen(false);
+            clearStudentSelection();
+            await Promise.all([fetchAlunos(), fetchAcademicOptions()]);
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Não foi possível adicionar os alunos à turma.', 'error');
+        } finally {
+            setBulkSaving(false);
+        }
+    };
+
+    const handleBulkDelete = async () => {
+        if (!selectedCount) return;
+        setBulkSaving(true);
+        try {
+            const response = await api.post('/api/alunos/bulk/anonymize', { student_ids: [...selectedStudentIds] });
+            showToast(response.data?.message || 'Alunos excluídos com sucesso!', 'success');
+            setIsBulkDeleteModalOpen(false);
+            clearStudentSelection();
+            await fetchAlunos();
+        } catch (error) {
+            showToast(error.response?.data?.message || 'Não foi possível excluir os alunos selecionados.', 'error');
+        } finally {
+            setBulkSaving(false);
         }
     };
 
@@ -200,16 +285,29 @@ const Alunos = () => {
                 </div>
             </section>
 
+            {selectedCount > 0 && <section className="panel mb-4 flex flex-col gap-3 border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between" aria-label="Ações para alunos selecionados">
+                <div>
+                    <p className="font-semibold text-text-default" aria-live="polite">{selectedCount} {selectedCount === 1 ? 'aluno selecionado' : 'alunos selecionados'}</p>
+                    <button type="button" onClick={clearStudentSelection} disabled={bulkSaving} className="mt-1 text-sm font-medium text-primary hover:underline disabled:opacity-50">Limpar seleção</button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:flex">
+                    <button type="button" onClick={() => setIsBulkEnrollmentModalOpen(true)} disabled={bulkSaving || !bulkClassOptions.length} className="btn btn-secondary"><UserPlus aria-hidden="true" />Adicionar à turma</button>
+                    <button type="button" onClick={() => setIsBulkDeleteModalOpen(true)} disabled={bulkSaving} className="btn btn-danger"><Trash2 aria-hidden="true" />Excluir</button>
+                </div>
+            </section>}
+
             {/* Tabela de Alunos */}
-            <MobileStudentList students={alunos} loading={loading} error={error} onView={setDetailsAluno} onEdit={handleOpenFormModal} onDelete={handleOpenConfirmModal} />
-            <div className="panel hidden overflow-x-auto sm:block">
+            <MobileStudentList students={alunos} loading={loading} error={error} onView={setDetailsAluno} onEdit={handleOpenFormModal} onDelete={handleOpenConfirmModal} selectedIds={selectedStudentIds} onToggleSelection={toggleStudentSelection} showAcademicSummary />
+            <div className="panel hidden overflow-x-auto xl:block">
                 <table className="data-table min-w-full divide-y divide-border">
                     <thead className="bg-surface">
                         <tr>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Aluno</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Email</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Telefone</th>
-                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">Ações</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Igreja</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Classe</th>
+                            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">
+                                <div className="flex items-center justify-end gap-3"><span>Ações</span><FormCheckbox checked={allVisibleSelected} indeterminate={someVisibleSelected && !allVisibleSelected} onChange={toggleVisibleStudents} disabled={loading || !visibleStudentIds.length} aria-label={allVisibleSelected ? 'Desmarcar alunos desta página' : 'Selecionar alunos desta página'} className="items-center" /></div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -218,21 +316,21 @@ const Alunos = () => {
                         ) : error ? (
                              <tr><td colSpan="4" className="text-center py-4 text-danger">{error}</td></tr>
                         ) : alunos.map((aluno) => (
-                            <tr key={aluno.id} className="hover:bg-border/50">
+                            <tr key={aluno.id} className={`hover:bg-border/50 ${selectedStudentIds.has(Number(aluno.id)) ? 'bg-primary/5' : ''}`}>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
+                                    <button type="button" onClick={() => setDetailsAluno(aluno)} aria-label={`Ver dados de ${aluno.nome}`} className="flex min-h-11 min-w-0 items-center gap-3 rounded text-left hover:text-primary"><ProfileAvatar name={aluno.nome} src={aluno.foto_url} className="h-10 w-10" /><span className="break-words font-semibold">{aluno.nome}</span></button>
                                 </td>
-                                <td data-label="E-mail" className="px-6 py-4 text-sm text-text-muted"><ContactLink type="email" value={aluno.email} /></td>
-                                <td data-label="Telefone" className="px-6 py-4 text-sm text-text-muted"><ContactLink type="phone" value={aluno.telefone} /></td>
+                                <td data-label="Igreja" className="px-6 py-4 text-sm text-text-muted">{aluno.igreja || 'Não informada'}</td>
+                                <td data-label="Classe" className="px-6 py-4 text-sm text-text-muted">{aluno.classe || 'Não informada'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <div className="flex justify-end space-x-2">
-                                        <button type="button" aria-label={`Ver detalhes de ${aluno.nome}`} onClick={() => setDetailsAluno(aluno)} className="icon-button"><Eye /></button>
+                                    <div className="flex items-center justify-end gap-2">
                                         <button type="button" aria-label={`Editar ${aluno.nome}`} onClick={() => handleOpenFormModal(aluno)} className="icon-button text-primary hover:text-primary-dark hover:bg-primary/10">
                                             <PencilIcon />
                                         </button>
                                         <button type="button" aria-label={`Excluir ${aluno.nome}`} onClick={() => handleOpenConfirmModal(aluno)} className="icon-button text-danger hover:text-red-700 hover:bg-danger/10">
                                             <TrashIcon />
                                         </button>
+                                        <FormCheckbox checked={selectedStudentIds.has(Number(aluno.id))} onChange={() => toggleStudentSelection(aluno)} aria-label={`${selectedStudentIds.has(Number(aluno.id)) ? 'Remover' : 'Adicionar'} ${aluno.nome} da seleção`} className="items-center p-2" />
                                     </div>
                                 </td>
                             </tr>
@@ -250,6 +348,8 @@ const Alunos = () => {
                 totalItems={totalAlunos}
                 itemsPerPage={itemsPerPage}
                 onPageChange={setCurrentPage}
+                compact
+                className="mt-4 rounded-xl border border-border bg-surface"
             />
 
             {/* Modais */}
@@ -269,7 +369,24 @@ const Alunos = () => {
                 message={`O cadastro de ${selectedAluno?.nome || 'este aluno'} será removido das turmas e todos os dados pessoais serão apagados de forma irreversível. O histórico acadêmico permanecerá apenas de forma anônima para estatísticas.`}
                 confirmLabel="Anonimizar e excluir"
             />
-            <StudentDetailsModal isOpen={Boolean(detailsAluno)} onClose={() => setDetailsAluno(null)} student={detailsAluno} />
+            <StudentBulkEnrollmentModal
+                isOpen={isBulkEnrollmentModalOpen}
+                onClose={() => !bulkSaving && setIsBulkEnrollmentModalOpen(false)}
+                onConfirm={handleBulkEnrollment}
+                options={bulkClassOptions}
+                selectedCount={selectedCount}
+                loading={bulkSaving}
+            />
+            <ConfirmationModal
+                isOpen={isBulkDeleteModalOpen}
+                onClose={() => !bulkSaving && setIsBulkDeleteModalOpen(false)}
+                onConfirm={handleBulkDelete}
+                title={`Anonimizar ${selectedCount} ${selectedCount === 1 ? 'aluno' : 'alunos'}?`}
+                message="Os alunos selecionados serão removidos de todas as turmas e seus dados pessoais serão apagados de forma irreversível. O histórico acadêmico permanecerá somente de forma anônima para estatísticas."
+                confirmLabel="Anonimizar e excluir selecionados"
+                loading={bulkSaving}
+            />
+            <StudentDetailsModal manageAccess isOpen={Boolean(detailsAluno)} onClose={() => setDetailsAluno(null)} student={detailsAluno} />
         </div>
     );
 };

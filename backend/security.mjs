@@ -65,19 +65,21 @@ export function createHttpSecurity({ isProduction, appOrigin, env = process.env 
   }
 
   function cookie(name, value, maxAge = 0) {
-    return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${isProduction ? '; Secure' : ''}`;
+    const lifetime = maxAge === null || maxAge === undefined ? '' : `; Max-Age=${maxAge}`;
+    return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Strict${lifetime}${isProduction ? '; Secure' : ''}`;
   }
 
   function securityHeaders(contentType = 'application/json; charset=utf-8') {
     const connectSources = ["'self'"];
     if (env.SUPABASE_URL) connectSources.push(new URL(env.SUPABASE_URL).origin);
+    connectSources.push('https://challenges.cloudflare.com');
     const headers = {
       'Content-Type': contentType,
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'no-referrer',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ${connectSources.join(' ')}; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+      'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' https://challenges.cloudflare.com; connect-src ${connectSources.join(' ')}; frame-src https://challenges.cloudflare.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
       'Cache-Control': 'no-store',
     };
     if (isProduction) headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';
@@ -141,12 +143,34 @@ export function createSlidingWindowRateLimiter({ clock = () => Date.now(), sweep
     };
   }
 
+  function status({ key, limit, windowMs }) {
+    if (!key) throw new TypeError('A chave do limitador é obrigatória.');
+    if (!Number.isInteger(limit) || limit < 1) throw new TypeError('O limite deve ser um inteiro positivo.');
+    if (!Number.isFinite(windowMs) || windowMs < 1) throw new TypeError('A janela deve ser positiva.');
+    const now = clock();
+    const existing = buckets.get(key);
+    const timestamps = (existing?.timestamps || []).filter(timestamp => now - timestamp < windowMs);
+    if (timestamps.length) buckets.set(key, { timestamps, windowMs });
+    else buckets.delete(key);
+    const blocked = timestamps.length >= limit;
+    return {
+      blocked,
+      remaining: Math.max(0, limit - timestamps.length),
+      retryAfterMs: blocked && timestamps.length ? Math.max(1, windowMs - (now - timestamps[0])) : 0,
+    };
+  }
+
   return {
     consume,
-    clear() {
-      buckets.clear();
-      operations = 0;
+    status,
+    reset({ key } = {}) {
+      if (key) buckets.delete(key);
+      else {
+        buckets.clear();
+        operations = 0;
+      }
     },
+    clear() { buckets.clear(); operations = 0; },
     size() {
       return buckets.size;
     },

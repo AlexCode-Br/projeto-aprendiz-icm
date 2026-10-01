@@ -40,6 +40,9 @@ test('dados de frequência e risco permanecem indisponíveis ao gestor',{timeout
     await waitForServer(baseUrl,state);
     const professor=await login('professor@projetoaprendiz.local','Professor@2026!'),manager=await login('gestor@projetoaprendiz.local','Gestor@2026!');
     const courses=await call(professor,'GET','/professores/meus-cursos'),classId=Number(courses.data[0].id);
+    const setupDatabase=new DatabaseSync(databasePath);
+    setupDatabase.prepare("UPDATE enrollments SET enrolled_at='2026-01-01' WHERE class_id=?").run(classId);
+    setupDatabase.close();
     const students=(await call(professor,'GET',`/frequencia?curso_id=${classId}&data=2026-08-29`)).data.alunos;
     assert.ok(students.length>0);
     const studentId=Number(students[0].id);

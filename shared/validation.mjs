@@ -45,17 +45,6 @@ export function requiredTextError(value, label, min = 3, max = 2000) {
   return '';
 }
 
-export function httpsUrlError(value) {
-  const text = cleanText(value, 2048);
-  if (!text) return '';
-  try {
-    const url = new URL(text);
-    return url.protocol === 'https:' ? '' : 'Use um endereço HTTPS válido.';
-  } catch {
-    return 'Informe uma URL válida.';
-  }
-}
-
 export function validateProfessor(values) {
   const errors = {};
   const nameMessage = personNameError(values.nome, 'nome completo');
@@ -71,7 +60,7 @@ export function validateProfessor(values) {
 export function validateStudent(values) {
   const errors = {};
   const nameMessage = personNameError(values.nome, 'nome completo');
-  const emailMessage = normalizeEmail(values.contato) ? emailError(values.contato) : '';
+  const emailMessage = emailError(values.contato);
   const phoneMessage = phoneError(values.telefone);
   if (nameMessage) errors.nome = nameMessage;
   if (emailMessage) errors.contato = emailMessage;
@@ -115,7 +104,7 @@ export function validateClassDetails(values) {
   return errors;
 }
 
-export const STUDENT_CONTACT_OUTCOMES = ['contatado', 'sem_resposta', 'retorno_agendado', 'outro'];
+const STUDENT_CONTACT_OUTCOMES = ['contatado', 'sem_resposta', 'retorno_agendado', 'outro'];
 
 export function validateStudentContact(values) {
   const errors = {};

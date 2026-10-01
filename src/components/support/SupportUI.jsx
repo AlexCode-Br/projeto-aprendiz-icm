@@ -8,11 +8,11 @@ const statusClasses = {
   Resolvido: 'border-border bg-surface-muted text-text-muted',
 };
 
-export function SupportStatusBadge({ status }) {
+function SupportStatusBadge({ status }) {
   return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses[status] || statusClasses.Aberto}`}>{status}</span>;
 }
 
-export function formatSupportDate(value, includeDate = false) {
+function formatSupportDate(value, includeDate = false) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
   const now = new Date();

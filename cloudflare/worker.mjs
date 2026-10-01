@@ -8,7 +8,27 @@ export { AuthRateLimiter } from './rate-limiter.mjs';
 
 const logger = createStructuredLogger({ write: line => console.error(line), includeStack: false });
 
+async function drainNotificationOutbox(env){
+  const db=createWorkerDatabase(env,{logger});
+  try{
+    return await createApplication({db,env,logger}).deliverNotificationOutbox({limit:100});
+  }finally{await db.close();}
+}
+
 export default {
+  async scheduled(_event, env, ctx) {
+    if (env.READ_ONLY_PREVIEW === 'true') return;
+    ctx.waitUntil((async()=>{
+      const db=createWorkerDatabase(env,{logger});
+      try {
+        const application=createApplication({db,env,logger});
+        await application.deliverStudentNotices();
+        await application.deliverNotificationOutbox({limit:200});
+        await application.cleanupSecurityData();
+      }
+      finally { await db.close(); }
+    })());
+  },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     if (url.hostname === 'www.aprendizicm.com.br') {
@@ -17,6 +37,9 @@ export default {
     }
     const { securityHeaders } = createHttpSecurity({ isProduction: true, appOrigin: env.APP_URL, env });
     const json = (status, message) => new Response(JSON.stringify({ message }), { status, headers: securityHeaders() });
+    if (request.method === 'GET' && url.pathname === '/api/health') {
+      return new Response(JSON.stringify({ status: 'ok' }), { status: 200, headers: securityHeaders() });
+    }
     if (!isApiPath(url.pathname) && url.pathname !== '/api') {
       if (!['GET', 'HEAD'].includes(request.method)) return json(405, 'Método não permitido.');
       let path;
@@ -26,7 +49,7 @@ export default {
       const headers = new Headers(asset.headers);
       const contentType = headers.get('Content-Type') || 'application/octet-stream';
       for (const [key, value] of Object.entries(securityHeaders(contentType))) headers.set(key, value);
-      headers.set('Cache-Control', contentType.includes('text/html') ? 'no-store' : /^\/assets\//.test(path) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
+      headers.set('Cache-Control', ['/sw.js','/manifest.webmanifest'].includes(path) ? 'no-cache' : contentType.includes('text/html') ? 'no-store' : /^\/assets\//.test(path) ? 'public, max-age=31536000, immutable' : 'public, max-age=3600');
       return new Response(asset.body, { status: asset.status, headers });
     }
     if (url.pathname === '/api') return json(404, 'Rota não encontrada.');
@@ -38,7 +61,7 @@ export default {
     let db;
     try {
       db = createWorkerDatabase(env, { logger });
-      const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER) });
+      const application = createApplication({ db, env, logger, authRateLimiter: distributedAuthLimiter(env.AUTH_RATE_LIMITER), scheduleNotificationDrain:()=>ctx.waitUntil(drainNotificationOutbox(env).catch(error=>logger.error('notification_outbox_background_failed',error))) });
       return await invokeApi(request, application.handler);
     } catch (error) {
       // Avoid reflecting provider errors, configuration or credentials to clients.

@@ -6,10 +6,13 @@ import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import Modal from '../../components/Modal';
 import { SupportConversation, SupportTicketList } from '../../components/support/SupportUI';
+import Pagination from '../../components/Pagination';
+import useLiveRefresh from '../../hooks/useLiveRefresh';
 import api from '../../services/api';
 import { SUPPORT_STATUSES } from '../../../shared/validation.mjs';
 
 const filters = ['Todos','Abertos','Em atendimento','Resolvidos','Não lidos'];
+const ITEMS_PER_PAGE = 5;
 const isSameTicket = (left,right) => left != null && right != null && String(left) === String(right);
 
 const Suporte = () => {
@@ -20,6 +23,7 @@ const Suporte = () => {
   const [detail,setDetail]=useState(null);
   const [search,setSearch]=useState('');
   const [filter,setFilter]=useState('Todos');
+  const [currentPage,setCurrentPage]=useState(1);
   const [loading,setLoading]=useState(true);
   const [detailLoading,setDetailLoading]=useState(false);
   const [error,setError]=useState('');
@@ -74,13 +78,12 @@ const Suporte = () => {
   },[showToast]);
 
   useEffect(()=>{const timer=setTimeout(()=>fetchTickets(),250);return()=>clearTimeout(timer);},[fetchTickets]);
+  useEffect(()=>{setCurrentPage(1);},[search,filter]);
   useEffect(()=>()=>{selectedIdRef.current=null;detailRequestRef.current+=1;},[]);
-  useEffect(()=>{
-    const refresh=()=>{const ticketId=selectedIdRef.current;fetchTickets({silent:true});if(ticketId)fetchDetail(ticketId,{silent:true});};
-    const interval=setInterval(refresh,15000);
-    window.addEventListener('focus',refresh);
-    return()=>{clearInterval(interval);window.removeEventListener('focus',refresh);};
-  },[fetchTickets,fetchDetail]);
+  useLiveRefresh(()=>{
+    const ticketId=selectedIdRef.current;
+    return Promise.all([fetchTickets({silent:true}),ticketId?fetchDetail(ticketId,{silent:true}):Promise.resolve()]);
+  },{intervalMs:15000});
 
   const openTicket=async ticketId=>{
     selectedIdRef.current=ticketId;
@@ -150,6 +153,12 @@ const Suporte = () => {
     unread:tickets.filter(ticket=>ticket.nao_lidas>0).length,
     waiting:tickets.filter(ticket=>ticket.aguardando==='Gestor'&&ticket.status!=='Resolvido').length,
   }),[tickets]);
+  const totalPages=Math.max(1,Math.ceil(tickets.length/ITEMS_PER_PAGE));
+  const paginatedTickets=useMemo(()=>{
+    const start=(currentPage-1)*ITEMS_PER_PAGE;
+    return tickets.slice(start,start+ITEMS_PER_PAGE);
+  },[tickets,currentPage]);
+  useEffect(()=>{if(currentPage>totalPages)setCurrentPage(totalPages);},[currentPage,totalPages]);
 
   const actions=detail?.ticket?<>
     <label className="sr-only" htmlFor="support-status">Status do chamado</label>
@@ -168,8 +177,8 @@ const Suporte = () => {
     <section className="panel mb-4 p-3 sm:p-4" aria-label="Busca e filtros de chamados">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
         <label className="flex-1"><span className="sr-only">Buscar chamados</span><SearchInput value={search} onChange={event=>setSearch(event.target.value)} placeholder="Buscar por professor, assunto, conteúdo ou número..." className="form-control"/></label>
-        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrar chamados">
-          {filters.map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-10 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar chamados">
+          {filters.map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-11 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}
         </div>
       </div>
     </section>
@@ -179,7 +188,8 @@ const Suporte = () => {
     <div className="panel grid min-h-[38rem] overflow-hidden lg:grid-cols-[minmax(19rem,0.82fr)_minmax(0,1.7fr)]">
       <aside className={`${selectedId?'hidden lg:block':'block'} border-r-0 border-border lg:border-r`} aria-label="Chamados">
         <div className="border-b border-border px-5 py-4"><h2 className="font-bold text-text-default">Chamados</h2><p className="mt-1 text-xs text-text-muted">Ordenados por atenção necessária e atividade recente.</p></div>
-        <div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={tickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor"/></div>
+        <div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={paginatedTickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor"/></div>
+        {!loading&&<Pagination currentPage={currentPage} totalItems={tickets.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact />}
       </aside>
       <div className={`${selectedId?'block':'hidden lg:block'}`}>
         <SupportConversation detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedIdRef.current)} onBack={closeTicket} onSend={sendReply} sending={sending} actions={actions}/>
@@ -188,7 +198,7 @@ const Suporte = () => {
     <Modal isOpen={deleteOpen} onClose={()=>{if(!deleting){setDeleteOpen(false);setDeleteTargetId(null);}}} title="Apagar chamado?" maxWidth="max-w-md">
       <div className="space-y-4">
         <p className="text-sm leading-6 text-text-muted">Esta ação apagará permanentemente o chamado, todas as mensagens e o histórico de status. Professores não têm acesso a esta ação.</p>
-        <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end"><button type="button" className="btn btn-secondary" disabled={deleting} onClick={()=>{setDeleteOpen(false);setDeleteTargetId(null);}}>Cancelar</button><button type="button" className="btn btn-danger" disabled={deleting} onClick={deleteTicket}>{deleting?'Apagando...':'Apagar definitivamente'}</button></div>
+        <div className="flex border-t border-border pt-5 sm:justify-end"><button type="button" className="btn btn-danger" disabled={deleting} onClick={deleteTicket}>{deleting?'Apagando...':'Apagar definitivamente'}</button></div>
       </div>
     </Modal>
   </>;

@@ -54,8 +54,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, locations = []
 
     if (!isOpen) return null;
     const footer = (
-        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} disabled={isSubmitting} className="btn btn-secondary">Cancelar</button>
+        <div className="flex sm:justify-end">
             <button type="submit" form={professorFormId} disabled={isSubmitting} className="btn btn-primary">{isSubmitting ? 'Salvando...' : professor ? 'Salvar alterações' : 'Salvar e enviar convite'}</button>
         </div>
     );
@@ -99,7 +98,7 @@ const ProfessorFormModal = ({ isOpen, onClose, onSave, professor, locations = []
                             {errors.local && <p className="mt-1 text-xs text-danger">{errors.local}</p>}
                         </div>
                     </div>
-                    <p className="rounded-xl border border-border bg-surface-muted/50 px-4 py-3 text-sm text-text-muted">Os cursos e as turmas deste professor são definidos exclusivamente na página <strong className="text-text-default">Turmas</strong>.</p>
+                    <p className="rounded-xl border border-border bg-surface-muted/50 px-4 py-3 text-sm text-text-muted">Após ativar o convite, o próprio professor escolherá os cursos que irá ofertar, a igreja ou modalidade e os dias e horários das aulas.</p>
                 </div>
             </form>
         </Modal>

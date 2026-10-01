@@ -1,59 +1,51 @@
 import FormSelect from '../../components/FormSelect';
 import SearchInput from '../../components/SearchInput';
-import { Eye, Pencil, Pin, Plus, Trash2 } from 'lucide-react';
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Pencil, Pin, Plus, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
 import InformativoModal from '../../components/InformativoModal';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { useToast } from '../../contexts/ToastContext';
 import api from '../../services/api';
 
-import InformativoReadersModal from '../../components/InformativoReadersModal';
 import AnnouncementAttachments from '../../components/AnnouncementAttachments';
 import AnnouncementAudienceModal from '../../components/AnnouncementAudienceModal';
 import useLiveRefresh from '../../hooks/useLiveRefresh';
 import KebabMenu, { KebabMenuItem } from '../../components/KebabMenu';
+import Pagination from '../../components/Pagination';
+
+const ITEMS_PER_PAGE = 5;
 
 const Informativos = () => {
     const { showToast } = useToast();
     const [informativos, setInformativos] = useState([]);
-    const [professores, setProfessores] = useState([]);
     const [isFormModalOpen, setFormModalOpen] = useState(false);
     const [isDeleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
     const [isSendConfirmModalOpen, setSendConfirmModalOpen] = useState(false);
-    const [audienceOptions, setAudienceOptions] = useState({ professores: [], cursos: [] });
+    const [audienceOptions, setAudienceOptions] = useState({ turmas: [] });
     const [audienceLoading, setAudienceLoading] = useState(false);
-    const [isReadersModalOpen, setReadersModalOpen] = useState(false);
     const [currentInformativo, setCurrentInformativo] = useState(null);
     const [formDataToSave, setFormDataToSave] = useState(null);
-    const [hasProfessors, setHasProfessors] = useState(false);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('Todos');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalInformativos, setTotalInformativos] = useState(0);
 
-    const fetchInformativos = useCallback(async ({ silent = false, refreshProfessors = false } = {}) => {
+    const fetchInformativos = useCallback(async ({ silent = false } = {}) => {
         if (!silent) setLoading(true);
         try {
-            const [infoResponse, profResponse] = await Promise.all([
-                api.get('/api/informativos'),
-                refreshProfessors ? api.get('/professores') : Promise.resolve(null)
-            ]);
-            setInformativos(Array.isArray(infoResponse.data) ? infoResponse.data : []);
-            const professores = Array.isArray(profResponse?.data?.professores)
-                ? profResponse.data.professores
-                : [];
-            if (profResponse) {
-                setProfessores(professores);
-                setHasProfessors(professores.some(professor => professor.status === 'Ativo'));
-            }
+            const infoResponse = await api.get('/api/informativos',{params:{page:currentPage,limit:ITEMS_PER_PAGE,q:search.trim()||undefined,status:statusFilter==='Todos'?undefined:statusFilter}});
+            setInformativos(infoResponse.data?.items||[]);
+            setTotalInformativos(Number(infoResponse.data?.total||0));
         } catch (error) {
             if (silent) throw error;
             showToast(error.message || 'Erro ao carregar dados.', 'error');
         } finally {
             if (!silent) setLoading(false);
         }
-    }, [showToast]);
+    }, [currentPage,search,showToast,statusFilter]);
 
-    useEffect(() => { void fetchInformativos({ refreshProfessors: true }); }, [fetchInformativos]);
+    useEffect(() => { void fetchInformativos(); }, [fetchInformativos]);
 
     const refreshLive = useCallback(() => fetchInformativos({ silent: true }), [fetchInformativos]);
     useLiveRefresh(refreshLive, { intervalMs: 15000, eventName: 'announcements:updated' });
@@ -70,18 +62,9 @@ const Informativos = () => {
     }, [informativos, refreshLive]);
 
     const handleOpenFormModal = (info = null) => {
-        if (!info && !hasProfessors) {
-            showToast('Cadastre ao menos um professor antes de criar informativos.', 'warning');
-            return;
-        }
         setFormDataToSave(null);
         setCurrentInformativo(info);
         setFormModalOpen(true);
-    };
-
-    const handleOpenReadersModal = (info) => {
-        setCurrentInformativo(info);
-        setReadersModalOpen(true);
     };
 
     const handleOpenDeleteConfirm = (info) => {
@@ -92,13 +75,13 @@ const Informativos = () => {
     const handleSaveAndOpenConfirm = (formData) => {
         setFormDataToSave({
             ...formData,
-            destinatarios: formData.destinatarios || currentInformativo?.destinatarios || { todos: true, professores: [], cursos: [] },
+            destinatarios: formData.destinatarios || currentInformativo?.destinatarios || { todos: false, professores: [], cursos: [], turmas: [] },
         });
         setFormModalOpen(false); // Fecha o form
         setSendConfirmModalOpen(true); // Abre a confirmação de envio
         setAudienceLoading(true);
         api.get('/api/informativos/destinatarios')
-            .then(response => setAudienceOptions({ professores: response.data?.professores || [], cursos: response.data?.cursos || [] }))
+            .then(response => setAudienceOptions({ turmas: response.data?.turmas || [] }))
             .catch(error => showToast(error.message || 'Não foi possível carregar os destinatários.', 'error'))
             .finally(() => setAudienceLoading(false));
     };
@@ -113,10 +96,10 @@ const Informativos = () => {
             const payload = { ...formDataToSave, destinatarios };
             if (currentInformativo) {
                 await api.put(`/api/informativos/${currentInformativo.id}`, payload);
-                showToast('Informativo atualizado com sucesso!', 'success');
+                showToast(payload.modoEnvio === 'agendar' ? 'Informativo atualizado e agendado com sucesso!' : 'Informativo atualizado com sucesso!', 'success');
             } else {
                 await api.post('/api/informativos', payload);
-                showToast('Informativo criado e publicado com sucesso!', 'success');
+                showToast(payload.modoEnvio === 'agendar' ? 'Informativo agendado com sucesso!' : 'Informativo enviado com sucesso!', 'success');
             }
             setSendConfirmModalOpen(false);
             setCurrentInformativo(null);
@@ -146,19 +129,17 @@ const Informativos = () => {
         'Urgente': 'bg-red-100 text-red-800',
     }[cat] || 'bg-gray-100 text-gray-800');
 
-    const visibleInformativos = useMemo(() => {
-        const term = search.trim().toLocaleLowerCase('pt-BR');
-        return informativos.filter(info => {
-            if (statusFilter !== 'Todos' && info.status !== statusFilter) return false;
-            const searchable = `${info.titulo} ${String(info.conteudo || '').replace(/<[^>]+>/g, ' ')} ${info.anexos?.map(item => item.nome).join(' ') || ''}`.toLocaleLowerCase('pt-BR');
-            return !term || searchable.includes(term);
-        });
-    }, [informativos, search, statusFilter]);
+    const totalPages = Math.max(1, Math.ceil(totalInformativos / ITEMS_PER_PAGE));
+
+    useEffect(() => { setCurrentPage(1); }, [search, statusFilter]);
+    useEffect(() => {
+        if (currentPage > totalPages) setCurrentPage(totalPages);
+    }, [currentPage, totalPages]);
 
     return (
         <>
             <div className="page-header">
-                <div><h1 className="page-title">Informativos</h1><p className="page-description">Publique comunicados e acompanhe quem visualizou.</p></div>
+                <div><h1 className="page-title">Informativos</h1><p className="page-description">Publique e gerencie comunicados destinados às turmas.</p></div>
                 <button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary w-full sm:w-auto">
                     <Plus aria-hidden="true" />Criar informativo
                 </button>
@@ -172,7 +153,7 @@ const Informativos = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
-                {visibleInformativos.map(info => (
+                {informativos.map(info => (
                     <article key={info.id} className="panel flex flex-col overflow-hidden">
                         <div className="p-5 flex-grow">
                             <div className="flex justify-between items-start mb-2">
@@ -189,20 +170,19 @@ const Informativos = () => {
                             <div className="announcement-content mt-4 max-w-none text-sm text-text-default" dangerouslySetInnerHTML={{ __html: info.conteudo }} />
                             <AnnouncementAttachments attachments={info.anexos} />
                         </div>
-                        <div className="px-4 py-3 border-t border-border flex flex-wrap gap-2 justify-between items-center text-xs text-text-muted">
-                            <button type="button" onClick={() => handleOpenReadersModal(info)} className="flex items-center space-x-4 hover:opacity-75 transition-opacity" title="Ver quem visualizou">
-                                <span className="inline-flex items-center gap-1.5"><Eye aria-hidden="true" className="!h-4 !w-4" />{info.lido} visualizações</span>
-                            </button>
+                        <div className="px-4 py-3 border-t border-border flex flex-wrap gap-2 justify-end items-center text-xs text-text-muted">
                             <div className="hidden items-center space-x-2 md:flex">
-                                <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-10 rounded-md px-2 text-primary hover:bg-primary/10">Editar</button>
-                                <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-10 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
+                                <button type="button" onClick={() => handleOpenFormModal(info)} className="min-h-11 rounded-md px-2 text-primary hover:bg-primary/10">Editar</button>
+                                <button type="button" onClick={() => handleOpenDeleteConfirm(info)} className="min-h-11 rounded-md px-2 text-danger hover:bg-red-50 hover:underline dark:hover:bg-red-950/30">Excluir</button>
                             </div>
                         </div>
                     </article>
                 ))}
                 {loading && Array.from({length:3},(_,index)=><div key={index} className="panel p-5" role="status" aria-label="Carregando informativo"><div className="skeleton h-5 w-24"/><div className="skeleton mt-4 h-7 w-3/4"/><div className="skeleton mt-4 h-20 rounded-lg"/></div>)}
-                {!loading && !visibleInformativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">{informativos.length ? <><strong className="block text-text-default">Nenhum informativo encontrado</strong><span className="mt-1 block text-sm">Limpe a busca ou altere os filtros para ver outros avisos.</span></> : <><strong className="block text-text-default">Nenhum informativo criado ainda</strong><span className="mt-1 block text-sm">Crie o primeiro aviso para manter os professores informados.</span><button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary mt-4">Criar informativo</button></>}</div>}
+                {!loading && !informativos.length && <div className="panel col-span-full px-6 py-14 text-center text-text-muted">{search||statusFilter!=='Todos' ? <><strong className="block text-text-default">Nenhum informativo encontrado</strong><span className="mt-1 block text-sm">Limpe a busca ou altere os filtros para ver outros avisos.</span></> : <><strong className="block text-text-default">Nenhum informativo criado ainda</strong><span className="mt-1 block text-sm">Crie o primeiro aviso para manter os professores informados.</span><button type="button" onClick={() => handleOpenFormModal()} className="btn btn-primary mt-4">Criar informativo</button></>}</div>}
             </div>
+
+            {!loading && <Pagination currentPage={currentPage} totalItems={totalInformativos} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact className="mt-4 rounded-xl border border-border bg-surface" />}
 
             <InformativoModal
                 isOpen={isFormModalOpen}
@@ -219,13 +199,8 @@ const Informativos = () => {
                 options={audienceOptions}
                 loading={audienceLoading}
                 initialAudience={formDataToSave?.destinatarios}
-            />
-
-            <InformativoReadersModal
-                isOpen={isReadersModalOpen}
-                onClose={() => setReadersModalOpen(false)}
-                informativo={currentInformativo}
-                professores={professores}
+                confirmLabel={formDataToSave?.modoEnvio === 'agendar' ? 'Agendar informativo' : 'Enviar informativo'}
+                submittingLabel={formDataToSave?.modoEnvio === 'agendar' ? 'Agendando…' : 'Enviando…'}
             />
 
             <ConfirmationModal

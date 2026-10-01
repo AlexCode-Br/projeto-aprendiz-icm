@@ -1,64 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { Client, types } from 'pg';
-
-// Keep these compatibility rules aligned with database.mjs. This module must
-// never import the Node migration/SQLite adapter into the Worker bundle.
-function normalizeRow(row) {
-  if (!row) return row;
-  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]));
-}
-
-function postgresSql(source) {
-  let sql = String(source).trim().replace(/;$/, '');
-  const ignoredInsert = /^INSERT\s+OR\s+IGNORE\s+/i.test(sql);
-  sql = sql.replace(/^INSERT\s+OR\s+IGNORE\s+/i, 'INSERT ');
-  sql = sql.replace(/\bLIKE\b/g, 'ILIKE');
-  sql = sql.replace(/GROUP_CONCAT\(DISTINCT\s+([^\)]+)\)/gi, "STRING_AGG(DISTINCT $1, ',')");
-  sql = sql.replace(/GROUP_CONCAT\(([^,\)]+),\s*'([^']*)'\)/gi, "STRING_AGG($1, '$2')");
-  if (ignoredInsert && !/\bON\s+CONFLICT\b/i.test(sql)) sql += ' ON CONFLICT DO NOTHING';
-  let index = 0;
-  return sql.replace(/\?/g, () => `$${++index}`);
-}
-
-const tablesWithId = new Set([
-  'users', 'sessions', 'password_resets', 'dev_emails', 'audit_log', 'locations',
-  'professor_profiles', 'professor_invites', 'students', 'courses', 'classes',
-  'school_years', 'churches', 'enrollments', 'attendance_sessions', 'attendance_records',
-  'announcements', 'announcement_attachments', 'support_tickets', 'support_messages',
-  'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos',
-]);
-const applicationTables = new Set([
-  ...tablesWithId, 'user_settings', 'announcement_reads', 'announcement_recipients',
-  'support_ticket_reads', 'class_schedules', 'enrollment_repair_archive', 'schema_migrations',
-]);
-
-function returningId(sql) {
-  const match = sql.match(/^\s*INSERT\s+INTO\s+(?:projeto_aprendiz\.)?([a-z_]+)/i);
-  if (!match || !tablesWithId.has(match[1].toLowerCase()) || /\bRETURNING\b/i.test(sql)) return sql;
-  return `${sql} RETURNING id`;
-}
-
-// Hyperdrive resets session state after each implicit transaction. Qualifying
-// application tables avoids both an unsafe persistent search_path assumption
-// and extra BEGIN/SET/COMMIT round trips for every ordinary query. Quoted text,
-// comments, explicit schemas and aliases are preserved.
-function qualifyApplicationTables(sql) {
-  const tokens = String(sql).match(/'(?:''|[^'])*'|"(?:""|[^"])*"|\$([a-zA-Z_][\w]*|)\$[\s\S]*?\$\1\$|--[^\r\n]*|\/\*[\s\S]*?\*\/|\s+|[a-zA-Z_][\w$]*|./g) || [];
-  const significant = tokens.map((token, index) => ({ token, index })).filter(({ token }) => !/^\s|^--|^\/\*/.test(token));
-  for (let position = 1; position < significant.length; position++) {
-    const previous = significant[position - 1].token.toUpperCase();
-    if (!['FROM', 'JOIN', 'UPDATE', 'INTO', 'USING'].includes(previous)) continue;
-    const { token, index } = significant[position];
-    const name = token.startsWith('"') ? token.slice(1, -1).replace(/""/g, '"') : token.toLowerCase();
-    if (applicationTables.has(name) && significant[position + 1]?.token !== '.') tokens[index] = `projeto_aprendiz.${token}`;
-  }
-  return tokens.join('');
-}
-
-function parseInt8(value) {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) ? parsed : value;
-}
+import { normalizeRow, postgresSql, returningId, qualifyApplicationTables, parseInt8 } from './database/sql-compatibility.mjs';
 
 function connectionOptions(env) {
   const hyperdrive = env.HYPERDRIVE?.connectionString;
@@ -172,8 +114,7 @@ class WorkerDatabase {
 }
 
 // Instantiate inside fetch()/scheduled(), never in module scope. Hyperdrive
-// owns the origin connection pool; the driver connection belongs to one request.
-// Its configuration MUST have query caching disabled for auth/read-after-write.
+// owns the origin pool; one driver connection belongs to one request.
 export function createWorkerDatabase(env, options) { return new WorkerDatabase(env, options); }
 
 export const workerDatabaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, connectionOptions, parseInt8 };

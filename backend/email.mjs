@@ -54,7 +54,7 @@ function preheaderText(body) {
   return normalizedBody(body).replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').slice(0, 140);
 }
 
-export function renderEmailHtml(subject, body, env = process.env) {
+function renderEmailHtml(subject, body, env = process.env) {
   const logoUrl = escapeHtml(env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL);
   const departmentLogoUrl = escapeHtml(env.EMAIL_DEPARTMENT_LOGO_URL || DEFAULT_DEPARTMENT_LOGO_URL);
   const year = new Date().getFullYear();

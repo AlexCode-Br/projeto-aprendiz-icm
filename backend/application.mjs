@@ -21,7 +21,11 @@ import {
 } from './storage.mjs';
 import { createProfilePhotoStorage, normalizeProfilePhoto } from './profile-photos.mjs';
 import { createNotificationService, normalizeNotificationPreferences } from './notifications.mjs';
+import { createWebPushService } from './web-push.mjs';
 import { createLazyClient } from './lazy-client.mjs';
+import { deliverStudentNotices } from './student-notifications.mjs';
+import { createNotificationOutbox } from './notification-outbox.mjs';
+import { verifyTurnstileToken } from './turnstile.mjs';
 import {
   catalogNameError,
   cleanText,
@@ -55,6 +59,7 @@ export function createApplication({
   env = process.env,
   logger = createStructuredLogger({ includeStack: env.NODE_ENV !== 'production' }),
   authRateLimiter = createSlidingWindowRateLimiter(),
+  scheduleNotificationDrain,
 } = {}) {
   if (!db) throw new TypeError('Uma conexão de banco de dados é obrigatória.');
   const port = Number(env.PORT || 4180);
@@ -63,17 +68,23 @@ export function createApplication({
   const isProduction = env.NODE_ENV === 'production';
   const authProvider = env.AUTH_PROVIDER || (env.SUPABASE_URL ? 'supabase' : 'local');
   const usesSupabaseAuth = authProvider === 'supabase';
+  const managerMfaRequired = env.REQUIRE_MANAGER_MFA !== 'false' && (isProduction || env.REQUIRE_MANAGER_MFA === 'true');
   const supabaseSecretKey = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || '';
 
   if (usesSupabaseAuth && (!env.SUPABASE_URL || !env.SUPABASE_PUBLISHABLE_KEY)) {
     throw new Error('SUPABASE_URL e SUPABASE_PUBLISHABLE_KEY são obrigatórias com AUTH_PROVIDER=supabase.');
   }
 
-  const supabaseAuth = usesSupabaseAuth
-    ? createLazyClient(createClient, env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, {
-        auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
-      })
-    : null;
+  const supabaseAuthOptions = {
+    auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
+  };
+  const signInWithSupabasePassword = async ({ email, password }) => {
+    if (!usesSupabaseAuth) return { data: null, error: new Error('Supabase Auth não está ativo.') };
+    // Password sign-in mutates the SDK client's in-memory auth state. A fresh,
+    // request-scoped client prevents concurrent Worker requests sharing it.
+    const client = createClient(env.SUPABASE_URL, env.SUPABASE_PUBLISHABLE_KEY, supabaseAuthOptions);
+    return client.auth.signInWithPassword({ email, password });
+  };
 
   const supabaseAdmin = usesSupabaseAuth && supabaseSecretKey
     ? createLazyClient(createClient, env.SUPABASE_URL, supabaseSecretKey, {
@@ -95,7 +106,9 @@ export function createApplication({
   }
 
   const { sendEmail } = createEmailService({ db, isProduction, env });
-  const notificationService = createNotificationService({ db, sendEmail, logger });
+  const webPushService = createWebPushService({ db, env, logger });
+  const notificationService = createNotificationService({ db, sendEmail, sendPush: webPushService.sendToUser, logger });
+  const notificationOutbox = createNotificationOutbox({ db, notificationService, logger, scheduleDrain: scheduleNotificationDrain });
 
   function requireSupabaseAdmin(response) {
     if (!usesSupabaseAuth || supabaseAdmin) return true;
@@ -107,7 +120,7 @@ export function createApplication({
     const token = randomBytes(32).toString('base64url');
     const tokenHash = sha256(token);
     const expires = new Date(Date.now() + 48 * 60 * 60_000).toISOString();
-    const inviteUrl = `${baseUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+    const inviteUrl = `${baseUrl}/accept-invite#token=${encodeURIComponent(token)}`;
     const emailBody = `Olá, ${name}. Você foi convidado para acessar o Projeto Aprendiz como Professor. Crie sua senha em até 48 horas:\n\n${inviteUrl}\n\nSe você não reconhece este convite, ignore esta mensagem.`;
 
     await db.transaction(async () => {
@@ -124,6 +137,74 @@ export function createApplication({
       await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy, 'professor_invite_email_failed', ip);
       return { inviteSent: false, expiresAt: expires };
     }
+  }
+
+  async function issueStudentInvite({ studentId, createdBy, ip, auditAction = 'student_invited' }) {
+    const student = await db.prepare(`SELECT s.id,s.name,s.email,sa.user_id
+      FROM students s LEFT JOIN student_accounts sa ON sa.student_id=s.id
+      WHERE s.id=? AND s.active=1 AND s.anonymized_at IS NULL`).get(studentId);
+    if (!student) return { inviteSent: false, code: 'STUDENT_NOT_FOUND', message: 'Aluno não encontrado.' };
+    if (student.user_id) return { inviteSent: false, code: 'ACCOUNT_ACTIVE', message: 'Este aluno já possui uma conta. Utilize a recuperação de senha.' };
+    if (!student.email || emailError(student.email)) {
+      return { inviteSent: false, code: 'INVALID_EMAIL', message: 'Cadastre um e-mail válido e exclusivo do aluno antes de enviar o convite.' };
+    }
+    if (await db.prepare('SELECT id FROM users WHERE LOWER(email)=LOWER(?)').get(student.email)) {
+      return { inviteSent: false, code: 'EMAIL_IN_USE', message: 'Este e-mail já pertence a uma conta. Não é possível vincular contas de outra pessoa ou função.' };
+    }
+
+    const token = randomBytes(32).toString('base64url');
+    const tokenHash = sha256(token);
+    const createdAt = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60_000).toISOString();
+    await db.transaction(async () => {
+      await db.prepare('DELETE FROM student_invites WHERE student_id=? AND accepted_at IS NULL').run(student.id);
+      await db.prepare('INSERT INTO student_invites (token_hash,student_id,email,expires_at,created_by,created_at) VALUES (?,?,?,?,?,?)')
+        .run(tokenHash,student.id,student.email,expiresAt,createdBy,createdAt);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy,`${auditAction}:${student.id}`,ip);
+    });
+
+    try {
+      await sendEmail(
+        student.email,
+        'Seu acesso de aluno — Projeto Aprendiz',
+        `Olá, ${student.name}.\n\nO gestor convidou você para acompanhar suas turmas e aulas. Crie sua senha em até 48 horas:\n\n${baseUrl}/accept-invite#tipo=aluno&token=${encodeURIComponent(token)}\n\nSe não reconhece este convite, ignore a mensagem.`,
+        `student-invite/${tokenHash}`,
+      );
+      return { inviteSent: true, expiresAt, sentAt: createdAt };
+    } catch (error) {
+      await db.prepare('DELETE FROM student_invites WHERE token_hash=?').run(tokenHash);
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(createdBy,`student_invite_email_failed:${student.id}`,ip);
+      logger.error('student_invite_delivery_failed',error,{studentId:student.id});
+      return { inviteSent: false, code: 'DELIVERY_FAILED', message: 'Não foi possível enviar o convite. Tente novamente.' };
+    }
+  }
+
+  async function issueStudentEmailChange({ studentId = 0, userId = 0, newEmail, requestedBy, ip, auditAction = 'student_email_change_requested' }) {
+    const account = await db.prepare(`SELECT s.id AS student_id,s.email AS student_email,u.id AS user_id,u.email AS old_email
+      FROM student_accounts sa JOIN students s ON s.id=sa.student_id AND s.active=1 AND s.anonymized_at IS NULL
+      JOIN users u ON u.id=sa.user_id AND u.role='aluno' AND u.active=1
+      WHERE (? > 0 AND s.id=?) OR (? > 0 AND u.id=?)`).get(studentId,studentId,userId,userId);
+    if (!account) return { sent:false, code:'ACCOUNT_NOT_FOUND', message:'O aluno ainda não possui uma conta ativa.' };
+    const email=cleanEmail(newEmail);
+    if(emailError(email))return {sent:false,code:'INVALID_EMAIL',message:'Informe um novo e-mail válido.'};
+    if(email===cleanEmail(account.old_email))return {sent:false,code:'SAME_EMAIL',message:'Este já é o e-mail da conta.'};
+    const duplicate=await db.prepare(`SELECT id FROM users WHERE LOWER(email)=LOWER(?) AND id<>?
+      UNION SELECT id FROM students WHERE LOWER(email)=LOWER(?) AND id<>?`).get(email,account.user_id,email,account.student_id);
+    if(duplicate)return {sent:false,code:'EMAIL_IN_USE',message:'Não é possível utilizar este e-mail.'};
+    const token=randomBytes(32).toString('base64url'),hash=sha256(token),expiresAt=new Date(Date.now()+30*60000).toISOString();
+    await db.transaction(async()=>{
+      await db.prepare('DELETE FROM student_email_changes WHERE user_id=? AND used_at IS NULL').run(account.user_id);
+      await db.prepare('INSERT INTO student_email_changes(token_hash,user_id,old_email,new_email,expires_at) VALUES (?,?,?,?,?)').run(hash,account.user_id,account.old_email,email,expiresAt);
+      await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(requestedBy,`${auditAction}:${account.student_id}`,ip);
+    });
+    try{
+      await sendEmail(email,'Confirme seu novo e-mail — Projeto Aprendiz',`Foi solicitada a alteração do e-mail de acesso e contato da sua conta. Confirme em até 30 minutos:\n\n${baseUrl}/confirm-email#token=${encodeURIComponent(token)}\n\nSe não reconhece esta alteração, ignore esta mensagem. O endereço atual continuará válido.`,`student-email/${hash}`);
+    }catch(error){
+      await db.prepare('DELETE FROM student_email_changes WHERE token_hash=?').run(hash);
+      logger.error('student_email_confirmation_failed',error,{userId:account.user_id});
+      return {sent:false,code:'DELIVERY_FAILED',message:'Não foi possível enviar a confirmação. O e-mail atual foi mantido.'};
+    }
+    return {sent:true,expiresAt,message:'Enviamos um link ao novo e-mail. O endereço atual permanece válido até a confirmação.'};
   }
 
   const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60_000;
@@ -156,6 +237,65 @@ export function createApplication({
     return { blocked: true, retryAfterMs };
   }
 
+  async function consumeActionRateLimit({ route, userId, ip, limit, windowMs = 60_000 }) {
+    const identity = `${Number(userId) || 0}:${String(ip || 'unknown')}`;
+    const result = await authRateLimiter.consume({
+      key: opaqueRateLimitKey(`action:${route}`, identity),
+      limit,
+      windowMs,
+    });
+    if (result.blocked) {
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)')
+        .run(Number(userId) || null, `action_rate_limited:${route}`, ip);
+    }
+    return result;
+  }
+
+  const authLimitKey = (route, scope, value) => opaqueRateLimitKey(`auth:${route}:${scope}`, value);
+
+  async function loginRateLimitStatus({ ip, email }) {
+    const ipResult = await authRateLimiter.status({
+      key: authLimitKey('login', 'ip', ip), limit: 20, windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    });
+    const emailResult = await authRateLimiter.status({
+      key: authLimitKey('login', 'email', email), limit: 5, windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    });
+    return { ip: ipResult, email: emailResult };
+  }
+
+  async function recordLoginFailure({ ip, email }) {
+    const ipResult = await authRateLimiter.consume({
+      key: authLimitKey('login', 'ip', ip), limit: 20, windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    });
+    const emailResult = await authRateLimiter.consume({
+      key: authLimitKey('login', 'email', email), limit: 5, windowMs: AUTH_RATE_LIMIT_WINDOW_MS,
+    });
+    return { ip: ipResult, email: emailResult };
+  }
+
+  async function resetLoginFailures(email) {
+    await authRateLimiter.reset({ key: authLimitKey('login', 'email', email) });
+  }
+
+  async function verifyTurnstile(token, ip) {
+    const secret = String(env.TURNSTILE_SECRET_KEY || '').trim();
+    const siteKey = String(env.TURNSTILE_SITE_KEY || '').trim();
+    const responseToken = String(token || '').trim();
+    if (!secret || !siteKey || !responseToken || responseToken.length > 2048) return false;
+    try {
+      return await verifyTurnstileToken({
+        token: responseToken,
+        ip,
+        secretKey: secret,
+        allowedHostnames: [new URL(baseUrl).hostname, 'www.aprendizicm.com.br'],
+        expectedAction: 'login',
+      });
+    } catch (error) {
+      logger.error('turnstile_verification_failed', error);
+      return false;
+    }
+  }
+
   function rateLimitResponse(response, result) {
     return json(response, 429, { message: AUTH_RATE_LIMIT_MESSAGE }, {
       'Retry-After': String(Math.max(1, Math.ceil(result.retryAfterMs / 1000))),
@@ -167,38 +307,45 @@ export function createApplication({
   async function currentSession(request) {
     const raw = cookies(request).pa_session;
     if (!raw) return null;
-    return await db.prepare(`
+    const session = await db.prepare(`
       SELECT sessions.*, users.id AS user_id, users.name, users.email, users.role, users.active
       FROM sessions JOIN users ON users.id = sessions.user_id
       WHERE sessions.token_hash = ? AND sessions.expires_at > ?
     `).get(sha256(raw), new Date().toISOString()) || null;
+    if (!session) return null;
+    const lastSeenAt = Date.parse(session.last_seen_at || session.created_at || 0);
+    const idleWindowMs = session.role === 'gestor' ? 12 * 60 * 60_000 : 72 * 60 * 60_000;
+    if (!Number.isFinite(lastSeenAt) || Date.now() - lastSeenAt > idleWindowMs) {
+      await db.prepare('DELETE FROM sessions WHERE id=?').run(session.id);
+      return null;
+    }
+    if (Date.now() - lastSeenAt > 15 * 60_000) {
+      const now = new Date().toISOString();
+      await db.prepare('UPDATE sessions SET last_seen_at=? WHERE id=?').run(now, session.id);
+      session.last_seen_at = now;
+    }
+    if (session?.role === 'aluno') {
+      const owner = await db.prepare(`SELECT students.id FROM student_accounts
+        JOIN students ON students.id=student_accounts.student_id
+        WHERE student_accounts.user_id=? AND students.active=1 AND students.anonymized_at IS NULL`).get(session.user_id);
+      if (!owner) return null;
+      session.student_id = Number(owner.id);
+    }
+    return session;
   }
 
-  async function createAppSession(user, ip, remember = false) {
+  async function createAppSession(user, ip, remember = false, { mfaVerified = false, userAgent = '' } = {}) {
     const token = randomBytes(32).toString('base64url');
     const csrfToken = randomBytes(24).toString('base64url');
-    const maxAge = remember ? 30 * 86400 : 8 * 3600;
-    const expires = new Date(Date.now() + maxAge * 1000).toISOString();
-    await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at) VALUES (?,?,?,?)').run(user.id, sha256(token), csrfToken, expires);
+    // A non-remembered login must disappear when the browser/PWA closes.
+    // Keep a finite server-side expiry as a safety net for abandoned sessions.
+    const maxAge = remember ? (user.role === 'gestor' ? 7 : 30) * 86400 : null;
+    const expires = new Date(Date.now() + (remember ? maxAge * 1000 : 8 * 3600 * 1000)).toISOString();
+    const now = new Date().toISOString();
+    await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at,last_seen_at,mfa_verified_at,user_agent) VALUES (?,?,?,?,?,?,?)')
+      .run(user.id, sha256(token), csrfToken, expires, now, mfaVerified ? now : null, cleanText(userAgent, 500));
     await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(user.id, 'login', ip);
     return { token, csrfToken, maxAge };
-  }
-
-  async function userFromSupabaseToken(request) {
-    const match = String(request.headers.authorization || '').match(/^Bearer\s+(.+)$/i);
-    if (!match) return null;
-    const { data, error } = await supabaseAuth.auth.getUser(match[1]);
-    const authUser = data?.user;
-    if (error || !authUser?.id || !authUser.email || !authUser.email_confirmed_at) return null;
-    let user = await db.prepare('SELECT * FROM users WHERE auth_user_id=? AND active=1').get(authUser.id);
-    if (!user) {
-      user = await db.prepare('SELECT * FROM users WHERE email=? AND auth_user_id IS NULL AND active=1').get(cleanEmail(authUser.email));
-      if (user) {
-        await db.prepare('UPDATE users SET auth_user_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(authUser.id,user.id);
-        user.auth_user_id = authUser.id;
-      }
-    }
-    return user || null;
   }
 
   async function authorize(request, response, roles = []) {
@@ -353,7 +500,8 @@ export function createApplication({
     if (classIds.length) {
       const placeholders = classIds.map(() => '?').join(',');
       classes = await db.prepare(`
-        SELECT classes.id,classes.course_id,classes.professor_id,classes.capacity,courses.name AS course_name
+        SELECT classes.id,classes.course_id,classes.professor_id,classes.capacity,classes.label,
+          courses.name AS course_name,locations.name AS location_name
         FROM classes
         JOIN courses ON courses.id=classes.course_id
         JOIN locations ON locations.id=classes.location_id
@@ -365,7 +513,9 @@ export function createApplication({
     } else if (legacyCourseNames.length) {
       const placeholders = legacyCourseNames.map(() => '?').join(',');
       classes = await db.prepare(`
-        SELECT MIN(classes.id) AS id,courses.id AS course_id,MIN(classes.professor_id) AS professor_id,MAX(classes.capacity) AS capacity,courses.name AS course_name
+        SELECT MIN(classes.id) AS id,courses.id AS course_id,MIN(classes.professor_id) AS professor_id,
+          MAX(classes.capacity) AS capacity,MIN(classes.label) AS label,courses.name AS course_name,
+          MIN(locations.name) AS location_name
         FROM classes
         JOIN courses ON courses.id=classes.course_id
         JOIN locations ON locations.id=classes.location_id
@@ -454,8 +604,13 @@ export function createApplication({
           return `<a href="${escapeHtml(parsed.toString())}" target="_blank" rel="noopener noreferrer">`;
         } catch { return '<a>'; }
       })
-      .replace(/<\/a>/gi, '</a>')
-      .slice(0, 12000000);
+      .replace(/<\/a>/gi, '</a>');
+  }
+
+  function richTextContentError(content) {
+    if (Buffer.byteLength(String(content || ''), 'utf8') > 64 * 1024) return 'O conteúdo formatado excede o limite de 64 KB.';
+    if ((String(content || '').match(/<[^>]+>/g) || []).length > 1000) return 'O conteúdo possui formatação excessiva.';
+    return '';
   }
 
   const {
@@ -474,6 +629,23 @@ export function createApplication({
   }
 
   async function normalizeAnnouncementRecipients(value) {
+    if (value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'turmas')) {
+      const turmas = recipientIds(value.turmas);
+      if (!turmas.length) return { error: 'Selecione ao menos uma turma.' };
+      if (turmas.length > ANNOUNCEMENT_RECIPIENT_MAX_COUNT) return { error: `Selecione no máximo ${ANNOUNCEMENT_RECIPIENT_MAX_COUNT} turmas.` };
+      const classRows = await db.prepare(`SELECT c.id,c.professor_id FROM classes c
+        JOIN professor_profiles pp ON pp.id=c.professor_id AND pp.active=1
+        JOIN courses co ON co.id=c.course_id AND co.active=1
+        JOIN locations l ON l.id=c.location_id AND l.active=1
+        JOIN school_years sy ON sy.id=c.school_year_id AND sy.active=1 AND sy.closed_at IS NULL
+        WHERE c.id IN (${turmas.map(() => '?').join(',')}) AND c.active=1`).all(...turmas);
+      if (classRows.length !== turmas.length) return { error: 'Uma das turmas selecionadas não está mais ativa.' };
+      const professores = [...new Set(classRows.map(row => Number(row.professor_id)))];
+      return {
+        items: professores.map(id => ({ recipient_type: 'professor', recipient_id: id })),
+        audience: { todos: false, professores: [], cursos: [], turmas },
+      };
+    }
     if (value == null || (typeof value === 'object' && !Array.isArray(value) && value.todos === true)) {
       return { items: [], audience: { todos: true, professores: [], cursos: [] } };
     }
@@ -624,26 +796,51 @@ export function createApplication({
     originAllowed,
     json,
     usesSupabaseAuth,
+    managerMfaRequired,
     readJson,
     cleanEmail,
     consumeAuthRateLimit,
+    consumeActionRateLimit,
+    loginRateLimitStatus,
+    recordLoginFailure,
+    resetLoginFailures,
+    verifyTurnstile,
+    turnstileSiteKey: String(env.TURNSTILE_SITE_KEY || '').trim(),
     rateLimitResponse,
     verifyPassword,
     createAppSession,
     publicUser,
     cookie,
     currentSession,
-    userFromSupabaseToken,
     baseUrl,
     sendEmail,
     notificationService,
+    notificationOutbox,
+    webPushService,
     normalizeNotificationPreferences,
     sha256,
     isProduction,
     issueProfessorInvite,
+    issueStudentInvite,
+    issueStudentEmailChange,
     strongPassword,
     requireSupabaseAdmin,
+    verifyUserPassword: async (userId,password,role='') => {
+      const user=await db.prepare(`SELECT email,password_hash,auth_user_id,role FROM users WHERE id=? AND active=1${role?' AND role=?':''}`).get(userId,...(role?[role]:[]));
+      if(!user)return false;
+      if(!usesSupabaseAuth)return verifyPassword(password,user.password_hash);
+      const {data,error}=await signInWithSupabasePassword({email:user.email,password});
+      return !error && data?.user?.id===user.auth_user_id;
+    },
+    verifyStudentPassword: async (userId,password) => {
+      const user=await db.prepare("SELECT email,password_hash,auth_user_id FROM users WHERE id=? AND role='aluno' AND active=1").get(userId);
+      if(!user)return false;
+      if(!usesSupabaseAuth)return verifyPassword(password,user.password_hash);
+      const {data,error}=await signInWithSupabasePassword({email:user.email,password});
+      return !error && data?.user?.id===user.auth_user_id;
+    },
     supabaseAdmin,
+    signInWithSupabasePassword,
     hashPassword,
     randomBytes,
     randomUUID,
@@ -676,6 +873,7 @@ export function createApplication({
     appTimeZone,
     announcementScheduleParts,
     sanitizeAnnouncementContent,
+    richTextContentError,
     normalizeAnnouncementRecipients,
     normalizeAnnouncementAttachments,
     prepareStoredAttachments,
@@ -728,5 +926,20 @@ export function createApplication({
     }
   }
 
-  return { handler, isApiPath, securityHeaders, json, handleError };
+  async function cleanupSecurityData() {
+    const now=new Date().toISOString();
+    const auditBefore=new Date(Date.now()-730*86400_000).toISOString();
+    const deleted={};
+    deleted.sessions=Number((await db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now)).changes||0);
+    deleted.passwordResets=Number((await db.prepare('DELETE FROM password_resets WHERE expires_at<? OR (used_at IS NOT NULL AND used_at<?)').run(now,new Date(Date.now()-30*86400_000).toISOString())).changes||0);
+    deleted.managerChallenges=Number((await db.prepare('DELETE FROM manager_login_challenges WHERE expires_at<? OR consumed_at IS NOT NULL').run(now)).changes||0);
+    deleted.audit=Number((await db.prepare('DELETE FROM audit_log WHERE created_at<?').run(auditBefore)).changes||0);
+    deleted.outbox=await notificationOutbox.cleanup();
+    return deleted;
+  }
+
+  return { handler, isApiPath, securityHeaders, json, handleError,
+    deliverStudentNotices: () => deliverStudentNotices({db,notificationService,announcementScheduledCondition,logger}),
+    deliverNotificationOutbox: options => notificationOutbox.drain(options),
+    cleanupSecurityData };
 }

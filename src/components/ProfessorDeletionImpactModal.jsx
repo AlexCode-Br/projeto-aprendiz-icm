@@ -54,8 +54,7 @@ const ProfessorDeletionImpactModal = ({ isOpen, onClose, onContinue, impact, loa
             </div>
         ) : null}
 
-        <div className="mt-7 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} className="btn btn-secondary">Cancelar</button>
+        <div className="mt-7 flex border-t border-border pt-5 sm:justify-end">
             <button type="button" onClick={onContinue} disabled={loading || !impact} className="btn btn-danger">Continuar para exclusão</button>
         </div>
     </Modal>

@@ -2,7 +2,10 @@ import { CLASS_WEEKDAYS, classSchedules, validateClassSchedules } from '../share
 
 export async function initializeClassSchedules(db) {
   if (db.dialect !== 'sqlite') return;
-  if (await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='class_schedules'").get()) return;
+  if (await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='class_schedules'").get()) {
+    await db.exec(`CREATE TABLE IF NOT EXISTS class_schedule_dates (class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE, class_date TEXT NOT NULL, start_minutes INTEGER NOT NULL CHECK(start_minutes BETWEEN 0 AND 1439), PRIMARY KEY(class_id,class_date,start_minutes))`);
+    return;
+  }
   await db.transaction(async () => {
     await db.exec(`CREATE TABLE class_schedules (
       class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE,
@@ -10,6 +13,7 @@ export async function initializeClassSchedules(db) {
       start_minutes INTEGER NOT NULL CHECK(start_minutes BETWEEN 0 AND 1439),
       PRIMARY KEY(class_id,weekday_index,start_minutes)
     )`);
+    await db.exec(`CREATE TABLE class_schedule_dates (class_id INTEGER NOT NULL REFERENCES classes(id) ON DELETE CASCADE, class_date TEXT NOT NULL, start_minutes INTEGER NOT NULL CHECK(start_minutes BETWEEN 0 AND 1439), PRIMARY KEY(class_id,class_date,start_minutes))`);
     const classes = await db.prepare('SELECT id,weekday,start_time FROM classes').all();
     for (const course of classes) {
       const slots = classSchedules(course);
@@ -30,6 +34,12 @@ export async function attachClassSchedules(db, classes) {
     for (const row of rows) {
       const slots = grouped.get(row.class_id) || [];
       slots.push({ weekday: CLASS_WEEKDAYS[row.weekday_index], start_time: String(Math.floor(row.start_minutes/60)).padStart(2,'0') + ':' + String(row.start_minutes%60).padStart(2,'0') });
+      grouped.set(row.class_id,slots);
+    }
+    const dated = await db.prepare(`SELECT class_id,class_date,start_minutes FROM class_schedule_dates WHERE class_id IN (${ids.map(()=>'?').join(',')}) AND class_date >= date('now') ORDER BY class_date,start_minutes`).all(...ids);
+    for (const row of dated) {
+      const slots = grouped.get(row.class_id) || [];
+      slots.push({ tipo:'data', date:row.class_date, start_time:String(Math.floor(row.start_minutes/60)).padStart(2,'0') + ':' + String(row.start_minutes%60).padStart(2,'0') });
       grouped.set(row.class_id,slots);
     }
   }

@@ -93,7 +93,27 @@ test('chamada exige a turma completa e permanece exclusiva do professor', { time
     const saved=await call(professor,'GET',`/frequencia?curso_id=${classId}&data=${today}`);
     assert.equal(saved.data.registrada,true);
     assert.equal(saved.data.alunos.filter(student=>student.status==='ausente').length,1);
-    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action='attendance_saved'").get().total,1);
+
+    const historicalDate='2026-07-15';
+    const historicalRoster=await call(professor,'GET',`/frequencia?curso_id=${classId}&data=${historicalDate}`);
+    assert.equal(historicalRoster.status,200,JSON.stringify(historicalRoster.data));
+    assert.ok(historicalRoster.data.alunos.length>0);
+    assert.equal(historicalRoster.data.alunos.some(student=>student.id===enrolledStudents[1].id),false,'matrícula posterior à chamada não pode integrar o elenco');
+    assert.equal((await call(professor,'POST','/frequencia',{
+      curso_id:classId,
+      data_aula:historicalDate,
+      frequencias:historicalRoster.data.alunos.map(student=>({aluno_id:student.id,status:'presente'})),
+    })).status,200);
+    const lateStudent=database.prepare("INSERT INTO students(name,email) VALUES ('Aluno posterior','posterior@example.com') RETURNING id").get();
+    database.prepare("INSERT INTO enrollments(student_id,class_id,status,enrolled_at) VALUES (?,?,'ativa','2026-09-01')").run(lateStudent.id,classId);
+    const historicalAfterEnrollment=await call(professor,'GET',`/frequencia?curso_id=${classId}&data=${historicalDate}`);
+    assert.deepEqual(historicalAfterEnrollment.data.alunos.map(student=>student.id),historicalRoster.data.alunos.map(student=>student.id),'chamada salva precisa conservar o snapshot do elenco');
+    assert.equal((await call(professor,'POST','/frequencia',{
+      curso_id:classId,
+      data_aula:historicalDate,
+      frequencias:historicalAfterEnrollment.data.alunos.map(student=>({aluno_id:student.id,status:'justificado'})),
+    })).status,200,'edição da chamada antiga deve validar contra o snapshot');
+    assert.equal(database.prepare("SELECT COUNT(*) AS total FROM audit_log WHERE action='attendance_saved'").get().total,3);
     database.close();
   } finally {
     if(server.exitCode===null)server.kill('SIGTERM');

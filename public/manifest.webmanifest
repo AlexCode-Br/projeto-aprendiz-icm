@@ -1,0 +1,40 @@
+{
+  "name": "Projeto Aprendiz",
+  "short_name": "Projeto Aprendiz",
+  "description": "Plataforma de gestão de cursos, alunos, professores e frequência do Projeto Aprendiz.",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "id": "/login",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8f8f8",
+  "theme_color": "#b71c1c",
+  "icons": [
+    {
+      "src": "/pwa-icon-192-v5.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-icon-512-v5.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-192-v5.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/pwa-maskable-512-v5.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

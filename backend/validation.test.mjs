@@ -46,7 +46,7 @@ test('valida catálogos e o perfil do professor sem criar turmas', () => {
 test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () => {
   assert.deepEqual(validateStudent({
     nome: 'Maria de Souza',
-    contato: '',
+    contato: 'maria@example.com',
     telefone: '(71) 99999-1234',
     classe: 'Adolescente',
     turmas: [11, 22, 33],
@@ -59,7 +59,7 @@ test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () =
 
   assert.match(validateStudent({
     nome: 'Maria de Souza',
-    contato: '',
+    contato: 'maria@example.com',
     telefone: '(71) 99999-1234',
     classe: 'Adolescente',
     turmas: [11],
@@ -69,6 +69,16 @@ test('valida o cadastro completo do aluno sem exigir uma igreja duplicada', () =
     guardian_phone: '(71) 98888-1234',
     guardian_consent: false,
   }).guardian_consent, /autorização/i);
+
+  assert.equal(validateStudent({
+    nome: 'Maria de Souza',
+    contato: '',
+    telefone: '(71) 99999-1234',
+    classe: 'Jovem',
+    turmas: [11],
+    local: 'Guarani',
+    instrumento: 'Não',
+  }).contato, 'O e-mail é obrigatório.');
 
   assert.equal(validateStudent({
     nome: 'Maria de Souza',

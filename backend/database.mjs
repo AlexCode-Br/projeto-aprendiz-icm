@@ -2,48 +2,11 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { readdir, readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { normalizeRow, postgresSql, returningId, qualifyApplicationTables, parseInt8 } from './database/sql-compatibility.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-function normalizeValue(value) {
-  if (value instanceof Date) return value.toISOString();
-  return value;
-}
-
-function normalizeRow(row) {
-  if (!row) return row;
-  return Object.fromEntries(Object.entries(row).map(([key, value]) => [key, normalizeValue(value)]));
-}
-
-function postgresSql(source) {
-  let sql = String(source).trim().replace(/;$/, '');
-  const ignoredInsert = /^INSERT\s+OR\s+IGNORE\s+/i.test(sql);
-  sql = sql.replace(/^INSERT\s+OR\s+IGNORE\s+/i, 'INSERT ');
-  sql = sql.replace(/\bLIKE\b/g, 'ILIKE');
-  sql = sql.replace(/GROUP_CONCAT\(DISTINCT\s+([^\)]+)\)/gi, "STRING_AGG(DISTINCT $1, ',')");
-  sql = sql.replace(/GROUP_CONCAT\(([^,\)]+),\s*'([^']*)'\)/gi, "STRING_AGG($1, '$2')");
-  if (ignoredInsert && !/\bON\s+CONFLICT\b/i.test(sql)) sql += ' ON CONFLICT DO NOTHING';
-  let index = 0;
-  return sql.replace(/\?/g, () => `$${++index}`);
-}
-
-const tablesWithId = new Set([
-  'users', 'sessions', 'password_resets', 'dev_emails', 'audit_log', 'locations',
-  'professor_profiles', 'professor_invites', 'students', 'courses', 'classes',
-  'school_years',
-  'churches',
-  'enrollments', 'attendance_sessions', 'attendance_records', 'announcements', 'announcement_attachments',
-  'support_tickets', 'support_messages', 'support_ticket_events', 'dropout_events', 'student_contacts',
-  'scheduled_notifications', 'profile_photos',
-]);
-
-function returningId(sql) {
-  const match = sql.match(/^\s*INSERT\s+INTO\s+([a-z_]+)/i);
-  if (!match || !tablesWithId.has(match[1].toLowerCase()) || /\bRETURNING\b/i.test(sql)) return sql;
-  return `${sql} RETURNING id`;
-}
-
-export const databaseInternals = { postgresSql, returningId, normalizeRow };
+export const databaseInternals = { postgresSql, returningId, normalizeRow, qualifyApplicationTables, parseInt8 };
 
 class PreparedStatement {
   constructor(database, sql) { this.database = database; this.sql = sql; }
@@ -79,11 +42,11 @@ class PostgresDatabase {
   }
   prepare(sql) { return new PreparedStatement(this, sql); }
   target() { return this.transactions.getStore() || this.pool; }
-  async query(sql, params = []) { return this.target().query(postgresSql(sql), params); }
+  async query(sql, params = []) { return this.target().query(qualifyApplicationTables(postgresSql(sql)), params); }
   async get(sql, params = []) { return normalizeRow((await this.query(sql, params)).rows[0]); }
   async all(sql, params = []) { return (await this.query(sql, params)).rows.map(normalizeRow); }
   async run(sql, params = []) {
-    const result = await this.target().query(returningId(postgresSql(sql)), params);
+    const result = await this.target().query(qualifyApplicationTables(returningId(postgresSql(sql))), params);
     return { changes: result.rowCount, lastInsertRowid: Number(result.rows?.[0]?.id || 0) };
   }
   async exec(sql) { await this.target().query(sql); }
@@ -130,10 +93,7 @@ export async function createDatabase({ sqlitePath, logger = console }) {
     const { Pool, types } = await import('pg');
     // Parse only PostgreSQL int8 values (COUNT/SUM), never text that merely
     // resembles a number such as a phone or a catalog named "2026".
-    types.setTypeParser(20, value => {
-      const parsed = Number(value);
-      return Number.isSafeInteger(parsed) ? parsed : value;
-    });
+    types.setTypeParser(20, parseInt8);
     const pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       max: Math.min(10, Math.max(1, Number(process.env.DB_POOL_SIZE || 5))),

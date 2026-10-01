@@ -7,6 +7,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "triggers": { "crons": ["* * * * *"] },
   "routes": [
     { "pattern": "aprendizicm.com.br", "custom_domain": true },
     { "pattern": "www.aprendizicm.com.br/*", "zone_name": "aprendizicm.com.br" }
@@ -28,6 +29,7 @@
     "READ_ONLY_PREVIEW": "false",
     "SUPABASE_URL": "https://ggghsddanuuekztxngxj.supabase.co",
     "SUPABASE_ANNOUNCEMENT_BUCKET": "announcement-attachments",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFCNjfbJOaUoTJam",
     "EMAIL_FROM": "naoresponda@aprendizicm.com.br",
     "EMAIL_LOGO_URL": "https://aprendizicm.com.br/projeto-aprendiz-logo.png",
     "EMAIL_DEPARTMENT_LOGO_URL": "https://aprendizicm.com.br/departamento-louvor-logo.png",

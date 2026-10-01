@@ -1,10 +1,13 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AuthContext } from '../contexts/AuthContext';
+import TeacherClassSetup from '../components/TeacherClassSetup';
 import { useLocation } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import PageSkeleton from '../components/PageSkeleton';
 
 const MainLayout = ({ children }) => {
+    const {user}=useContext(AuthContext);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const mainRef = useRef(null);
     const location = useLocation();
@@ -32,7 +35,7 @@ const MainLayout = ({ children }) => {
     }, [location.pathname]);
 
     return (
-        <div className="flex h-dvh overflow-hidden bg-background">
+        <div className="app-shell flex overflow-hidden bg-background">
             <a href="#main-content" className="sr-only z-[60] rounded-lg bg-surface px-4 py-3 text-text-default shadow-lg focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Ir para o conteúdo principal</a>
             <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
             
@@ -47,8 +50,8 @@ const MainLayout = ({ children }) => {
             <div className="flex min-h-0 min-w-0 flex-1 flex-col" {...(sidebarOpen ? { inert: '' } : {})}>
                 <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-                <main ref={mainRef} id="main-content" tabIndex="-1" className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 outline-none sm:p-6 lg:p-8">
-                    <div className="page-shell"><React.Suspense fallback={<PageSkeleton />}>{children}</React.Suspense></div>
+                <main ref={mainRef} id="main-content" tabIndex="-1" className="app-main-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-3 outline-none sm:p-6 lg:p-8">
+                    <div className="page-shell">{user?.role==='professor'&&<TeacherClassSetup key={user.id}/>}<React.Suspense fallback={<PageSkeleton />}>{children}</React.Suspense></div>
                 </main>
             </div>
         </div>

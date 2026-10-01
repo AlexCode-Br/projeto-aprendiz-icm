@@ -1,7 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { initializeClassSchedules } from './class-schedules.mjs';
+import { initializeStudentSchema } from './student-schema.mjs';
 import { hashPassword, strongPassword } from './security.mjs';
 import { normalizeEmail } from '../shared/validation.mjs';
+import { catalogKey, churchName } from '../shared/catalog-options.mjs';
+import { ensureOfferingCatalog } from './offering-catalog.mjs';
 
 // Local/Node bootstrap only. Workers use the existing migrated production database.
 export async function initializeNodeApplication({ db, env = process.env }) {
@@ -17,7 +20,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('gestor','professor')),
+      role TEXT NOT NULL CHECK(role IN ('gestor','professor','aluno')),
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -28,6 +31,9 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       token_hash TEXT NOT NULL UNIQUE,
       csrf_token TEXT NOT NULL,
       expires_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      mfa_verified_at TEXT,
+      user_agent TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE IF NOT EXISTS password_resets (
@@ -38,11 +44,35 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       used_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS manager_login_challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      code_hash TEXT NOT NULL,
+      remember INTEGER NOT NULL DEFAULT 0 CHECK(remember IN (0,1)),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      expires_at TEXT NOT NULL,
+      consumed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS manager_login_challenges_user_idx ON manager_login_challenges(user_id);
+    CREATE INDEX IF NOT EXISTS manager_login_challenges_expiry_idx ON manager_login_challenges(expires_at);
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       preferences_json TEXT NOT NULL DEFAULT '{}',
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      endpoint TEXT NOT NULL UNIQUE,
+      p256dh TEXT NOT NULL,
+      auth TEXT NOT NULL,
+      user_agent TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
     CREATE TABLE IF NOT EXISTS profile_photos (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_type TEXT NOT NULL CHECK(owner_type IN ('user','professor','student')),
@@ -165,7 +195,10 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       transferred_to_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL,
       UNIQUE(student_id, class_id)
     );
+    CREATE INDEX IF NOT EXISTS enrollments_recent_active_idx ON enrollments(enrolled_at DESC,id DESC) WHERE status='ativa';
     CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);
+    CREATE INDEX IF NOT EXISTS enrollments_class_status_student_idx ON enrollments(class_id,status,student_id);
+    CREATE INDEX IF NOT EXISTS enrollments_class_period_idx ON enrollments(class_id,enrolled_at,completed_at,student_id);
     CREATE TABLE IF NOT EXISTS attendance_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       class_id INTEGER NOT NULL REFERENCES classes(id),
@@ -289,8 +322,34 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       UNIQUE(notification_type,reference_key,recipient)
     );
     CREATE INDEX IF NOT EXISTS scheduled_notifications_status_idx ON scheduled_notifications(status,updated_at);
+    CREATE TABLE IF NOT EXISTS notification_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      preference TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      destination TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      notification_tag TEXT NOT NULL,
+      email_enabled INTEGER NOT NULL DEFAULT 0 CHECK(email_enabled IN (0,1)),
+      push_enabled INTEGER NOT NULL DEFAULT 1 CHECK(push_enabled IN (0,1)),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','sent','dead')),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts>=0),
+      available_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      lease_until TEXT,
+      sent_at TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS notification_outbox_pending_idx ON notification_outbox(status,available_at,id);
+    CREATE INDEX IF NOT EXISTS notification_outbox_lease_idx ON notification_outbox(status,lease_until) WHERE status='processing';
   `);
   if (db.dialect === 'sqlite') {
+    const sessionColumns = await db.prepare('PRAGMA table_info(sessions)').all();
+    if(!sessionColumns.some(column=>column.name==='last_seen_at'))await db.exec('ALTER TABLE sessions ADD COLUMN last_seen_at TEXT; UPDATE sessions SET last_seen_at=created_at WHERE last_seen_at IS NULL; CREATE INDEX IF NOT EXISTS sessions_last_seen_at_idx ON sessions(last_seen_at);');
+    if(!sessionColumns.some(column=>column.name==='mfa_verified_at'))await db.exec('ALTER TABLE sessions ADD COLUMN mfa_verified_at TEXT;');
+    if(!sessionColumns.some(column=>column.name==='user_agent'))await db.exec('ALTER TABLE sessions ADD COLUMN user_agent TEXT;');
     const userColumns = await db.prepare('PRAGMA table_info(users)').all();
     if (!userColumns.some(column => column.name === 'auth_user_id')) {
       await db.exec('ALTER TABLE users ADD COLUMN auth_user_id TEXT; CREATE UNIQUE INDEX IF NOT EXISTS users_auth_user_id_unique ON users(auth_user_id);');
@@ -457,9 +516,39 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     const enrollmentColumns=await db.prepare('PRAGMA table_info(enrollments)').all();
     if(!enrollmentColumns.some(column=>column.name==='completed_at'))await db.exec('ALTER TABLE enrollments ADD COLUMN completed_at TEXT;');
     if(!enrollmentColumns.some(column=>column.name==='transferred_to_class_id'))await db.exec('ALTER TABLE enrollments ADD COLUMN transferred_to_class_id INTEGER REFERENCES classes(id) ON DELETE SET NULL;');
+    await db.exec("CREATE INDEX IF NOT EXISTS enrollments_recent_active_idx ON enrollments(enrolled_at DESC,id DESC) WHERE status='ativa';");
     await db.exec('CREATE INDEX IF NOT EXISTS enrollments_transferred_to_class_id_idx ON enrollments(transferred_to_class_id);');
+    await db.exec('CREATE INDEX IF NOT EXISTS enrollments_class_status_student_idx ON enrollments(class_id,status,student_id);');
+    await db.exec('CREATE INDEX IF NOT EXISTS enrollments_class_period_idx ON enrollments(class_id,enrolled_at,completed_at,student_id);');
+    await db.exec("UPDATE enrollments SET completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP) WHERE status<>'ativa';");
     const dropoutColumns=await db.prepare('PRAGMA table_info(dropout_events)').all();
     if(!dropoutColumns.some(column=>column.name==='reason_category'))await db.exec("ALTER TABLE dropout_events ADD COLUMN reason_category TEXT NOT NULL DEFAULT 'outro' CHECK(reason_category IN ('mudanca','desinteresse','horario','saude','familia','outro')); UPDATE dropout_events SET reason_category=CASE WHEN LOWER(reason) LIKE '%horário%' OR LOWER(reason) LIKE '%horario%' THEN 'horario' WHEN LOWER(reason) LIKE '%pessoais%' OR LOWER(reason) LIKE '%familia%' THEN 'familia' ELSE 'outro' END;");
+  }
+
+  if (db.dialect === 'sqlite') {
+    const churchRows = await db.prepare('SELECT id,name FROM churches ORDER BY id').all();
+    const groups = new Map();
+    for (const row of churchRows) {
+      const displayName = churchName(row.name);
+      const key = catalogKey(displayName);
+      if (!key) continue;
+      const items = groups.get(key) || [];
+      items.push({ ...row, displayName, prefixed: /^\s*ICM(?:\s+|-)+/i.test(row.name) });
+      groups.set(key, items);
+    }
+    await db.transaction(async () => {
+      for (const items of groups.values()) {
+        items.sort((a, b) => Number(a.prefixed) - Number(b.prefixed) || Number(a.id) - Number(b.id));
+        const [target, ...duplicates] = items;
+        for (const duplicate of duplicates) {
+          await db.prepare('UPDATE students SET church_id=? WHERE church_id=?').run(target.id, duplicate.id);
+          await db.prepare('DELETE FROM churches WHERE id=?').run(duplicate.id);
+        }
+        if (target.name !== target.displayName) {
+          await db.prepare('UPDATE churches SET name=? WHERE id=?').run(target.displayName, target.id);
+        }
+      }
+    });
   }
 
   async function seedUser(name, email, password, role) {
@@ -467,6 +556,9 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     await db.prepare('INSERT INTO users (name,email,password_hash,role) VALUES (?,?,?,?)')
       .run(name, email, await hashPassword(password || randomBytes(48).toString('base64url')), role);
   }
+
+  // Keep the canonical church/locality directory available even without demo data.
+  await ensureOfferingCatalog(db);
 
   const seedDemoData = env.SEED_DEMO_DATA === 'true' || !isProduction;
   if (seedDemoData) {
@@ -483,9 +575,7 @@ export async function initializeNodeApplication({ db, env = process.env }) {
   async function seedAcademicData() {
     const schoolYear = await db.prepare('SELECT id FROM school_years WHERE active=1 ORDER BY id DESC LIMIT 1').get();
     if (!schoolYear) throw new Error('Nenhum período letivo ativo foi configurado.');
-    const locationNames = ['Pituba', 'Brotas', 'Lauro de Freitas', 'Guarani', 'Boca do Rio', 'Alto de Coutos', 'EAD'];
     const courseNames = ['Violão I', 'Teclado', 'Bateria', 'Canto Coral', 'Violino', 'Flauta Transversal', 'Saxofone', 'Contrabaixo', 'Violão II', 'Teoria Musical'];
-    for (const name of locationNames) await db.prepare('INSERT OR IGNORE INTO locations (name) VALUES (?)').run(name);
     for (const name of courseNames) await db.prepare('INSERT OR IGNORE INTO courses (name) VALUES (?)').run(name);
 
     const professorUser = await db.prepare('SELECT id FROM users WHERE email = ?').get('professor@projetoaprendiz.local');
@@ -517,18 +607,18 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     }
 
     const studentRows = [
-      ['João Pereira','joao.pereira@email.com','(71) 98821-1040','ICM Pituba','Jovem',1,'Violão I','Pituba'],
-      ['Maria Clara','maria.clara@email.com','(71) 97732-2151','ICM Brotas','Adolescente',0,'Teclado','Brotas'],
-      ['Pedro Almeida','pedro.almeida@email.com','(71) 96643-3262','ICM Lauro','Jovem',1,'Bateria','Lauro de Freitas'],
-      ['Ana Beatriz','ana.beatriz@email.com','(71) 95554-4373','ICM Pituba','Jovem',0,'Canto Coral','Pituba'],
-      ['Lucas Guimarães','lucas.guimaraes@email.com','(71) 94465-5484','ICM Brotas','Adolescente',1,'Violino','Brotas'],
-      ['Gabriela Santos','gabriela.santos@email.com','(71) 93376-6595','ICM Boca do Rio','Jovem',1,'Flauta Transversal','Boca do Rio'],
-      ['Rafael Souza','rafael.souza@email.com','(71) 92287-7606','ICM Alto de Coutos','Varão',1,'Contrabaixo','Alto de Coutos'],
-      ['Juliana Costa','juliana.costa@email.com','(71) 91198-8717','ICM Pituba','Senhora',0,'Teoria Musical','EAD'],
-      ['Ricardo Alves','ricardo.alves@email.com','(71) 90019-9828','ICM Pituba','Varão',1,'Violão II','Pituba'],
-      ['Camila Rocha','camila.rocha@email.com','(71) 98920-0939','ICM Brotas','Jovem',1,'Saxofone','Brotas'],
-      ['Bruno Lima','bruno.lima@email.com','(71) 97831-1050','ICM Pituba','Adolescente',0,'Violão I','Pituba'],
-      ['Larissa Melo','larissa.melo@email.com','(71) 96742-2161','ICM Brotas','Jovem',0,'Teclado','Brotas'],
+      ['João Pereira','joao.pereira@email.com','(71) 98821-1040','Pituba','Jovem',1,'Violão I','Pituba'],
+      ['Maria Clara','maria.clara@email.com','(71) 97732-2151','Brotas','Adolescente',0,'Teclado','Brotas'],
+      ['Pedro Almeida','pedro.almeida@email.com','(71) 96643-3262','Lauro','Jovem',1,'Bateria','Lauro de Freitas'],
+      ['Ana Beatriz','ana.beatriz@email.com','(71) 95554-4373','Pituba','Jovem',0,'Canto Coral','Pituba'],
+      ['Lucas Guimarães','lucas.guimaraes@email.com','(71) 94465-5484','Brotas','Adolescente',1,'Violino','Brotas'],
+      ['Gabriela Santos','gabriela.santos@email.com','(71) 93376-6595','Boca do Rio','Jovem',1,'Flauta Transversal','Boca do Rio'],
+      ['Rafael Souza','rafael.souza@email.com','(71) 92287-7606','Alto de Coutos','Varão',1,'Contrabaixo','Alto de Coutos'],
+      ['Juliana Costa','juliana.costa@email.com','(71) 91198-8717','Pituba','Senhora',0,'Teoria Musical','EAD'],
+      ['Ricardo Alves','ricardo.alves@email.com','(71) 90019-9828','Pituba','Varão',1,'Violão II','Pituba'],
+      ['Camila Rocha','camila.rocha@email.com','(71) 98920-0939','Brotas','Jovem',1,'Saxofone','Brotas'],
+      ['Bruno Lima','bruno.lima@email.com','(71) 97831-1050','Pituba','Adolescente',0,'Violão I','Pituba'],
+      ['Larissa Melo','larissa.melo@email.com','(71) 96742-2161','Brotas','Jovem',0,'Teclado','Brotas'],
     ];
     for (const [name,email,phone,church,ageGroup,instrument,course,location] of studentRows) {
       await db.prepare('INSERT OR IGNORE INTO churches (name) VALUES (?)').run(church);
@@ -587,7 +677,9 @@ export async function initializeNodeApplication({ db, env = process.env }) {
   if (seedDemoData) await seedCommunicationData();
   await db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(new Date().toISOString());
   await db.prepare('DELETE FROM password_resets WHERE expires_at <= ? OR used_at IS NOT NULL').run(new Date().toISOString());
+  await db.prepare('DELETE FROM manager_login_challenges WHERE expires_at <= ? OR consumed_at IS NOT NULL').run(new Date().toISOString());
 
   await initializeClassSchedules(db);
+  await initializeStudentSchema(db);
 
 }

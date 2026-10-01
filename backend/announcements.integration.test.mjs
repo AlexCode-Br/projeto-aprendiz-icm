@@ -10,7 +10,7 @@ import test from 'node:test';
 
 const projectRoot=join(dirname(fileURLToPath(import.meta.url)),'..');
 const dataUrl=(mime,buffer)=>`data:${mime};base64,${buffer.toString('base64')}`;
-const png=Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]),Buffer.from('test-image')]);
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
 const pdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\n%%EOF');
 const secondPdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n%%EOF');
 const replacementPdf=Buffer.from('%PDF-1.4\n1 0 obj<</Type/Catalog/Version/1.7>>endobj\n%%EOF');
@@ -83,6 +83,17 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
       ],
     };
 
+    const invalidSchedule=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Agendamento incompleto',modoEnvio:'agendar',dataAgendamento:'',horaAgendamento:'',anexos:[]});
+    assert.equal(invalidSchedule.status,400);
+    assert.ok(invalidSchedule.data.errors.dataAgendamento);
+    assert.ok(invalidSchedule.data.errors.horaAgendamento);
+
+    const immediate=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Aviso enviado agora',modoEnvio:'agora',dataAgendamento:'',horaAgendamento:'',anexos:[]});
+    assert.equal(immediate.status,201,JSON.stringify(immediate.data));
+    const immediateManagerItem=(await call(gestor,'GET','/api/informativos')).data.find(item=>item.id===immediate.data.id);
+    assert.equal(immediateManagerItem.status,'Publicado');
+    assert.ok((await call(professorA,'GET','/api/informativos')).data.some(item=>item.id===immediate.data.id),'envio imediato deve aparecer sem data e hora preenchidas');
+
     assert.equal((await call(professorA,'POST','/api/informativos',payload)).status,403);
     const spoofed=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Arquivo inválido',anexos:[{nome:'falso.pdf',tipo:'application/pdf',dataUrl:dataUrl('application/pdf',png)}]});
     assert.equal(spoofed.status,400);
@@ -113,21 +124,34 @@ test('informativos preservam agendamento, anexos, leitura individual e permissõ
     assert.ok(itemA);
     assert.equal(itemA.hasRead,false);
     assert.deepEqual(itemA.anexos.map(item=>item.tipo),['image/png','application/pdf','application/pdf']);
+    const pagedA=await call(professorA,'GET','/api/informativos?page=1&limit=1&q=cronograma&read=nao-lidos');
+    assert.equal(pagedA.status,200,JSON.stringify(pagedA.data));
+    assert.equal(pagedA.data.items.length,1);
+    assert.equal(pagedA.data.items[0].id,announcementId);
+    assert.ok(pagedA.data.total>=1);
+    const recentA=await call(professorA,'GET','/api/informativos?page=1&limit=3&order=recent');
+    assert.equal(recentA.status,200,JSON.stringify(recentA.data));
+    assert.ok(recentA.data.items.length<=3,'o painel deve receber apenas os três itens solicitados');
+    const recentIds=recentA.data.items.map(item=>item.id);
+    assert.ok(recentIds.indexOf(immediate.data.id)<recentIds.indexOf(announcementId),'a ordenação recente deve priorizar a data sem fixação');
+    const managerPaged=await call(gestor,'GET','/api/informativos?page=1&limit=1&status=Publicado');
+    assert.equal(managerPaged.status,200,JSON.stringify(managerPaged.data));
+    assert.equal(managerPaged.data.items.length,1);
+    assert.ok(managerPaged.data.total>=1);
     assert.equal((await call(professorA,'GET','/api/informativos/nao-lidos')).data.total,initialUnread+1);
     assert.equal((await call(professorA,'POST',`/api/informativos/${announcementId}/lida`,{})).status,200);
     assert.equal((await call(professorA,'GET','/api/informativos/nao-lidos')).data.total,initialUnread);
     assert.equal((await call(professorB,'GET','/api/informativos')).data.find(item=>item.id===announcementId).hasRead,false,'leitura deve ser individual');
-    const readers=await call(gestor,'GET',`/api/informativos/${announcementId}/leituras`);
-    assert.deepEqual(readers.data.map(reader=>reader.professor_id),[professorAProfile]);
-    assert.deepEqual(readers.data.map(reader=>reader.name),['Marina Oliveira']);
-    assert.equal('email' in readers.data[0],false,'a lista compacta não deve expor o e-mail');
+    const managerPublishedItem=(await call(gestor,'GET','/api/informativos')).data.find(item=>item.id===announcementId);
+    assert.equal('lido' in managerPublishedItem,false,'o gestor não recebe contagem de visualizações');
+    assert.equal((await call(gestor,'GET',`/api/informativos/${announcementId}/leituras`)).status,404,'a lista administrativa de leitores foi removida');
 
     const pdfAttachments=itemA.anexos.filter(item=>item.tipo==='application/pdf');
     const pdfAttachment=pdfAttachments[0];
     const openedPdf=await call(professorA,'GET',pdfAttachment.url,undefined,{binary:true});
     assert.equal(openedPdf.status,200);
     assert.equal(openedPdf.headers.get('content-type'),'application/pdf');
-    assert.match(openedPdf.headers.get('content-disposition'),/^inline/);
+    assert.match(openedPdf.headers.get('content-disposition'),/^attachment/);
     assert.deepEqual(openedPdf.data,pdf);
 
     const targeted=await call(gestor,'POST','/api/informativos',{...payload,titulo:'Somente professor A',destinatarios:{todos:false,professores:[professorAProfile],cursos:[]},anexos:[payload.anexos[1]]});

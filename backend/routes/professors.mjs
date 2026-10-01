@@ -1,3 +1,5 @@
+import { churchName } from '../../shared/catalog-options.mjs';
+
 export function createProfessorRoutes(context) {
   const {
     db,
@@ -22,7 +24,7 @@ export function createProfessorRoutes(context) {
   } = context;
 
   const prepareProfileLocation = async value => {
-    const name=cleanText(value,100),key=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    const name=churchName(cleanText(value,100)),key=name.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
     const error=catalogNameError(name,'igreja');
     if(error)return {id:null,name,error,needsSave:false};
     if(['ead','remoto'].includes(key))return {id:null,name,error:'Selecione uma igreja física.',needsSave:false};
@@ -210,7 +212,6 @@ export function createProfessorRoutes(context) {
             await db.prepare('DELETE FROM sessions WHERE user_id=?').run(professor.user_id);
             await db.prepare('DELETE FROM password_resets WHERE user_id=?').run(professor.user_id);
             await db.prepare('DELETE FROM user_settings WHERE user_id=?').run(professor.user_id);
-            await db.prepare('DELETE FROM audit_log WHERE user_id=?').run(professor.user_id);
           }
           await db.prepare(`DELETE FROM attendance_records WHERE session_id IN (
             SELECT attendance_sessions.id FROM attendance_sessions
@@ -230,7 +231,7 @@ export function createProfessorRoutes(context) {
           await db.prepare('DELETE FROM professor_invites WHERE professor_profile_id=?').run(id);
           await db.prepare('DELETE FROM dev_emails WHERE recipient=(SELECT email FROM professor_profiles WHERE id=?)').run(id);
           await db.prepare('DELETE FROM professor_profiles WHERE id=?').run(id);
-          if(professor.user_id)await db.prepare('DELETE FROM users WHERE id=?').run(professor.user_id);
+          if(professor.user_id)await db.prepare("UPDATE users SET auth_user_id=NULL,name='Professor removido #' || id,email='professor-removido-' || id || '@deleted.invalid',active=0,updated_at=CURRENT_TIMESTAMP WHERE id=?").run(professor.user_id);
           await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'professor_permanently_deleted',ip);
         });
         return json(response,200,{
@@ -238,7 +239,7 @@ export function createProfessorRoutes(context) {
           permanentlyDeleted:true,
           authAccountRemoved:true,
           resumo:impact?.resumo,
-          message:'Professor e todos os dados vinculados foram excluídos definitivamente.',
+          message:'Professor excluído. O histórico técnico de auditoria foi preservado de forma anonimizada.',
         });
       }
     return json(response, 404, { message: 'Rota não encontrada.' });

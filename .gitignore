@@ -9,10 +9,7 @@ lerna-debug.log*
 
 node_modules
 backend/data/
-# Banco isolado de testes da revisão visual (nunca publicar)
-/uiux-qa.db*
 dist/
-dist
 dist-ssr
 *.local
 .env
@@ -24,6 +21,24 @@ dist-ssr
 cloudflare/build/
 *.pem
 *.key
+
+# Test artifacts and local operational tools
+/tmp/
+/.tmp-*
+/.migration-worker/
+/.qa-*/
+/output/
+coverage/
+test-results/
+playwright-report/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sql.gz
+*.dump
+
 
 # Editor directories and files
 .vscode/*

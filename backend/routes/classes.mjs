@@ -1,4 +1,7 @@
 import { attachClassSchedules } from '../class-schedules.mjs';
+import { churchName } from '../../shared/catalog-options.mjs';
+import { sortClassSchedules, validateClassSchedules } from '../../shared/class-schedules.mjs';
+import { findClassScheduleConflict, lockProfessorProfile, replaceClassSchedules } from '../class-schedule-write.mjs';
 
 export function createClassRoutes(context) {
   const {
@@ -12,21 +15,8 @@ export function createClassRoutes(context) {
     duplicateError,
     selectedSchoolYear,
     catalogNameError,
-    validateClassDetails,
     notificationService,
   } = context;
-
-  const ensureActiveCatalogItem = async (table, name) => {
-    const existing = await db.prepare(`SELECT id,active FROM ${table} WHERE LOWER(name)=LOWER(?)`).get(name);
-    if (existing) {
-      if (Number(existing.active) !== 1) await db.prepare(`UPDATE ${table} SET name=?,active=1 WHERE id=?`).run(name, existing.id);
-      return Number(existing.id);
-    }
-    await db.prepare(`INSERT INTO ${table} (name,active) VALUES (?,1) ON CONFLICT(name) DO UPDATE SET active=1`).run(name);
-    const saved = await db.prepare(`SELECT id FROM ${table} WHERE LOWER(name)=LOWER(?)`).get(name);
-    if (!saved) throw new Error(`catalog_item_not_saved:${table}`);
-    return Number(saved.id);
-  };
 
   return async function classRoutes(request, response, url, ip) {
       const catalogMatch = url.pathname.match(/^\/api\/catalogos\/(cursos|locais)(?:\/(\d+))?$/);
@@ -38,7 +28,8 @@ export function createClassRoutes(context) {
         const id = idText ? Number(idText) : null;
         if (request.method === 'POST') {
           const body = await readJson(request);
-          const name = cleanText(body.nome, 100);
+          const rawName = cleanText(body.nome, 100);
+          const name = kind === 'locais' ? churchName(rawName) : rawName;
           const errorMessage = catalogNameError(name, entity);
           if (errorMessage) return invalid(response, { nome: errorMessage });
           const existing = await db.prepare(`SELECT id,active FROM ${table} WHERE LOWER(name)=LOWER(?)`).get(name);
@@ -57,7 +48,8 @@ export function createClassRoutes(context) {
         if (!current) return json(response, 404, { message: `${entity[0].toUpperCase()}${entity.slice(1)} não encontrado.` });
         if (request.method === 'PUT') {
           const body = await readJson(request);
-          const name = cleanText(body.nome, 100);
+          const rawName = cleanText(body.nome, 100);
+          const name = kind === 'locais' ? churchName(rawName) : rawName;
           const errorMessage = catalogNameError(name, entity);
           if (errorMessage) return invalid(response, { nome: errorMessage });
           try {
@@ -105,6 +97,113 @@ export function createClassRoutes(context) {
           message: `${entity[0].toUpperCase()}${entity.slice(1)} e todos os vínculos foram excluídos definitivamente.`,
         });
       }
+
+      if (request.method === 'GET' && url.pathname === '/api/professores/me/turmas/opcoes') {
+        if (!await authorize(request, response, ['professor'])) return;
+        const [courses, locations] = await Promise.all([
+          db.prepare('SELECT id,name AS nome FROM courses WHERE active=1 ORDER BY name').all(),
+          db.prepare('SELECT id,name AS nome FROM locations WHERE active=1 ORDER BY name').all(),
+        ]);
+        return json(response, 200, {
+          cursos: courses.map(item => ({ id: Number(item.id), nome: item.nome })),
+          locais: locations.map(item => ({ id: Number(item.id), nome: churchName(item.nome) })),
+        });
+      }
+
+      if (request.method === 'POST' && url.pathname === '/api/professores/me/turmas') {
+        const session = await authorize(request, response, ['professor']); if (!session) return;
+        const period = await selectedSchoolYear(request, response, { writable: true }); if (!period) return;
+        const body = await readJson(request) || {};
+        const courseId = Number(body.courseId), locationId = Number(body.locationId);
+        const scheduleError = validateClassSchedules(body.horarios);
+        const horarios = scheduleError ? [] : sortClassSchedules(body.horarios);
+        const errors = {
+          curso: Number.isSafeInteger(courseId) && courseId > 0 ? '' : 'Selecione um curso cadastrado.',
+          local: Number.isSafeInteger(locationId) && locationId > 0 ? '' : 'Selecione uma igreja ou modalidade cadastrada.',
+          horarios: scheduleError || (!horarios.length ? 'Cadastre ao menos um dia e horário de aula.' : ''),
+        };
+        if (hasValidationErrors(errors)) return invalid(response, errors);
+        const [profile, course, location] = await Promise.all([
+          db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id),
+          db.prepare('SELECT id,name FROM courses WHERE id=? AND active=1').get(courseId),
+          db.prepare('SELECT id,name FROM locations WHERE id=? AND active=1').get(locationId),
+        ]);
+        if (!profile) return json(response, 403, { message: 'Seu perfil de professor não está ativo.' });
+        if (!course) return invalid(response, { curso: 'O curso selecionado não está disponível.' });
+        if (!location) return invalid(response, { local: 'A igreja ou modalidade selecionada não está disponível.' });
+        try {
+          const created = await db.transaction(async () => {
+            if (!await lockProfessorProfile(db, profile.id)) return { forbidden: true };
+            const conflict = await findClassScheduleConflict(db, { professorId: profile.id, schoolYearId: period.id, schedules: horarios });
+            if (conflict) return { conflict };
+            const label = `${course.name} — ${churchName(location.name)}`;
+            const firstWeekly = horarios.find(slot => slot.tipo !== 'data');
+            const result = await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,weekday,start_time,capacity) VALUES (?,?,?,?,?,?,?,NULL)')
+              .run(period.id, course.id, profile.id, location.id, label, firstWeekly?.weekday || null, firstWeekly?.start_time || null);
+            const classId = Number(result.lastInsertRowid);
+            if (!await replaceClassSchedules(db, { classId, schoolYearId: period.id, professorId: profile.id, schedules: horarios })) throw new Error('class_create_lost');
+            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `class_created_by_professor:${classId}`, ip);
+            return { classId, label };
+          });
+          if (created.forbidden) return json(response, 403, { message: 'Seu perfil de professor não está ativo.' });
+          if (created.conflict) return json(response, 409, { message: created.conflict, errors: { horarios: created.conflict } });
+          await notificationService.notifyManagers('courseUpdates', 'Nova turma ofertada', `${session.name} criou a turma ${created.label}.`, `class-created/${created.classId}`);
+          return json(response, 201, { id: created.classId, message: 'Turma criada. Agora você pode configurar o banner, o mapa e o mural.' });
+        } catch (error) {
+          if (duplicateError(error)) return json(response, 409, { message: 'Você já possui uma turma com este curso, local e horário.' });
+          throw error;
+        }
+      }
+
+      const professorClassMatch = url.pathname.match(/^\/api\/professores\/me\/turmas\/(\d+)$/);
+      if (professorClassMatch && request.method === 'PUT') {
+        const session = await authorize(request, response, ['professor']); if (!session) return;
+        const period = await selectedSchoolYear(request, response, { writable: true }); if (!period) return;
+        const classId = Number(professorClassMatch[1]), body = await readJson(request) || {};
+        const courseId = Number(body.courseId), locationId = Number(body.locationId);
+        const scheduleError = validateClassSchedules(body.horarios);
+        const horarios = scheduleError ? [] : sortClassSchedules(body.horarios);
+        const errors = {
+          curso: Number.isSafeInteger(courseId) && courseId > 0 ? '' : 'Selecione um curso cadastrado.',
+          local: Number.isSafeInteger(locationId) && locationId > 0 ? '' : 'Selecione uma igreja ou modalidade cadastrada.',
+          horarios: scheduleError || (!horarios.length ? 'Cadastre ao menos um dia e horário de aula.' : ''),
+        };
+        if (hasValidationErrors(errors)) return invalid(response, errors);
+        const profile = await db.prepare('SELECT id FROM professor_profiles WHERE user_id=? AND active=1').get(session.user_id);
+        if (!profile) return json(response, 403, { message: 'Seu perfil de professor não está ativo.' });
+        const current = await db.prepare(`SELECT classes.id,classes.course_id,classes.location_id,classes.label,courses.name AS course_name,locations.name AS location_name
+          FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id
+          WHERE classes.id=? AND classes.school_year_id=? AND classes.professor_id=? AND classes.active=1`).get(classId, period.id, profile.id);
+        if (!current) return json(response, 404, { message: 'Turma não encontrada.' });
+        if (Number(current.course_id) !== courseId) return json(response, 400, { message: 'O curso ofertado não pode ser alterado depois que a turma é criada.' });
+        const location = await db.prepare('SELECT id,name FROM locations WHERE id=? AND active=1').get(locationId);
+        if (!location) return invalid(response, { local: 'A igreja ou modalidade selecionada não está disponível.' });
+        try {
+          const saved = await db.transaction(async () => {
+            if (!await lockProfessorProfile(db, profile.id)) return { forbidden: true };
+            const target = await db.prepare(`SELECT classes.id FROM classes WHERE classes.id=? AND classes.school_year_id=? AND classes.professor_id=? AND classes.active=1${db.dialect === 'postgres' ? ' FOR UPDATE' : ''}`)
+              .get(classId, period.id, profile.id);
+            if (!target) return { missing: true };
+            const conflict = await findClassScheduleConflict(db, { professorId: profile.id, schoolYearId: period.id, classId, schedules: horarios });
+            if (conflict) return { conflict };
+            const generatedPreviousLabel = `${current.course_name} — ${churchName(current.location_name)}`;
+            const nextLabel = current.label === generatedPreviousLabel ? `${current.course_name} — ${churchName(location.name)}` : current.label;
+            await db.prepare('UPDATE classes SET location_id=?,label=? WHERE id=? AND school_year_id=? AND professor_id=? AND active=1')
+              .run(location.id, nextLabel, classId, period.id, profile.id);
+            if (!await replaceClassSchedules(db, { classId, schoolYearId: period.id, professorId: profile.id, schedules: horarios })) return { missing: true };
+            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id, `class_updated_by_professor:${classId}`, ip);
+            return { label: nextLabel };
+          });
+          if (saved.forbidden) return json(response, 403, { message: 'Seu perfil de professor não está ativo.' });
+          if (saved.missing) return json(response, 404, { message: 'Turma não encontrada.' });
+          if (saved.conflict) return json(response, 409, { message: saved.conflict, errors: { horarios: saved.conflict } });
+          await notificationService.notifyManagers('courseUpdates', 'Turma atualizada pelo professor', `${session.name} atualizou a turma ${saved.label}.`, `class-updated/${classId}/${Date.now()}`);
+          return json(response, 200, { success: true, message: 'Curso, local e horários salvos.' });
+        } catch (error) {
+          if (duplicateError(error)) return json(response, 409, { message: 'Você já possui uma turma com este curso, local e horário.' });
+          throw error;
+        }
+      }
     
       if (request.method === 'GET' && url.pathname === '/cursos') {
         if (!await authorize(request, response, ['gestor'])) return;
@@ -117,70 +216,12 @@ export function createClassRoutes(context) {
     
       if (request.method === 'POST' && url.pathname === '/cursos') {
         const session = await authorize(request, response, ['gestor']); if (!session) return;
-        const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
-        const body = await readJson(request);
-        const courseName = cleanText(body.nome, 100), locationName = cleanText(body.local, 100), professorName = cleanText(body.professor, 100);
-        if (body.weekday || body.start_time || body.horarios !== undefined) return json(response,403,{message:'Os dias e horários são definidos pelo professor da turma.'});
-        const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
-        const errors = {
-          nome: catalogNameError(courseName, 'curso'),
-          local: catalogNameError(locationName, 'local ou modalidade'),
-          professor: professorName ? '' : 'Selecione um professor cadastrado.',
-          ...validateClassDetails({ weekday, start_time: startTime,label:classLabel,capacity }),
-        };
-        if (hasValidationErrors(errors)) return invalid(response, errors);
-        const professor = await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
-        if (!professor) return json(response, 400, { message: 'Professor não encontrado.' });
-        try {
-          const classId = await db.transaction(async () => {
-            const courseId = await ensureActiveCatalogItem('courses', courseName);
-            const locationId = await ensureActiveCatalogItem('locations', locationName);
-            const result=await db.prepare('INSERT INTO classes (school_year_id,course_id,professor_id,location_id,label,weekday,start_time,capacity) VALUES (?,?,?,?,?,?,?,?)').run(period.id,courseId,professor.id,locationId,classLabel||`${courseName} — ${locationName}`,weekday||null,startTime||null,capacity);
-            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_created',ip);
-            return Number(result.lastInsertRowid);
-          });
-          await notificationService.notifyProfessor(professor.id,'courseUpdates','Nova turma atribuída',`A turma ${classLabel||courseName}, em ${locationName}, foi atribuída a você.`,`class-created/${classId}`);
-          await notificationService.notifyManagers('courseUpdates','Nova turma cadastrada',`${session.name} cadastrou a turma ${classLabel||courseName}, em ${locationName}.`,`class-created/${classId}`);
-          return json(response,201,{id:classId});
-        } catch (error) {
-          if (error.code === '23505' || String(error).includes('UNIQUE')) return json(response,409,{message:'Esta turma já existe.'});
-          throw error;
-        }
+        return json(response, 403, { message: 'As turmas são criadas pelo professor após a ativação da conta.' });
       }
       const courseMatch=url.pathname.match(/^\/cursos\/(\d+)$/);
       if (courseMatch && request.method==='PUT') {
         const session=await authorize(request,response,['gestor']); if(!session)return;
-        const period=await selectedSchoolYear(request,response,{writable:true});if(!period)return;
-        const id=Number(courseMatch[1]),body=await readJson(request);
-        if (body.weekday || body.start_time || body.horarios !== undefined) return json(response,403,{message:'Os dias e horários são definidos pelo professor da turma.'});
-        const courseName=cleanText(body.nome,100),locationName=cleanText(body.local,100),professorName=cleanText(body.professor,100);
-        const weekday = cleanText(body.weekday, 20), startTime = cleanText(body.start_time, 10),classLabel=cleanText(body.label,100),capacity=body.capacity===''||body.capacity==null?null:Number(body.capacity);
-        const errors={nome:catalogNameError(courseName,'curso'),local:catalogNameError(locationName,'local ou modalidade'),professor:professorName?'':'Selecione um professor cadastrado.',...validateClassDetails({weekday,start_time:startTime,label:classLabel,capacity})};
-        if(hasValidationErrors(errors))return invalid(response,errors);
-        const professor=await db.prepare('SELECT id FROM professor_profiles WHERE name=? AND active=1').get(professorName);
-        if(!professor)return json(response,400,{message:'Professor não encontrado.'});
-        const existingClass=await db.prepare(`SELECT classes.id,classes.label,classes.capacity,courses.name AS course_name,locations.name AS location_name
-          FROM classes JOIN courses ON courses.id=classes.course_id JOIN locations ON locations.id=classes.location_id
-          WHERE classes.id=? AND classes.school_year_id=?`).get(id,period.id);
-        if(!existingClass)return json(response,404,{message:'Turma não encontrada.'});
-        const generatedPreviousLabel=`${existingClass.course_name} — ${existingClass.location_name}`;
-        const nextLabel=body.label===undefined
-          ? (existingClass.label===generatedPreviousLabel?`${courseName} — ${locationName}`:existingClass.label)
-          : classLabel||`${courseName} — ${locationName}`;
-        const nextCapacity=body.capacity===undefined?existingClass.capacity:capacity;
-        if(nextCapacity!==null){const occupied=await db.prepare("SELECT COUNT(*) AS total FROM enrollments WHERE class_id=? AND status='ativa'").get(id);if(Number(occupied.total)>nextCapacity)return invalid(response,{capacity:`A capacidade não pode ser menor que os ${occupied.total} aluno(s) já matriculados.`});}
-        try{
-          await db.transaction(async () => {
-            const courseId = await ensureActiveCatalogItem('courses', courseName);
-            const locationId = await ensureActiveCatalogItem('locations', locationName);
-            const result=await db.prepare('UPDATE classes SET course_id=?,professor_id=?,location_id=?,label=?,capacity=? WHERE id=? AND school_year_id=?').run(courseId,professor.id,locationId,nextLabel,nextCapacity,id,period.id);
-            if(!result.changes)throw new Error('class_update_lost');
-            await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,'class_updated',ip);
-          });
-        }catch(error){if(duplicateError(error))return json(response,409,{message:'Esta turma já existe.'});throw error;}
-        await notificationService.notifyProfessor(professor.id,'courseUpdates','Turma atualizada',`A turma ${nextLabel||courseName}, em ${locationName}, teve seus dados atualizados.`,`class-updated/${id}/${Date.now()}`);
-        await notificationService.notifyManagers('courseUpdates','Turma atualizada',`${session.name} atualizou a turma ${nextLabel||courseName}, em ${locationName}.`,`class-updated/${id}/${Date.now()}`);
-        return json(response,200,{success:true});
+        return json(response, 403, { message: 'Somente o professor responsável pode configurar sua turma.' });
       }
       if(courseMatch&&request.method==='DELETE'){
         const session=await authorize(request,response,['gestor']);if(!session)return;

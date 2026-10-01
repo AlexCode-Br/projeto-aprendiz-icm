@@ -107,7 +107,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                     <div className="space-y-4">
                         <ProfilePhotoPicker name={formData.nome} currentUrl={aluno?.foto_url || ''} value={photoChange} onChange={setPhotoChange} disabled={saving} />
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {Object.entries({ nome: 'Nome completo', contato: 'E-mail (opcional)', telefone: 'Telefone (WhatsApp)' }).map(([key, label]) => (
+                            {Object.entries({ nome: 'Nome completo', contato: 'E-mail', telefone: 'Telefone (WhatsApp)' }).map(([key, label]) => (
                                 <div key={key}>
                                     <label htmlFor={key} className="form-label">{label}</label>
                                     <input
@@ -119,6 +119,8 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                                         autoComplete={key === 'nome' ? 'name' : key === 'contato' ? 'email' : 'tel'}
                                         inputMode={key === 'telefone' ? 'tel' : undefined}
                                         maxLength={key === 'contato' ? 254 : key === 'telefone' ? 15 : 100}
+                                        required={key === 'nome' || key === 'contato' || key === 'telefone'}
+                                        aria-required={key === 'nome' || key === 'contato' || key === 'telefone'}
                                         aria-invalid={Boolean(errors[key])}
                                         className={`form-control ${errors[key] ? 'border-danger' : ''}`}
                                     />
@@ -216,8 +218,7 @@ const AlunoFormModal = ({ isOpen, onClose, onSave, aluno, offerings = [], church
                             </div>
                         </div>
                     </div>
-                    <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
-                        <button type="button" onClick={onClose} disabled={saving} className="btn btn-secondary">Cancelar</button>
+                    <div className="mt-6 flex border-t border-border pt-5 sm:justify-end">
                         <button type="submit" disabled={saving} className="btn btn-primary">{saving ? 'Salvando...' : aluno ? 'Salvar alterações' : 'Adicionar aluno'}</button>
                     </div>
                 </form>

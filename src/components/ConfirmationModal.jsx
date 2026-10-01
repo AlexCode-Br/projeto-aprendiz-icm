@@ -10,8 +10,7 @@ const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message, confirm
             </div>
             <p className="mt-4 text-sm leading-6 text-text-muted">{message}</p>
         </div>
-        <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <button type="button" onClick={onClose} disabled={loading} className="btn btn-secondary">Cancelar</button>
+        <div className="mt-7 flex sm:justify-end">
             <button type="button" onClick={onConfirm} disabled={loading} className={`btn ${destructive ? 'btn-danger' : 'btn-primary'}`}>{loading ? 'Excluindo...' : confirmLabel}</button>
         </div>
     </Modal>

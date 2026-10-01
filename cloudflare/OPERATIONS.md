@@ -15,11 +15,29 @@ O nome técnico do Worker foi preservado para não recriar segredos, Durable Obj
 
 ## Publicação
 
+O repositório canônico é `AlexCode-Br/projeto-aprendiz-icm`. A mudança de nome não altera domínio, Worker, banco, segredos ou assinaturas push.
+
+### GitHub Actions
+
+O workflow `Deploy production` é manual (`workflow_dispatch`), aceita somente `main` e depende de uma etapa de validação. Não há publicação automática em push. Antes da primeira execução:
+
+1. Integrar o código validado em `main` por revisão. Uma alteração só existir localmente não a torna disponível na CI.
+2. Criar o environment `production` no GitHub e configurar os secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` e `DATABASE_URL`. Usar token restrito à conta e às permissões necessárias para o Worker; nunca enviar valores por chat ou commit.
+3. Usar conexão direta ou session pooler Supabase para migrações, conforme acesso de rede do runner; não usar transaction pooler para esse processo. O deploy configura `DATABASE_SSL=true`.
+4. Configurar proteção de `main` com revisão e o check `validate`. Adicionar aprovação no environment se o plano GitHub oferecer essa opção para este repositório privado.
+5. Conferir a versão anterior saudável do Worker e o backup do banco antes de autorizar uma publicação.
+
+Os secrets do GitHub são credenciais do processo de publicação, não substitutos dos secrets de runtime já cadastrados no Worker. O pipeline executa migrações, publica e roda `scripts/smoke-production.mjs`; uma falha no smoke exige investigação, não um rollback automático de banco.
+
+### Publicação local
+
 ```bash
 pnpm check
 pnpm cloudflare:build
 pnpm cloudflare:deploy
 ```
+
+`pnpm cloudflare:deploy` executa as migrações antes de publicar e exige `DATABASE_URL` apontando para produção. Se a migração falhar, o Worker não é publicado. Não contorne esta etapa executando `wrangler deploy` diretamente.
 
 `wrangler.jsonc` é a fonte de verdade. O deploy preserva os segredos remotos. Nunca coloque chaves privadas no arquivo ou no frontend.
 
@@ -27,19 +45,38 @@ Segredos obrigatórios:
 
 - `SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SECRET_KEY`
+- `TURNSTILE_SECRET_KEY`
 - `RESEND_API_KEY`
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+
+Gestores usam verificação em duas etapas por código enviado ao e-mail depois da senha. Em produção ela é obrigatória por padrão; mantenha `REQUIRE_MANAGER_MFA=true`. O valor `false` é reservado a uma recuperação operacional temporária e deve ser removido logo após a contingência.
+
+Gere o par VAPID uma única vez com `pnpm vapid:generate` e cadastre os dois valores com `wrangler secret put`. Trocar esse par invalida as assinaturas existentes e exige nova ativação nos dispositivos.
 
 ## Verificação pós-deploy
+
+`node scripts/smoke-production.mjs` executa as verificações públicas de leitura abaixo, sem login, alteração de dados ou publicação. Os testes funcionais autenticados continuam separados.
 
 1. Confirmar `200` em `/login` e `/api/health`.
 2. Confirmar `401` em `/api/auth/me` sem sessão.
 3. Confirmar redirecionamento `308` de `www` para a raiz.
 4. Entrar como gestor e professor e abrir as páginas principais.
-5. Observar erros e CPU com `wrangler tail`; `cloudflare/tail-summary.mjs` remove cookies, cabeçalhos e query strings do resumo.
+5. Observar erros e CPU com `pnpm cloudflare:tail`; o resumo remove cookies, cabeçalhos e query strings.
 6. Confirmar MX, DKIM, DMARC e o return-path do Resend após qualquer alteração DNS.
+7. Em Configurações, ativar as notificações em um dispositivo e confirmar o recebimento pelo botão de teste.
+8. Em uma janela isolada, confirmar que cinco senhas incorretas para o mesmo e-mail exibem o Turnstile e que o login continua mostrando uma mensagem genérica.
 
 ## Recuperação
 
 Use o histórico de versões do Worker ou `wrangler rollback` para voltar à versão saudável anterior. Alterações de banco exigem migrações próprias e não são revertidas por rollback do código.
 
+Consulte [Continuidade e recuperação de dados](../docs/DISASTER_RECOVERY.md) e realize um ensaio de restauração mensal.
+
 Os diretórios `.qa-professor/` e `output/` pertencem ao usuário e não devem ser apagados nem incluídos em commits.
+
+## Homologação e migrações
+
+Apesar do nome `aprendiz-staging`, esse Worker é produção. Uma homologação real exige outro Worker, outro Durable Object, banco/Auth/Storage separados e chaves Turnstile, e-mail e VAPID próprias. Não aponte testes ou previews para os bindings atuais.
+
+Nomes de migrações são identificadores já registrados em `schema_migrations`: não renomeie as duas migrações com prefixo `016`. A migração `002_security_hardening.sql` agora verifica se objetos legados em `public` existem antes de revogar privilégios, permitindo instalar em banco vazio. Bancos onde `002` já foi registrada não a reexecutam; a proteção do schema privado permanece inalterada. Esse ajuste não requer migração adicional em produção.

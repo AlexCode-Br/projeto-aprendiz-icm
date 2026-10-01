@@ -7,11 +7,15 @@ import PrivateRoute from './components/PrivateRoute.jsx';
 import './index.css'; // Importando o CSS global
 
 const Login = React.lazy(() => import('./pages/Login.jsx'));
+const StudentPortal = React.lazy(() => import('./pages/aluno/StudentPortal.jsx'));
+const StudentCourseDetails = React.lazy(() => import('./pages/aluno/StudentCourseDetails.jsx'));
 const ResetPassword = React.lazy(() => import('./pages/ResetPassword.jsx'));
 const ForgotPassword = React.lazy(() => import('./pages/ForgotPassword.jsx'));
 const AcceptInvite = React.lazy(() => import('./pages/AcceptInvite.jsx'));
+const ConfirmEmail = React.lazy(() => import('./pages/ConfirmEmail.jsx'));
+const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy.jsx'));
 const GestorDashboard = React.lazy(() => import('./pages/gestor/Dashboard.jsx'));
-const Cursos = React.lazy(() => import('./pages/gestor/Cursos.jsx'));
+const GestorTurmas = React.lazy(() => import('./pages/gestor/Turmas.jsx'));
 const Alunos = React.lazy(() => import('./pages/gestor/Alunos.jsx'));
 const Professores = React.lazy(() => import('./pages/gestor/Professores.jsx'));
 const GestorInformativos = React.lazy(() => import('./pages/gestor/Informativos.jsx'));
@@ -23,11 +27,16 @@ const ProfessorFrequencia = React.lazy(() => import('./pages/professor/Professor
 const ProfessorRelatorios = React.lazy(() => import('./pages/professor/ProfessorRelatorios.jsx'));
 const ProfessorInformativos = React.lazy(() => import('./pages/professor/ProfessorInformativos.jsx'));
 const ProfessorSuporte = React.lazy(() => import('./pages/professor/ProfessorSuporte.jsx'));
-const Configuracoes = React.lazy(() => import('./pages/gestor/Configuracoes.jsx'));
-const ProfessorConfiguracoes = React.lazy(() => import('./pages/professor/ProfessorConfiguracoes.jsx'));
+const AccountSettings = React.lazy(() => import('./components/AccountSettings.jsx'));
 
 const PageLoading = () => <div className="space-y-5 py-8" role="status" aria-label="Carregando página"><div className="skeleton h-9 w-72 max-w-full" /><div className="skeleton h-4 w-96 max-w-full" /><div className="grid gap-4 sm:grid-cols-2"><div className="skeleton h-32 rounded-xl" /><div className="skeleton h-32 rounded-xl" /></div></div>;
 
+const dashboardPath = user => `/${['gestor','professor','aluno'].includes(user?.role) ? user.role : 'professor'}/dashboard`;
+
+const LoginRoute = () => {
+    const { user } = React.useContext(AuthContext);
+    return user ? <Navigate to={dashboardPath(user)} replace /> : <Login />;
+};
 
 const NotFound = () => (
     <div className="flex items-center justify-center h-full">
@@ -42,12 +51,7 @@ const NotFound = () => (
 const DashboardRedirector = () => {
     const { user } = React.useContext(AuthContext);
     if (!user) return <Navigate to="/login" replace />;
-    
-    const dashboardPath = user.role === 'gestor' 
-        ? '/gestor/dashboard' 
-        : '/professor/dashboard';
-        
-    return <Navigate to={dashboardPath} replace />;
+    return <Navigate to={dashboardPath(user)} replace />;
 };
 
 const AppRoutes = () => {
@@ -55,14 +59,14 @@ const AppRoutes = () => {
 
     const commonRoutes = (
         <>
-            <Route path="/configuracoes" element={user?.role === 'gestor' ? <Configuracoes /> : <ProfessorConfiguracoes />} />
+            <Route path="/configuracoes" element={<AccountSettings />} />
         </>
     );
 
     const gestorRoutes = (
         <>
             <Route path="/gestor/dashboard" element={<GestorDashboard />} />
-            <Route path="/gestor/cursos" element={<Cursos />} />
+            <Route path="/gestor/cursos" element={<GestorTurmas />} />
             <Route path="/gestor/alunos" element={<Alunos />} />
             <Route path="/gestor/professores" element={<Professores />} />
             <Route path="/gestor/relatorios" element={<Navigate to="/gestor/dashboard" replace />} />
@@ -85,10 +89,12 @@ const AppRoutes = () => {
 
     return (
         <Routes>
-            <Route path="/login" element={<Login />} />
+            <Route path="/login" element={<LoginRoute />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/accept-invite" element={<AcceptInvite />} />
+            <Route path="/confirm-email" element={<ConfirmEmail />} />
+            <Route path="/politica-de-privacidade" element={<PrivacyPolicy />} />
             
             <Route 
                 path="/*"
@@ -100,6 +106,17 @@ const AppRoutes = () => {
                                 
                                 {user?.role === 'gestor' && gestorRoutes}
                                 {user?.role === 'professor' && professorRoutes}
+                                {user?.role === 'aluno' && <>
+                                    <Route path="/aluno/dashboard" element={<StudentPortal key="dashboard" page="dashboard" />} />
+                                    <Route path="/aluno/cursos" element={<Navigate to="/aluno/dashboard" replace />} />
+                                    <Route path="/aluno/cursos/:id" element={<StudentCourseDetails />} />
+                                    <Route path="/aluno/turmas" element={<Navigate to="/aluno/dashboard" replace />} />
+                                    <Route path="/aluno/informativos" element={<Navigate to="/aluno/dashboard" replace />} />
+                                    <Route path="/aluno/perfil" element={<Navigate to="/configuracoes" replace />} />
+                                    <Route path="/aluno/calendario" element={<Navigate to="/aluno/dashboard" replace />} />
+                                    <Route path="/aluno/frequencia" element={<Navigate to="/aluno/dashboard" replace />} />
+                                    <Route path="/aluno/notificacoes" element={<Navigate to="/aluno/dashboard" replace />} />
+                                </>}
                                 {commonRoutes}
 
                                 <Route path="*" element={<NotFound />} />

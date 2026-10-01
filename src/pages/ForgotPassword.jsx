@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { ArrowLeft, LoaderCircle, Mail } from 'lucide-react';
 import AuthLayout from '../layouts/AuthLayout';
 import api from '../services/api';
 
@@ -26,22 +27,25 @@ const ForgotPassword = () => {
     };
 
     return (
-        <AuthLayout title="Recuperar acesso" description="Informe o e-mail cadastrado para receber um link seguro de redefinição.">
+        <AuthLayout isLogin title="Recuperar acesso" description="Informe o e-mail cadastrado para receber um link seguro de redefinição.">
             {message ? (
                 <div className="space-y-5">
                     <div className="alert-success" role="status">{message}</div>
                     {mailbox && <a href={mailbox} className="btn btn-secondary w-full">Abrir caixa de e-mail de testes</a>}
-                    <Link to="/login" className="block text-center font-semibold text-primary hover:underline">Voltar ao login</Link>
+                    <Link to="/login" className="flex min-h-11 items-center justify-center gap-2 rounded-lg text-center font-semibold text-primary hover:bg-primary/10 hover:underline"><ArrowLeft aria-hidden="true" />Voltar ao login</Link>
                 </div>
             ) : (
-                <form onSubmit={submit} className="space-y-5">
+                <form onSubmit={submit} className="space-y-5" noValidate>
                     {error && <div className="alert-error" role="alert">{error}</div>}
                     <label className="block" htmlFor="recovery-email">
                         <span className="form-label">E-mail</span>
-                        <input id="recovery-email" name="email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="seu.email@exemplo.com" className="form-control" />
+                        <span className="relative block">
+                            <Mail aria-hidden="true" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted" />
+                            <input id="recovery-email" name="email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="seu.email@exemplo.com" className="form-control pl-11" />
+                        </span>
                     </label>
-                    <button type="submit" disabled={loading} className="submit-btn w-full">{loading ? 'Enviando...' : 'Enviar instruções'}</button>
-                    <Link to="/login" className="block text-center font-medium text-text-muted hover:text-text-default hover:underline">Voltar ao login</Link>
+                    <button type="submit" disabled={loading} className="submit-btn w-full">{loading ? <><LoaderCircle className="animate-spin" aria-hidden="true" />Enviando...</> : 'Enviar instruções'}</button>
+                    <Link to="/login" className="flex min-h-11 items-center justify-center gap-2 rounded-lg text-center font-medium text-text-muted hover:bg-surface-hover hover:text-text-default hover:underline"><ArrowLeft aria-hidden="true" />Voltar ao login</Link>
                 </form>
             )}
         </AuthLayout>

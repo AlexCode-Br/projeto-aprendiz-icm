@@ -21,7 +21,21 @@ const logger = createStructuredLogger();
 await mkdir(dataRoot, { recursive: true });
 const db = await createDatabase({ sqlitePath, logger });
 await initializeNodeApplication({ db });
-const { handler, isApiPath, securityHeaders, json, handleError } = createApplication({ db, logger });
+let application;
+let drainScheduled=false;
+application=createApplication({ db, logger, scheduleNotificationDrain:()=>{
+  if(drainScheduled)return;
+  drainScheduled=true;
+  setImmediate(async()=>{
+    try{
+      let result;
+      do{result=await application.deliverNotificationOutbox({limit:100});}while(result.processed>0);
+    }
+    catch(error){logger.error('notification_outbox_background_failed',error);}
+    finally{drainScheduled=false;}
+  });
+} });
+const { handler, isApiPath, securityHeaders, json, handleError } = application;
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, character => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[character]));
@@ -62,8 +76,8 @@ async function serve(request, response, url) {
   } catch { file = join(resolvedDistRoot, 'index.html'); }
   try {
     const content = await readFile(file);
-    const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml', '.ttf':'font/ttf', '.txt':'text/plain; charset=utf-8' };
-    response.writeHead(200, { ...securityHeaders(types[extname(file)] || 'application/octet-stream'), 'Cache-Control': extname(file) === '.html' ? 'no-store' : 'public, max-age=31536000, immutable', 'Content-Length': String(content.length) });
+    const types = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.css':'text/css; charset=utf-8', '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.svg':'image/svg+xml', '.webmanifest':'application/manifest+json; charset=utf-8', '.ttf':'font/ttf', '.txt':'text/plain; charset=utf-8' };
+    response.writeHead(200, { ...securityHeaders(types[extname(file)] || 'application/octet-stream'), 'Cache-Control': ['/sw.js','/manifest.webmanifest'].includes(decodedPath) ? 'no-cache' : extname(file) === '.html' ? 'no-store' : 'public, max-age=31536000, immutable', 'Content-Length': String(content.length) });
     response.end(request.method === 'HEAD' ? undefined : content);
   } catch { json(response, 503, { message: 'Frontend ainda não compilado.' }); }
 }
@@ -79,7 +93,7 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Projeto Aprendiz Aprimorado em ${baseUrl}`);
+  console.log(`Projeto Aprendiz em ${baseUrl}`);
   if (!isProduction) console.log('Caixa de e-mail de testes em /dev-mail');
 });
 
