@@ -39,6 +39,8 @@ pnpm cloudflare:deploy
 
 `pnpm cloudflare:deploy` executa as migrações antes de publicar e exige `DATABASE_URL` apontando para produção. Se a migração falhar, o Worker não é publicado. Não contorne esta etapa executando `wrangler deploy` diretamente.
 
+Conexões de manutenção devem validar TLS. Se o Session Pooler exigir a CA oficial do Supabase, configure `NODE_EXTRA_CA_CERTS` com o caminho do certificado antes de iniciar o processo Node. Não use `DATABASE_SSL_REJECT_UNAUTHORIZED=false`. A orientação oficial está em [SSL enforcement](https://supabase.com/docs/guides/platform/ssl-enforcement).
+
 `wrangler.jsonc` é a fonte de verdade. O deploy preserva os segredos remotos. Nunca coloque chaves privadas no arquivo ou no frontend.
 
 Segredos obrigatórios:
@@ -72,6 +74,8 @@ Gere o par VAPID uma única vez com `pnpm vapid:generate` e cadastre os dois val
 Use o histórico de versões do Worker ou `wrangler rollback` para voltar à versão saudável anterior. Alterações de banco exigem migrações próprias e não são revertidas por rollback do código.
 
 Consulte [Continuidade e recuperação de dados](../docs/DISASTER_RECOVERY.md) e realize um ensaio de restauração mensal.
+
+Em 01/10/2026, o histórico de migrações foi reconciliado depois de comparar estruturas e efeitos de dados com as migrations, restaurar um backup cifrado e ensaiar o procedimento em PostgreSQL isolado. A única estrutura ausente era o índice da migração `018`; as demais entradas foram registradas somente após confirmação dos efeitos. O registro legado `009_lifecycle_and_history.sql` foi preservado. Consulte o [registro da operação](../docs/releases/DEPLOY_2026-10-01.md). Não trate esse procedimento pontual como autorização para marcar outras migrações sem validação.
 
 Os diretórios `.qa-professor/` e `output/` pertencem ao usuário e não devem ser apagados nem incluídos em commits.
 
