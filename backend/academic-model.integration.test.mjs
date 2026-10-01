@@ -1,53 +1,14 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
-
-const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-
-async function waitForServer(baseUrl, state) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    if (state.exitCode !== null) throw new Error(`Servidor encerrou antes do teste: ${state.logs}`);
-    try { if ((await fetch(`${baseUrl}/api/health`)).ok) return; } catch {}
-    await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  throw new Error(`Servidor não iniciou: ${state.logs}`);
-}
+import { startTestServer } from './test-support/server.mjs';
 
 test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferências', { timeout: 40_000 }, async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'projeto-aprendiz-academic-'));
-  const databasePath = join(directory, 'academic.db');
-  const port = 48_000 + (process.pid % 1_000);
-  const baseUrl = `http://127.0.0.1:${port}`;
-  let logs = '';
-  const server = spawn(process.execPath, ['backend/server.mjs'], {
-    cwd: projectRoot,
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', APP_URL: baseUrl, SQLITE_PATH: databasePath, AUTH_PROVIDER: 'local', SEED_DEMO_DATA: 'true', NODE_ENV: 'test' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  server.stdout.on('data', chunk => { logs += chunk; });
-  server.stderr.on('data', chunk => { logs += chunk; });
-  const state = { get exitCode() { return server.exitCode; }, get logs() { return logs; } };
-
-  const call = async (session, method, path, body) => {
-    const response = await fetch(`${baseUrl}${path}`, {
-      method,
-      headers: {
-        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        ...(session?.cookie ? { Cookie: session.cookie } : {}),
-        ...(session?.csrf ? { 'X-CSRF-Token': session.csrf } : {}),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    return { status: response.status, data: await response.json().catch(() => ({})), headers: response.headers };
-  };
+  const app = await startTestServer();
+  const { databasePath, baseUrl, call } = app;
+  let database;
 
   try {
-    await waitForServer(baseUrl, state);
     const login = await call(null, 'POST', '/api/auth/login', { email: 'gestor@projetoaprendiz.local', password: 'Gestor@2026!' });
     assert.equal(login.status, 200, JSON.stringify(login.data));
     const manager = { cookie: String(login.headers.get('set-cookie')).split(';')[0], csrf: login.data.csrfToken };
@@ -240,7 +201,7 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(anonymousDropout.status, 200, JSON.stringify(anonymousDropout.data));
     assert.ok(anonymousDropout.data.some(entry => entry.aluno === 'Aluno anonimizado' && entry.categoria === 'Outro'));
 
-    const database = new DatabaseSync(databasePath);
+    database = new DatabaseSync(databasePath);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM audit_log WHERE action=?').get(`student_anonymized:${second.data.id}`).total, 1);
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM students WHERE active=1 AND email IS NULL').get().total, 0);
     assert.equal(database.prepare('SELECT church_id FROM students WHERE id=?').get(first.data.id).church_id, church.data.id);
@@ -264,11 +225,8 @@ test('modelo acadêmico preserva igrejas, responsáveis, capacidade e transferê
     assert.equal(dropout.reason, 'Dados anonimizados por solicitação');
     assert.equal(dropout.reason_category, 'outro');
     assert.equal(database.prepare('SELECT COUNT(*) AS total FROM audit_log WHERE action=?').get(`student_anonymized:${second.data.id}`).total, 1);
-    database.close();
   } finally {
-    if (server.exitCode === null) server.kill('SIGTERM');
-    await new Promise(resolve => server.once('exit', resolve));
-    try { await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
-    catch (error) { if (process.platform !== 'win32' || error.code !== 'EBUSY') throw error; }
+    database?.close();
+    await app.close();
   }
 });

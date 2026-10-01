@@ -92,7 +92,7 @@ export function createNotificationOutbox({db,notificationService,logger=console,
     const skipped=[],deliverable=[];
     for(const row of rows){
       const userId=Number(row.user_id),enabled=(preferences.get(userId)||normalizeNotificationPreferences({}))[row.preference]!==false;
-      if(!active.has(userId)||!enabled||(!Boolean(row.email_enabled)&&Boolean(row.push_enabled)&&!subscribed.has(userId)))skipped.push(row);
+      if(!active.has(userId)||!enabled||(!row.email_enabled&&row.push_enabled&&!subscribed.has(userId)))skipped.push(row);
       else deliverable.push(row);
     }
     return{deliverable,skipped};

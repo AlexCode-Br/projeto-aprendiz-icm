@@ -70,7 +70,6 @@ export const AuthProvider = ({ children }) => {
             await api.post('/api/auth/logout', {});
         } finally {
             api.setCsrfToken('');
-            api.setAccessToken('');
             setRememberedSession(false);
             setLegacySessionPersistence(false);
             setUser(null);

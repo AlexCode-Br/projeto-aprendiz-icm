@@ -214,11 +214,10 @@ export function createAnnouncementRoutes(context) {
         const retainedIds=attachmentResult.existingItems.map(item=>Number(item.id));
         const removed=[...existingAttachments.values()].filter(item=>!retainedIds.includes(Number(item.id)));
         let stored=[];
-        let result;
         try{
           stored=await prepareStoredAttachments(announcementId,attachmentResult.newItems);
           await db.transaction(async () => {
-            result=await db.prepare(`UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,published_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP
+            await db.prepare(`UPDATE announcements SET title=?,category=?,content=?,scheduled_at=?,published_at=?,pinned=?,updated_at=CURRENT_TIMESTAMP
               WHERE id=? AND active=1
                 AND EXISTS (SELECT 1 FROM users announcement_author WHERE announcement_author.id=announcements.author_user_id AND announcement_author.role='gestor')
                 AND NOT EXISTS (SELECT 1 FROM student_course_announcements sca WHERE sca.announcement_id=announcements.id)`).run(title,body.categoria,content,scheduled,scheduled,body.fixarNoTopo?1:0,announcementId);

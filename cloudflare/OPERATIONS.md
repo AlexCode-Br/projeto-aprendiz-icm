@@ -15,6 +15,22 @@ O nome técnico do Worker foi preservado para não recriar segredos, Durable Obj
 
 ## Publicação
 
+O repositório canônico é `AlexCode-Br/projeto-aprendiz-icm`. A mudança de nome não altera domínio, Worker, banco, segredos ou assinaturas push.
+
+### GitHub Actions
+
+O workflow `Deploy production` é manual (`workflow_dispatch`), aceita somente `main` e depende de uma etapa de validação. Não há publicação automática em push. Antes da primeira execução:
+
+1. Integrar o código validado em `main` por revisão. Uma alteração só existir localmente não a torna disponível na CI.
+2. Criar o environment `production` no GitHub e configurar os secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` e `DATABASE_URL`. Usar token restrito à conta e às permissões necessárias para o Worker; nunca enviar valores por chat ou commit.
+3. Usar conexão direta ou session pooler Supabase para migrações, conforme acesso de rede do runner; não usar transaction pooler para esse processo. O deploy configura `DATABASE_SSL=true`.
+4. Configurar proteção de `main` com revisão e o check `validate`. Adicionar aprovação no environment se o plano GitHub oferecer essa opção para este repositório privado.
+5. Conferir a versão anterior saudável do Worker e o backup do banco antes de autorizar uma publicação.
+
+Os secrets do GitHub são credenciais do processo de publicação, não substitutos dos secrets de runtime já cadastrados no Worker. O pipeline executa migrações, publica e roda `scripts/smoke-production.mjs`; uma falha no smoke exige investigação, não um rollback automático de banco.
+
+### Publicação local
+
 ```bash
 pnpm check
 pnpm cloudflare:build
@@ -40,6 +56,8 @@ Gere o par VAPID uma única vez com `pnpm vapid:generate` e cadastre os dois val
 
 ## Verificação pós-deploy
 
+`node scripts/smoke-production.mjs` executa as verificações públicas de leitura abaixo, sem login, alteração de dados ou publicação. Os testes funcionais autenticados continuam separados.
+
 1. Confirmar `200` em `/login` e `/api/health`.
 2. Confirmar `401` em `/api/auth/me` sem sessão.
 3. Confirmar redirecionamento `308` de `www` para a raiz.
@@ -56,3 +74,9 @@ Use o histórico de versões do Worker ou `wrangler rollback` para voltar à ver
 Consulte [Continuidade e recuperação de dados](../docs/DISASTER_RECOVERY.md) e realize um ensaio de restauração mensal.
 
 Os diretórios `.qa-professor/` e `output/` pertencem ao usuário e não devem ser apagados nem incluídos em commits.
+
+## Homologação e migrações
+
+Apesar do nome `aprendiz-staging`, esse Worker é produção. Uma homologação real exige outro Worker, outro Durable Object, banco/Auth/Storage separados e chaves Turnstile, e-mail e VAPID próprias. Não aponte testes ou previews para os bindings atuais.
+
+Nomes de migrações são identificadores já registrados em `schema_migrations`: não renomeie as duas migrações com prefixo `016`. A migração `002_security_hardening.sql` agora verifica se objetos legados em `public` existem antes de revogar privilégios, permitindo instalar em banco vazio. Bancos onde `002` já foi registrada não a reexecutam; a proteção do schema privado permanece inalterada. Esse ajuste não requer migração adicional em produção.

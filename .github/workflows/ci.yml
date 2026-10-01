@@ -3,14 +3,19 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 'codex/**']
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -35,8 +40,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - name: Validate legacy drift migration on PostgreSQL
-        run: node --test backend/legacy-drift-migration.test.mjs
+      - name: Audit dependencies
+        run: pnpm audit
+      - name: Validate PostgreSQL migrations
+        run: pnpm test:postgres
         env:
           TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/projeto_aprendiz_test
           DATABASE_SSL: "false"
+      - name: Build Worker without publishing
+        run: pnpm cloudflare:build

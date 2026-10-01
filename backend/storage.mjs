@@ -28,6 +28,8 @@ function detectedAttachmentMime(buffer) {
 function safeAttachmentFilename(value, mime) {
   const extension = extname(String(value || '')).toLowerCase();
   if (!attachmentExtensions[mime]?.has(extension)) return '';
+  // Control bytes are intentionally removed from names received in uploads.
+  // eslint-disable-next-line no-control-regex
   const withoutControls = String(value || '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/[\\/:*?"<>|]/g, '_').trim();
   return cleanText(withoutControls, 180) || `anexo${extension}`;
 }

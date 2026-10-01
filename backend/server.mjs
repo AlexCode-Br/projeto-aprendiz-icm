@@ -93,7 +93,7 @@ const server = http.createServer(async (request, response) => {
 });
 
 server.listen(port, host, () => {
-  console.log(`Projeto Aprendiz Aprimorado em ${baseUrl}`);
+  console.log(`Projeto Aprendiz em ${baseUrl}`);
   if (!isProduction) console.log('Caixa de e-mail de testes em /dev-mail');
 });
 

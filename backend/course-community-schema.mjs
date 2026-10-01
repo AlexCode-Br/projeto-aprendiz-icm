@@ -1,4 +1,4 @@
-// Shared by local initialization and the production Worker bootstrap.
+// SQLite schema for local initialization. PostgreSQL evolves through migrations.
 export const communitySchema = `
 CREATE TABLE IF NOT EXISTS class_presentation (
  class_id INTEGER PRIMARY KEY REFERENCES classes(id) ON DELETE CASCADE,
@@ -24,11 +24,4 @@ CREATE TABLE IF NOT EXISTS course_post_comments (
 );
 CREATE INDEX IF NOT EXISTS course_post_comments_post_idx ON course_post_comments(announcement_id,created_at);
 CREATE INDEX IF NOT EXISTS course_post_comments_user_idx ON course_post_comments(user_id);
-`;
-export const communityPostgresSchema = communitySchema.replace(/\b(class_presentation|course_post_likes|course_post_comments|classes|users|announcements)\b/g,'projeto_aprendiz.$1') + `
-ALTER TABLE projeto_aprendiz.class_presentation ADD COLUMN IF NOT EXISTS stream_mode TEXT NOT NULL DEFAULT 'post_and_comment' CHECK(stream_mode IN ('post_and_comment','comment_only','teacher_only'));
-ALTER TABLE projeto_aprendiz.class_presentation ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projeto_aprendiz.course_post_likes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE projeto_aprendiz.course_post_comments ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON projeto_aprendiz.class_presentation,projeto_aprendiz.course_post_likes,projeto_aprendiz.course_post_comments FROM PUBLIC,anon,authenticated;
 `;

@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createWorkerDatabase, workerDatabaseInternals as internals } from './worker-database.mjs';
 import { databaseInternals } from './database.mjs';
+import { readdir, readFile } from 'node:fs/promises';
+import { applicationTables } from './database/sql-compatibility.mjs';
 
 function fakeDriver({ respond = () => ({ rows: [], rowCount: 0 }), failConnect = false } = {}) {
   const clients = [];
@@ -109,21 +111,18 @@ test('successful transaction commits, nested transaction fails and connection fa
   assert.throws(() => internals.connectionOptions({}), /Configure HYPERDRIVE/);
 });
 
-test('student portal Worker bootstrap is idempotent, private and schema-qualified', async () => {
-  const calls=[];
-  const database={exec:async sql=>{calls.push(sql);},prepare:()=>({all:async()=>[],run:async()=>({changes:1})})};
-  await Promise.all([internals.ensureStudentPortalSchema(database),internals.ensureStudentPortalSchema(database)]);
-  assert.equal(calls.length,2);
-  for(const table of ['class_presentation','course_post_likes','course_post_comments']){
-    assert.ok(calls[1].includes(`CREATE TABLE IF NOT EXISTS projeto_aprendiz.${table}`));
-    assert.ok(calls[1].includes(`ALTER TABLE projeto_aprendiz.${table} ENABLE ROW LEVEL SECURITY`));
+test('every migrated table uses the same private SQL registry in Node and Worker', async () => {
+  const root = new URL('./migrations/', import.meta.url);
+  for (const name of (await readdir(root)).filter(name => name.endsWith('.sql'))) {
+    const source = await readFile(new URL(name, root), 'utf8');
+    for (const match of source.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:projeto_aprendiz\.)?([a-z_]+)/gi)) {
+      const table = match[1];
+      assert.ok(applicationTables.has(table), `${name}: register ${table} in sql-compatibility.mjs`);
+      const sql = `SELECT * FROM ${table} WHERE id=?`;
+      assert.equal(internals.qualifyApplicationTables(sql), `SELECT * FROM projeto_aprendiz.${table} WHERE id=?`);
+      assert.equal(databaseInternals.qualifyApplicationTables(sql), internals.qualifyApplicationTables(sql));
+    }
   }
-  assert.match(calls[1],/stream_mode TEXT NOT NULL DEFAULT 'post_and_comment'/);
-  await internals.ensureStudentPortalSchema(database);
-  assert.equal(calls.length,2);
-  assert.match(calls[0],/CREATE TABLE IF NOT EXISTS projeto_aprendiz\.student_accounts/);
-  assert.match(calls[0],/CREATE TABLE IF NOT EXISTS projeto_aprendiz\.student_invites/);
-  assert.match(calls[0],/CHECK\(role IN \('gestor','professor','aluno'\)\)/);
-  assert.match(calls[0],/ENABLE ROW LEVEL SECURITY/);
-  assert.match(calls[0],/FROM PUBLIC, anon, authenticated/);
+  assert.equal(databaseInternals.postgresSql, internals.postgresSql);
+  assert.equal(databaseInternals.returningId, internals.returningId);
 });

@@ -1,7 +1,13 @@
 {
-  "name": "projeto-aprendiz-aprimorado",
+  "name": "projeto-aprendiz-icm",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Plataforma independente de integração entre alunos e professores do Projeto Aprendiz do Maanaim de Salvador.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlexCode-Br/projeto-aprendiz-icm.git"
+  },
+  "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@11.19.0",
   "engines": {
@@ -12,8 +18,8 @@
     "build": "vite build",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "start": "node backend/server.mjs",
-    "dev:backend": "node --watch backend/server.mjs",
+    "start": "node --env-file-if-exists=.env backend/server.mjs",
+    "dev:backend": "node --env-file-if-exists=.env --watch backend/server.mjs",
     "db:migrate": "node backend/migrate.mjs",
     "vapid:generate": "node backend/generate-vapid-keys.mjs",
     "test:mass": "node backend/mass-simulation.mjs",
@@ -21,7 +27,10 @@
     "cloudflare:dev": "wrangler dev",
     "cloudflare:deploy": "pnpm db:migrate && node cloudflare/build.mjs && wrangler deploy",
     "cloudflare:tail": "wrangler tail --format json | node cloudflare/tail-summary.mjs",
-    "check": "node --check backend/server.mjs && node --check backend/database.mjs && node --test backend/*.test.mjs && vite build"
+    "test": "node --test backend/*.test.mjs",
+    "test:postgres": "node --test backend/legacy-drift-migration.test.mjs backend/postgres-migrations.test.mjs",
+    "repo:check": "node scripts/check-repository.mjs",
+    "check": "pnpm repo:check && pnpm lint && node --check backend/server.mjs && node --check backend/database.mjs && pnpm test && vite build"
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.6.1",

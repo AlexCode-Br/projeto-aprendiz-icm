@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import test from 'node:test';
 import pg from 'pg';
+import { requireLocalTestDatabase } from './test-support/postgres.mjs';
 
 const migrationPath = join(import.meta.dirname, 'migrations', '016_repair_legacy_lifecycle_drift.sql');
 const migrationSql = await readFile(migrationPath, 'utf8');
@@ -22,7 +23,7 @@ test('migração PostgreSQL repara o drift sem perder dados úteis', {
   skip: !testDatabaseUrl && 'defina TEST_DATABASE_URL para executar a regressão PostgreSQL',
   timeout: 30_000,
 }, async () => {
-  const client = new pg.Client({ connectionString: testDatabaseUrl });
+  const client = new pg.Client({ connectionString: requireLocalTestDatabase(testDatabaseUrl) });
   const schema = `legacy_drift_${process.pid}_${randomBytes(6).toString('hex')}`;
   assert.match(schema, /^[a-z0-9_]+$/);
   const quotedSchema = `"${schema}"`;

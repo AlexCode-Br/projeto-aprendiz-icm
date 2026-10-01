@@ -4,7 +4,16 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 
 export default [
-  { ignores: ['dist/**', 'node_modules/**'] },
+  { ignores: ['dist/**', 'node_modules/**', 'cloudflare/build/**', '.wrangler/**', 'tmp/**', 'output/**', '.tmp-*/**', '.qa-*/**', '.migration-worker/**'] },
+  {
+    files: ['backend/**/*.mjs', 'cloudflare/**/*.mjs', 'scripts/**/*.mjs', 'shared/**/*.mjs', '*.config.js'],
+    languageOptions: { ecmaVersion: 'latest', sourceType: 'module', globals: { ...globals.node, ...globals.browser } },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none', varsIgnorePattern: '^_' }],
+    },
+  },
   {
     files: ['src/**/*.{js,jsx}'],
     plugins: {

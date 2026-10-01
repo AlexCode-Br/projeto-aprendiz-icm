@@ -27,12 +27,15 @@ Navegador
 | `src/services/` | Cliente HTTP da aplicação; autenticação Supabase é executada exclusivamente pelo backend. |
 | `src/utils/` | Exportações e transformações exclusivas do navegador. |
 | `backend/routes/` | Endpoints HTTP separados por domínio. |
+| `backend/database/` | Regras SQL puras compartilhadas por Node e Worker; registro das tabelas privadas. |
 | `backend/*.mjs` | Inicialização, banco, segurança, e-mail, storage e infraestrutura da API. |
 | `backend/migrations/` | Evolução idempotente do schema privado `projeto_aprendiz`. |
+| `backend/test-support/` | Inicialização isolada do servidor para testes de integração. |
 | `shared/` | Validações e regras puras usadas pelo frontend e backend. |
 | `cloudflare/` | Adaptadores e operação específicos do runtime Cloudflare. |
 | `public/` | Assets que precisam manter URL pública estável, inclusive em e-mails. |
 | `docs/` | Arquitetura e políticas atuais; o Git guarda o histórico. |
+| `scripts/` | Verificações de repositório, diagnóstico e smoke test de produção. |
 
 ## Limites de responsabilidade
 
@@ -50,11 +53,19 @@ Navegador
 - O professor cria as próprias ofertas a partir dos catálogos ativos de cursos e localidades e informa ao menos um horário. O gestor lista e pode excluir turmas, mas não cria nem edita ofertas. O curso é imutável após a criação; o professor responsável pode atualizar a igreja ou modalidade e a agenda. Horários usam `class_schedules` para recorrências semanais e `class_schedule_dates` para aulas em datas específicas, com detecção transacional de conflitos do professor.
 - Testes ficam próximos ao backend porque exercitam os mesmos módulos e contratos sem uma segunda estrutura paralela.
 
+## Banco e despacho HTTP
+
+`backend/database.mjs` mantém a conexão Node, SQLite local e execução de migrações. `backend/worker-database.mjs` mantém conexão e transações no runtime Cloudflare. Ambos importam `backend/database/sql-compatibility.mjs` para converter parâmetros, qualificar o schema privado, normalizar resultados e tratar IDs. Esse módulo não depende de filesystem, SQLite ou cliente PostgreSQL.
+
+O registro `applicationTables` inclui todas as tabelas das migrações. Uma regressão compara a sequência SQL com o registro compartilhado; uma tabela nova deve atualizar ambos. Isso previne divergências entre os runtimes, inclusive em desafios MFA. O Worker não contém inicializadores de DDL: PostgreSQL evolui somente por migrações; o bootstrap SQLite permanece restrito ao modo local.
+
+`backend/routes/index.mjs` aplica a validação global de origem e IDs e encaminha pedidos aos módulos de domínio. Conta, sessões, preferências e push estão em `account.mjs`; fotos em `profile-photos.mjs`; períodos letivos em `school-years.mjs`. A separação preserva URLs, respostas e verificações de autorização.
+
 ## Área do aluno
 
 - `student_accounts` estabelece uma relação explícita e única entre conta e cadastro acadêmico. Convites do gestor criam esse vínculo; coincidência de e-mail não concede acesso automaticamente.
 - `/api/aluno/*` usa o aluno vinculado à sessão, nunca um identificador de aluno enviado pelo cliente. Rotas administrativas continuam bloqueadas para esse perfil, inclusive fotos e anexos de terceiros.
-- A navegação do aluno reúne apenas Início e a cascata Meus cursos; Configurações concentra dados pessoais. Não existe página agregadora de cursos: cada item da cascata abre diretamente o curso, que possui abas separadas para o Mural do professor e os Informativos do gestor destinados à turma, além de aulas e frequência. Não há inscrição em cursos pelo aluno nem um Mural global separado.
+- A navegação do aluno reúne apenas Início e a cascata Meus cursos; Configurações concentra dados pessoais. Não existe página agregadora de cursos: cada item da cascata abre diretamente o curso. Horário e local ficam no cabeçalho; Mural, Arquivos, Informativos e frequência preservam o contexto da matrícula. Não há inscrição em cursos pelo aluno nem um Mural global separado.
 - O painel do aluno pode consolidar indicadores gerais, mas dados acadêmicos são sempre contextualizados: frequência, avisos não lidos e próxima aula são calculados por matrícula e levam diretamente ao curso correspondente. Não existem telas gerais de calendário ou frequência que misturem cursos.
 - Os menus “Meus cursos” e “Minhas turmas” carregam seus itens em cascata por APIs vinculadas à sessão. O cliente não envia identificadores de aluno ou professor para compor essa lista.
 - Edição pessoal usa uma lista de campos permitidos. Alteração do e-mail de contato e login exige senha atual e confirmação do novo endereço, mantendo o anterior até a confirmação.
@@ -70,7 +81,7 @@ Fotos de autores de publicações e comentários são entregues por URLs vincula
 
 Informativos e publicações do Mural compartilham `RichTextEditor` no cliente e `sanitizeAnnouncementContent` na API. A formatação permitida limita-se a parágrafos, divisões, quebras, negrito, itálico, sublinhado, listas e links HTTPS com abertura isolada; comentários permanecem como texto simples.
 
-`class_presentation` guarda endereço, imagem otimizada (máximo 1 MB), posição, zoom e política de participação. A imagem é entregue por endpoint autenticado com cache privado desabilitado. `ClassBanner` compartilha o enquadramento entre prévia, professor e aluno; `ClassSettingsModal` permite reenquadrar sem reenviar e configurar a participação no mural. Turmas ainda não configuradas pelo professor atual aparecem no fluxo inicial de configuração. As migrações 023 e 024 e o bootstrap idempotente mantêm SQLite local e PostgreSQL compatíveis.
+`class_presentation` guarda endereço, imagem otimizada (máximo 1 MB), posição, zoom e política de participação. A imagem é entregue por endpoint autenticado com cache privado desabilitado. `ClassBanner` compartilha o enquadramento entre prévia, professor e aluno; `ClassSettingsModal` permite reenquadrar sem reenviar e configurar a participação no mural. Turmas ainda não configuradas pelo professor atual aparecem no fluxo inicial de configuração. As migrações PostgreSQL e o bootstrap SQLite local mantêm os modelos compatíveis, sem DDL em requisições do Worker.
 
 ## Compatibilidade de nomes
 
@@ -90,5 +101,9 @@ Os caminhos abaixo são regeneráveis e não pertencem ao código-fonte:
 
 ## Qualidade
 
-`pnpm check` verifica a sintaxe do backend, executa a suíte automatizada e compila o frontend. `pnpm lint` cobre o repositório com ESLint. Mudanças de banco devem incluir migração e regressão; mudanças responsivas devem ser conferidas no mobile e no desktop.
+`pnpm check` verifica higiene do repositório e links de documentação, executa ESLint, valida a sintaxe dos pontos de entrada, roda os testes e compila o frontend. `pnpm lint` cobre frontend, backend, regras compartilhadas e scripts. Mudanças de banco devem incluir migração e regressão; mudanças responsivas devem ser conferidas no mobile e no desktop.
+
+`backend/test-support/server.mjs` usa SQLite e uma porta livre em loopback. Credenciais e integrações de produção herdadas são excluídas do subprocesso. A adoção começou pelos testes de conta, MFA e modelo acadêmico; os demais testes existentes ainda mantêm seus inicializadores locais. A suíte PostgreSQL exige `TEST_DATABASE_URL`, usa schema aleatório e desfaz todas as alterações por rollback. A CI provisiona PostgreSQL 16 temporário para essa verificação.
+
+O repositório usa um único pacote: separar frontend e API em workspaces agora acrescentaria complexidade ao build integrado sem um consumidor independente. As decisões estão em [Decisões de arquitetura](decisions/README.md). O documento [Estado do projeto](../PROJECT_STATUS.md) contém apenas o estado atual; o registro anterior foi arquivado como documentação de releases.
 

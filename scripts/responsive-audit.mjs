@@ -142,8 +142,5 @@ try {
   socket?.close();
   browser.kill();
   await Promise.race([once(browser, 'exit'), wait(2_000)]).catch(() => {});
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    try { await rm(profile, { recursive: true, force: true }); break; }
-    catch (error) { if (attempt === 4) throw error; await wait(250); }
-  }
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 250 });
 }

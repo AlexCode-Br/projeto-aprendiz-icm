@@ -37,16 +37,24 @@ ALTER TABLE projeto_aprendiz.dropout_events ENABLE ROW LEVEL SECURITY;
 
 -- Keep the legacy public schema intact for recovery, while removing direct
 -- browser access that was still exposed through PostgREST/GraphQL.
-REVOKE ALL PRIVILEGES ON TABLE public.announcement_confirmations FROM PUBLIC, anon, authenticated;
-REVOKE ALL PRIVILEGES ON TABLE public.announcements FROM PUBLIC, anon, authenticated;
-REVOKE ALL PRIVILEGES ON TABLE public.attendance FROM PUBLIC, anon, authenticated;
-REVOKE ALL PRIVILEGES ON TABLE public.courses FROM PUBLIC, anon, authenticated;
-REVOKE ALL PRIVILEGES ON TABLE public.enrollments FROM PUBLIC, anon, authenticated;
-REVOKE ALL PRIVILEGES ON TABLE public.profiles FROM PUBLIC, anon, authenticated;
-REVOKE ALL PRIVILEGES ON TABLE public.students FROM PUBLIC, anon, authenticated;
-REVOKE ALL PRIVILEGES ON TABLE public.support_tickets FROM PUBLIC, anon, authenticated;
+DO $$
+DECLARE legacy_table TEXT;
+BEGIN
+  FOREACH legacy_table IN ARRAY ARRAY['announcement_confirmations','announcements','attendance','courses','enrollments','profiles','students','support_tickets'] LOOP
+    IF to_regclass(format('public.%I', legacy_table)) IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL PRIVILEGES ON TABLE public.%I FROM PUBLIC, anon, authenticated', legacy_table);
+    END IF;
+  END LOOP;
+END $$;
 
 -- SECURITY DEFINER functions are used by a database trigger, not by clients.
 -- Revoking client execution does not prevent the trigger from running.
-REVOKE EXECUTE ON FUNCTION public.get_user_role(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+DO $$
+BEGIN
+  IF to_regprocedure('public.get_user_role(uuid)') IS NOT NULL THEN
+    REVOKE EXECUTE ON FUNCTION public.get_user_role(uuid) FROM PUBLIC, anon, authenticated;
+  END IF;
+  IF to_regprocedure('public.handle_new_user()') IS NOT NULL THEN
+    REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+  END IF;
+END $$;

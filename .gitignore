@@ -22,6 +22,24 @@ cloudflare/build/
 *.pem
 *.key
 
+# Test artifacts and local operational tools
+/tmp/
+/.tmp-*
+/.migration-worker/
+/.qa-*/
+/output/
+coverage/
+test-results/
+playwright-report/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sql.gz
+*.dump
+
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

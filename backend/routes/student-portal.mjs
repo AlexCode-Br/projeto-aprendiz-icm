@@ -167,7 +167,7 @@ export function createStudentPortalRoutes(context) {
         ORDER BY a.scheduled_at DESC,a.id DESC LIMIT 1`).get(studentId,session.user_id);
       let targetClass=null;
       if(latest){
-        targetClass=Boolean(latest.mural)
+        targetClass=latest.mural
           ?await db.prepare('SELECT class_id FROM student_course_announcements WHERE announcement_id=?').get(latest.id)
           :await db.prepare(`SELECT sac.class_id FROM student_announcement_classes sac
             JOIN enrollments e ON e.class_id=sac.class_id AND e.student_id=? AND e.status='ativa'
@@ -190,7 +190,7 @@ export function createStudentPortalRoutes(context) {
       const noticesByClass=[];
       for(const item of unreadRows){
         let summary=noticesByClass.find(value=>value.turmaId===Number(item.class_id));
-        if(!summary){summary={turmaId:Number(item.class_id),total:0,origem:Boolean(item.mural)?'mural':'informativos'};noticesByClass.push(summary);}
+        if(!summary){summary={turmaId:Number(item.class_id),total:0,origem:item.mural?'mural':'informativos'};noticesByClass.push(summary);}
         summary.total+=1;
       }
       return json(response,200,{total:Number(row.total),turmaId:targetClass?Number(targetClass.class_id):null,origem:latest?(latest.mural?'mural':'informativos'):null,porTurma:noticesByClass});
