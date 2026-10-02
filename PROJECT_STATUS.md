@@ -1,6 +1,6 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 01/10/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
+Atualizado em 02/10/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
 
 ## Produção
 
@@ -71,10 +71,21 @@ Abra a pasta clonada e retome a partir deste documento, `AGENTS.md`, `docs/ARCHI
 
 O responsável informou que salvou uma cópia de `projeto-aprendiz` no Drive. Essa cópia não comprova a preservação da pasta separada de backup do banco nem dos arquivos locais ignorados. Antes de apagar o Windows, copie também o conjunto cifrado em `Documents/Codex/backups/projeto-aprendiz` (arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e ferramenta de recuperação) e preserve a senha original da exportação em um gerenciador de senhas. Confira se os arquivos realmente podem ser baixados no novo computador. Segredos locais devem permanecer cifrados e fora do Git.
 
+## Retomada operacional de 02/10/2026
+
+- Os quatro documentos de manutenção foram lidos e o Git remoto foi conferido pelo navegador. Na conferência inicial, `main` estava em `0dd45ad`; o registro de 01/10 estava em `ebd4680`, na branch de trabalho, um commit à frente e um atrás de `main`. A [PR #43](https://github.com/AlexCode-Br/projeto-aprendiz-icm/pull/43) foi aberta em rascunho para integrar a documentação por revisão, sem novo deploy.
+- CI da `main` (#95) e do registro `ebd4680` (#104) aprovadas. A CI da PR deve aprovar seu resultado final antes da integração; nenhum teste local completo foi repetido nesta retomada.
+- Ambiente GitHub `production` criado, com regra de publicação limitada à branch `main` e nenhuma tag permitida. Não há secrets no ambiente nem no repositório. A interface não oferece aprovação por revisores neste ambiente; a autorização do responsável continua sendo uma etapa operacional explícita antes de acionar o workflow manual.
+- Proteções clássicas de branch não estão configuradas. O GitHub informa que essas regras não serão aplicadas neste repositório privado no plano atual; a restrição do environment não substitui proteção contra push ou merge em `main`.
+- Smoke público de leitura aprovado: `/login` 200, `/api/health` 200 e estado `ok`, `/api/auth/me` sem sessão 401 e redirecionamento `www` 308 para a raiz. Não houve login, alteração de dados, migração ou publicação.
+- A pasta local aberta neste computador Windows contém o conjunto de backup cifrado, cujo tamanho e SHA-256 conferem com o manifesto. O código foi recuperado por ZIP da branch de trabalho em uma subpasta separada, sem histórico `.git`. O Git fornecido pelo runtime está disponível, mas o acesso HTTPS ao repositório privado pelo terminal exige autenticação; a sessão GitHub do navegador não autentica automaticamente o clone.
+- Autenticação da cifra, restauração, cópia externa do backup e retenção da senha original não foram revalidadas nesta sessão. O ensaio de 01/10 permanece registrado separadamente.
+
 ## Pendências operacionais
 
 - Validar os fluxos autenticados da versão publicada: código por e-mail do gestor, áreas de professor e aluno, mural, frequência, anexos e notificações em dispositivo autorizado.
-- Configurar o ambiente GitHub `production`, proteção de `main` e credenciais de CI antes de usar o workflow de publicação.
+- Cadastrar `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` e `DATABASE_URL` diretamente nos secrets do ambiente GitHub `production`, usando credenciais de escopo mínimo e conexão de manutenção com TLS validado. Resolver a limitação de aplicação das proteções de `main` antes de considerar o pipeline pronto. Não enviar valores por chat ou commit e não acionar o workflow sem autorização explícita.
+- Integrar a documentação da PR #43 após revisão e CI aprovada. Autenticar o Git no computador e obter um clone com histórico antes de retomar alterações de código; preservar o conjunto de backup fora da raiz desse clone.
 - Staging precisa de Worker, Hyperdrive, banco, Auth e Storage separados; nenhum ambiente de teste deve reutilizar o banco de produção.
 - Confirmar a política de backup contínuo do Supabase, incluir Auth/Storage na recuperação e manter cópia cifrada externa. Ensaio do schema privado realizado em 01/10/2026; repetir mensalmente conforme `docs/DISASTER_RECOVERY.md`.
 - Avaliar a atualização PostgreSQL disponível no Supabase, conferindo versão vigente, extensões e as [mudanças de compatibilidade de 17.11](https://supabase.com/changelog/postgres-15-19-17-11-breaking-changes) antes de definir uma janela de manutenção. Não foi executada atualização do banco gerenciado nesta operação.
