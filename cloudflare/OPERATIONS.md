@@ -19,7 +19,7 @@ O repositório canônico é `AlexCode-Br/projeto-aprendiz-icm`. A mudança de no
 
 ### GitHub Actions
 
-O workflow `Deploy production` é manual (`workflow_dispatch`), aceita somente `main` e depende de uma etapa de validação. Não há publicação automática em push. Antes da primeira execução:
+O workflow `Deploy production` é manual (`workflow_dispatch`), aceita somente `main` e depende de uma etapa de validação. Não há publicação automática em push. A primeira execução autorizada concluiu em 02/10/2026; consulte o [registro](../docs/releases/DEPLOY_2026-10-02.md). Para preparar ou revisar o pipeline:
 
 1. Integrar o código validado em `main` por revisão. Uma alteração só existir localmente não a torna disponível na CI.
 2. Criar o environment `production` no GitHub e configurar os secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` e `SUPABASE_CA_CERT`. O último contém apenas o PEM da CA pública oficial obtida em Database Settings no Supabase. Usar token restrito à conta e às permissões necessárias para o Worker; nunca enviar valores por chat ou commit.
