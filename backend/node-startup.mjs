@@ -57,6 +57,16 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     );
     CREATE INDEX IF NOT EXISTS manager_login_challenges_user_idx ON manager_login_challenges(user_id);
     CREATE INDEX IF NOT EXISTS manager_login_challenges_expiry_idx ON manager_login_challenges(expires_at);
+    CREATE TABLE IF NOT EXISTS manager_login_devices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(user_id,token_hash)
+    );
+    CREATE INDEX IF NOT EXISTS manager_login_devices_expiry_idx ON manager_login_devices(expires_at);
     CREATE TABLE IF NOT EXISTS user_settings (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       preferences_json TEXT NOT NULL DEFAULT '{}',
