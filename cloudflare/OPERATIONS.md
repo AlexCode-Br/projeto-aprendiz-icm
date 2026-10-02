@@ -27,6 +27,8 @@ O workflow `Deploy production` é manual (`workflow_dispatch`), aceita somente `
 4. Configurar proteção de `main` com revisão e o check `validate`. Adicionar aprovação no environment se o plano GitHub oferecer essa opção para este repositório privado.
 5. Conferir a versão anterior saudável do Worker e o backup do banco antes de autorizar uma publicação.
 
+A segunda publicação de 02/10/2026 ativou o alerta separado de novo dispositivo para gestores, com a migração privada `028_manager_login_devices.sql`; consulte o [registro da versão vigente](../docs/releases/DEPLOY_2026-10-02_ALERTA_GESTOR.md). O e-mail de código MFA continua separado do aviso de acesso.
+
 Os secrets do GitHub são credenciais do processo de publicação, não substitutos dos secrets de runtime já cadastrados no Worker. O pipeline executa migrações, publica e roda `scripts/smoke-production.mjs`; uma falha no smoke exige investigação, não um rollback automático de banco.
 
 ### Publicação local
