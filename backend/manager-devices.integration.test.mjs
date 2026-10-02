@@ -45,9 +45,8 @@ test('gestor recebe alerta separado após MFA e reconhece navegador', { timeout:
     assert.equal(db.prepare('SELECT COUNT(*) AS n FROM manager_login_devices').get().n, 1);
     const alert = db.prepare('SELECT * FROM notification_outbox').get();
     assert.match(alert.subject, /Novo dispositivo conectado/);
-    assert.match(alert.body, /Navegador: Edge/);
-    assert.match(alert.body, /Sistema operacional: Windows/);
-    assert.match(alert.body, /Localização aproximada pelo IP: Não disponível/);
+    assert.match(alert.body, /Sistema e navegador: Windows, Edge/);
+    assert.match(alert.body, /Localização aproximada: Não disponível/);
     assert.doesNotMatch(alert.body, /código de verificação é/);
     assert.equal(alert.email_enabled, 1);
     assert.equal(alert.push_enabled, 0);
