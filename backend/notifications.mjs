@@ -1,3 +1,5 @@
+export const MANAGER_DEVICE_ALERT = 'managerNewDevice';
+
 const NOTIFICATION_DEFAULTS = Object.freeze({
   newStudent: true,
   newTicket: true,
@@ -69,5 +71,13 @@ export function createNotificationService({ db, sendEmail, sendPush = async () =
     return notifyUser(professor.user_id, preference, subject, body, `${idempotencyKey}/professor-${professorId}`);
   }
 
-  return { preferencesFor, notifyUser, notifyManagers, notifyProfessor };
+  async function notifySecurityAlert(userId, subject, body, idempotencyKey) {
+    const user = await db.prepare("SELECT email FROM users WHERE id=? AND active=1 AND role='gestor'").get(userId);
+    if (!user) return { sent: false, reason: 'disabled' };
+    // Account security alerts are mandatory and email-only, independent of preferences.
+    await sendEmail(user.email, subject, body, idempotencyKey);
+    return { sent: true, channels: { email: true, push: false } };
+  }
+
+  return { preferencesFor, notifyUser, notifyManagers, notifyProfessor, notifySecurityAlert };
 }
