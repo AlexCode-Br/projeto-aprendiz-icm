@@ -6,12 +6,12 @@ Atualizado em 02/10/2026. Este arquivo reúne apenas o estado vigente; o [histó
 
 - URL: `https://aprendizicm.com.br`.
 - Worker existente: `aprendiz-staging`, usado em produção com os bindings de `wrangler.jsonc`.
-- Última versão publicada e confirmada: `24fa9a92-bb96-471d-8283-3d3397efdbdf`, commit `676aa89` em `main`, publicada pelo workflow manual em 02/10/2026. Smoke público e hashes do JavaScript/CSS aprovados. MFA do gestor por e-mail preservado; os fluxos autenticados desta versão ainda dependem de validação pelo responsável.
+- Última versão publicada e confirmada: `86321bf4-4dd7-415e-a4ed-2fb6339be220`, commit `592e607` em `main`, publicada pelo workflow manual em 02/10/2026 às 07:56 (America/Sao_Paulo). Smoke público e hashes do JavaScript/CSS aprovados. MFA do gestor por e-mail preservado; novo alerta de dispositivo enviado em mensagem separada. [Registro](docs/releases/DEPLOY_2026-10-02_ALERTA_GESTOR.md).
 - PostgreSQL, Auth e Storage privados no Supabase, conectados pelo Hyperdrive.
-- Migração `027_security_audit_remediation.sql` aplicada. MFA do gestor continua por e-mail.
+- Migrações `027_security_audit_remediation.sql` e `028_manager_login_devices.sql` aplicadas. MFA do gestor continua por e-mail; reconhecimento de navegador não autentica nem dispensa o código.
 - Senha PostgreSQL redefinida pelo responsável em 01/10/2026 e atualizada no Hyperdrive existente. Identidade, destino e cache desabilitado foram preservados. Smoke público aprovado após a troca.
 - Histórico reconciliado em 01/10/2026 após backup cifrado e restauração verificada. Nove scripts tinham seus efeitos confirmados; `018` precisava apenas do índice `enrollments_recent_active_idx`. Dez entradas foram registradas, mantendo `009_lifecycle_and_history.sql` e os campos legados. Checksums dos dados da aplicação foram preservados na transação. Não há scripts locais pendentes.
-- `pnpm cloudflare:deploy` concluído pelo GitHub Actions, com migrador antes da publicação e TLS validado pela CA oficial. [Registro atual](docs/releases/DEPLOY_2026-10-02.md); [reconciliação e publicação anterior](docs/releases/DEPLOY_2026-10-01.md).
+- `pnpm cloudflare:deploy` concluído pelo GitHub Actions, com migrador antes da publicação e TLS validado pela CA oficial. [Registro atual](docs/releases/DEPLOY_2026-10-02_ALERTA_GESTOR.md); [primeira publicação de 02/10](docs/releases/DEPLOY_2026-10-02.md); [reconciliação e publicação anterior](docs/releases/DEPLOY_2026-10-01.md).
 
 ## Repositório e preservação
 
@@ -92,9 +92,13 @@ O conjunto cifrado local inclui o arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e
 - Smoke independente pós-deploy aprovado: login 200, health 200/ok, sessão ausente 401 e www 308. JavaScript e CSS publicados conservaram os hashes SHA-256 anteriores, conforme esperado para uma mudança de pipeline e documentação. Os testes autenticados não foram executados.
 - A CI emitiu avisos de runtime das actions v4 e da futura migração de `ubuntu-latest`. Avaliar atualização das actions e estabilidade da imagem do runner em manutenção separada, com validação completa.
 
-## Pendências operacionais
+## Publicação do alerta do gestor em 02/10/2026
 
-- Código do alerta separado de novo dispositivo integrado pela PR #45 em 02/10/2026. O responsável solicitou um modelo compacto com data/hora em Brasília, sistema/navegador, localização aproximada e botão “Não fui eu”; a simplificação e o deploy foram autorizados. O e-mail do código MFA permanece separado. Reconhecimento do navegador usa cookie protegido e hash privado com validade renovável de um ano, sem dispensar MFA; entrega obrigatória por e-mail via outbox, sem push. Migração `028_manager_login_devices.sql` preparada, ainda pendente da publicação autorizada. A versão de produção registrada acima permanece vigente até a conclusão do workflow.
+- PR #45 integrou o reconhecimento de novo navegador e a entrega obrigatória por e-mail via outbox, com hash privado e cookie protegido renovável por um ano, sem dispensar MFA. PR #46 simplificou o modelo conforme referência do responsável: data/hora em Brasília, sistema/navegador, localização aproximada e botão “Não fui eu” para Configurações. O código de verificação permanece em outro e-mail; IP permanece na auditoria.
+- [Deploy production #2](https://github.com/AlexCode-Br/projeto-aprendiz-icm/actions/runs/36997932593), autorizado pelo responsável, publicou `592e607` após check, auditoria, PostgreSQL isolado e build seco aprovados. O migrador concluiu antes do upload. Versão anterior saudável preservada: `24fa9a92-bb96-471d-8283-3d3397efdbdf`.
+- Smoke independente e comparação SHA-256 dos assets publicados com o build local aprovados. Prévia conferida com dados fictícios; nenhum login ou envio manual de e-mail real foi feito nesta publicação. [Detalhes](docs/releases/DEPLOY_2026-10-02_ALERTA_GESTOR.md).
+
+## Pendências operacionais
 
 - Validar os fluxos autenticados da versão publicada: código por e-mail do gestor, áreas de professor e aluno, mural, frequência, anexos e notificações em dispositivo autorizado.
 - Renovar o token Cloudflare do pipeline antes de 31/12/2026. Os quatro secrets de publicação estão cadastrados em `production` e foram validados pela primeira execução. Resolver a limitação de aplicação das proteções de `main`; a autorização explícita desta publicação não modifica o plano GitHub nem torna o ambiente uma proteção contra push ou merge. Não enviar valores por chat ou commit.
