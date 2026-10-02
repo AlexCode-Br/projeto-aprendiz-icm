@@ -1,3 +1,5 @@
+import { managerLoginEmail } from '../manager-login-email.mjs';
+
 export function createAuthRoutes(context) {
   const {
     db,
@@ -40,10 +42,11 @@ export function createAuthRoutes(context) {
     return `${local.slice(0, 2)}${'*'.repeat(Math.max(2, Math.min(8, local.length - 2)))}@${domain}`;
   };
 
-  async function issueManagerChallenge(user, remember, ip) {
+  async function issueManagerChallenge(user, remember, ip, request) {
+    const requestedAt = new Date();
     const challengeToken = randomBytes(32).toString('base64url');
     const code = String(randomBytes(4).readUInt32BE(0) % 1_000_000).padStart(6, '0');
-    const expiresAt = new Date(Date.now() + 10 * 60_000).toISOString();
+    const expiresAt = new Date(requestedAt.getTime() + 10 * 60_000).toISOString();
     await db.transaction(async () => {
       await db.prepare('UPDATE manager_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE user_id=? AND consumed_at IS NULL').run(user.id);
       await db.prepare('INSERT INTO manager_login_challenges(user_id,token_hash,code_hash,remember,expires_at) VALUES (?,?,?,?,?)')
@@ -51,7 +54,8 @@ export function createAuthRoutes(context) {
       await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(user.id, 'manager_mfa_challenge_issued', ip);
     });
     try {
-      await sendEmail(user.email, 'Código de verificação — Projeto Aprendiz', `Olá, ${user.name}.\n\nSeu código de verificação é: ${code}\n\nEle expira em 10 minutos. Se você não tentou entrar, altere sua senha e avise a administração.`, `manager-mfa/${user.id}/${sha256(challengeToken)}`);
+      const body = managerLoginEmail({ name: user.name, code, requestedAt, ip, request });
+      await sendEmail(user.email, 'Código de verificação — Projeto Aprendiz', body, `manager-mfa/${user.id}/${sha256(challengeToken)}`);
     } catch (error) {
       await db.prepare('DELETE FROM manager_login_challenges WHERE token_hash=?').run(sha256(challengeToken));
       logger.error('manager_mfa_delivery_failed', error, { userId: user.id });
@@ -110,7 +114,7 @@ export function createAuthRoutes(context) {
         }
         await resetLoginFailures(normalized);
         if (user.role === 'gestor' && managerMfaRequired) {
-          const challenge = await issueManagerChallenge(user, remember, ip);
+          const challenge = await issueManagerChallenge(user, remember, ip, request);
           if (!challenge) return json(response, 503, { message: 'Não foi possível enviar o código de verificação. Tente novamente.' });
           return json(response, 202, { mfaRequired: true, ...challenge });
         }
