@@ -40,7 +40,7 @@ Atualizado em 02/10/2026. Este arquivo reúne apenas o estado vigente; o [histó
 - `pnpm check` com PostgreSQL isolado em 01/10/2026: lint, build e 99 testes aprovados, zero falhas e zero testes pulados. Build seco do Worker aprovado.
 - Conexão de manutenção pelo Session Pooler validada com o certificado CA oficial do Supabase e verificação TLS ativa. Segredos permanecem fora do Git.
 - Backup local cifrado do schema privado, com restauração e checksums das 46 tabelas verificados. Arquivos binários do Storage e schemas gerenciados não estão nessa cópia. A senha usada na exportação deve ser preservada no gerenciador de senhas para recuperar este arquivo, mesmo após futuras rotações.
-- Antes da troca de sistema operacional, SHA-256 e tamanho do arquivo cifrado conferiram com o manifesto; autenticação da cifra e leitura por `pg_restore --list` foram repetidas sem conexão com banco algum. Banco de teste excluído, servidor local parado e ausência de `restore-data` confirmada após remoção manual pelo responsável.
+- Em 01/10/2026, SHA-256 e tamanho do arquivo cifrado conferiram com o manifesto; autenticação da cifra e leitura por `pg_restore --list` foram repetidas sem conexão com banco algum. Banco de teste excluído, servidor local parado e ausência de `restore-data` confirmada após remoção manual pelo responsável.
 
 ## Contratos permanentes
 
@@ -54,22 +54,24 @@ Atualizado em 02/10/2026. Este arquivo reúne apenas o estado vigente; o [histó
 
 Leia [Arquitetura](docs/ARCHITECTURE.md), [Contribuição](CONTRIBUTING.md) e, antes de publicar, [Operação](cloudflare/OPERATIONS.md). Execute `pnpm check`, `pnpm cloudflare:build` e `git diff --check` antes da entrega. Deploy depende de solicitação explícita do responsável.
 
-## Retomada no Zorin OS
+## Desenvolvimento no Windows
 
-A documentação de encerramento e retomada está na branch `codex/melhorias-projeto-aprendiz`. O código da aplicação já está integrado em `main`; para recuperar também estes registros, clone explicitamente a branch de trabalho. O repositório é privado e exige autenticação GitHub, sem credenciais embutidas na URL.
+O responsável voltou ao Windows. Use Git autenticado, Node.js conforme `.node-version` e pnpm conforme `packageManager` em `package.json`: neste registro, Node.js 24.19.0 e pnpm 11.19.0. A documentação operacional está na branch `codex/melhorias-projeto-aprendiz`, em revisão na PR #43; o código da aplicação já está integrado em `main`.
 
-```bash
-git clone --branch codex/melhorias-projeto-aprendiz https://github.com/AlexCode-Br/projeto-aprendiz-icm.git projeto-aprendiz
-cd projeto-aprendiz
+Clone em uma pasta nova, separada do conjunto de backup e da cópia recuperada por ZIP:
+
+```powershell
+git clone --branch codex/melhorias-projeto-aprendiz https://github.com/AlexCode-Br/projeto-aprendiz-icm.git projeto-aprendiz-icm
+cd projeto-aprendiz-icm
 pnpm install --frozen-lockfile
 pnpm check
 ```
 
-Use Node.js conforme `.node-version` e pnpm conforme `packageManager` em `package.json`: neste registro, Node.js 24.19.0 e pnpm 11.19.0. Não reutilize `node_modules`, bancos locais, builds ou executáveis PostgreSQL do Windows; instale as dependências próprias do Linux. A validação PostgreSQL completa depende de um banco de teste local isolado; sem ele, as duas regressões correspondentes são puladas, não aprovadas.
+O repositório é privado e exige autenticação GitHub própria do Git, sem credenciais embutidas na URL. A validação PostgreSQL completa depende de um banco de teste local isolado; sem ele, as duas regressões correspondentes são puladas, não aprovadas.
 
 Abra a pasta clonada e retome a partir deste documento, `AGENTS.md`, `docs/ARCHITECTURE.md` e `cloudflare/OPERATIONS.md`. Confira o Git e trate a retomada como preparação local, sem novo deploy ou alteração de produção até autorização explícita.
 
-O responsável informou que salvou uma cópia de `projeto-aprendiz` no Drive. Essa cópia não comprova a preservação da pasta separada de backup do banco nem dos arquivos locais ignorados. Antes de apagar o Windows, copie também o conjunto cifrado em `Documents/Codex/backups/projeto-aprendiz` (arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e ferramenta de recuperação) e preserve a senha original da exportação em um gerenciador de senhas. Confira se os arquivos realmente podem ser baixados no novo computador. Segredos locais devem permanecer cifrados e fora do Git.
+O conjunto cifrado local inclui o arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e ferramenta de recuperação. Preserve também uma cópia externa cifrada e a senha original da exportação em um gerenciador de senhas. A cópia do projeto no Drive, informada pelo responsável, não comprova a preservação do backup separado nem dos arquivos locais ignorados. Segredos locais devem permanecer cifrados e fora do Git.
 
 ## Retomada operacional de 02/10/2026
 
@@ -89,4 +91,4 @@ O responsável informou que salvou uma cópia de `projeto-aprendiz` no Drive. Es
 - Staging precisa de Worker, Hyperdrive, banco, Auth e Storage separados; nenhum ambiente de teste deve reutilizar o banco de produção.
 - Confirmar a política de backup contínuo do Supabase, incluir Auth/Storage na recuperação e manter cópia cifrada externa. Ensaio do schema privado realizado em 01/10/2026; repetir mensalmente conforme `docs/DISASTER_RECOVERY.md`.
 - Avaliar a atualização PostgreSQL disponível no Supabase, conferindo versão vigente, extensões e as [mudanças de compatibilidade de 17.11](https://supabase.com/changelog/postgres-15-19-17-11-breaking-changes) antes de definir uma janela de manutenção. Não foi executada atualização do banco gerenciado nesta operação.
-- Confirmar a cópia externa da pasta separada de backup e a recuperação da senha original antes de apagar o Windows; a cópia do projeto no Drive foi informada pelo responsável, mas não inspecionada.
+- Confirmar a cópia externa da pasta separada de backup e a recuperação da senha original; a cópia do projeto no Drive foi informada pelo responsável, mas não inspecionada.
