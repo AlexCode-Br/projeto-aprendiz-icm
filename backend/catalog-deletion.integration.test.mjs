@@ -68,6 +68,8 @@ test('exclusão de catálogos remove vínculos e preserva contatos sem autor', {
     };
 
     const database = new DatabaseSync(databasePath);
+    // Login now delivers its security alert in the server's background writer.
+    database.exec('PRAGMA busy_timeout=5000');
     database.exec('PRAGMA foreign_keys=ON');
     const periodId = database.prepare('SELECT id FROM school_years WHERE active=1').get().id;
     const professor = database.prepare('SELECT id,home_location_id FROM professor_profiles WHERE active=1 ORDER BY id LIMIT 1').get();

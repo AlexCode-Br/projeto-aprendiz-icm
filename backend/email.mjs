@@ -42,13 +42,33 @@ function callToAction(subject, body) {
   const url = normalizedBody(body).match(/https?:\/\/[^\s<]+/)?.[0];
   if (!url) return '';
   const safeUrl = escapeHtml(url);
-  const label = deviceAlert ? 'Revisar minhas sessões' : /recupera|senha/i.test(subject) ? 'Redefinir minha senha' : 'Acessar o Projeto Aprendiz';
+  const label = deviceAlert ? 'Não fui eu' : /recupera|senha/i.test(subject) ? 'Redefinir minha senha' : 'Acessar o Projeto Aprendiz';
   return `
-    <table role="presentation" cellspacing="0" cellpadding="0" style="margin:8px 0 24px;">
+    <table role="presentation" ${deviceAlert ? 'width="100%"' : ''} cellspacing="0" cellpadding="0" style="margin:${deviceAlert ? '0' : '8px 0 24px'};">
       <tr><td bgcolor="${BRAND_COLOR}" style="border-radius:8px;">
-        <a href="${safeUrl}" style="display:inline-block;padding:14px 22px;color:#ffffff;font-size:15px;font-weight:700;line-height:1;text-decoration:none;border-radius:8px;">${label}</a>
+        <a href="${safeUrl}" style="display:${deviceAlert ? 'block' : 'inline-block'};text-align:center;padding:14px 22px;color:#ffffff;font-size:15px;font-weight:700;line-height:1;text-decoration:none;border-radius:8px;">${label}</a>
       </td></tr>
     </table>`;
+}
+
+function deviceAlertHtml(body) {
+  const paragraphs = normalizedBody(body).split(/\n{2,}/);
+  const fields = [
+    ['◷', 'Data e hora (Brasília)'],
+    ['💻', 'Sistema e navegador'],
+    ['📍', 'Localização aproximada'],
+  ];
+  const rows = fields.map(([icon, label]) => {
+    const value = normalizedBody(body).split('\n').find(line => line.startsWith(`${label}: `))?.slice(label.length + 2) || 'Não disponível';
+    return `<tr><td valign="top" width="32" style="padding:0 12px 22px 0;font-size:23px;line-height:1.2;">${icon}</td><td style="padding:0 0 22px;"><div style="color:#747780;font-size:14px;line-height:1.4;margin-bottom:5px;">${escapeHtml(label)}</div><div style="color:#24262b;font-size:17px;line-height:1.5;">${escapeHtml(value)}</div></td></tr>`;
+  }).join('');
+  return `${bodyHtml(paragraphs.slice(0, 2).join('\n\n'))}
+    <div style="padding:24px;border:1px solid #e2e4e8;border-radius:12px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+      <p style="margin:0 0 14px;font-size:16px;line-height:1.6;">Se foi você, pode desconsiderar este e-mail.</p>
+      <p style="margin:0 0 18px;color:#656870;font-size:13px;line-height:1.5;">Não reconhece o acesso? Revise suas sessões e altere sua senha.</p>
+      ${callToAction('Novo dispositivo conectado', body)}
+    </div>`;
 }
 
 function preheaderText(body) {
@@ -56,9 +76,8 @@ function preheaderText(body) {
 }
 
 function renderEmailHtml(subject, body, env = process.env) {
-  const securityNotice = /^Novo dispositivo conectado/i.test(subject)
-    ? 'Se você não reconhece este acesso, revise suas sessões e altere sua senha no Projeto Aprendiz.'
-    : 'Esta é uma mensagem automática e segura do Projeto Aprendiz. Se você não reconhece esta solicitação, ignore este e-mail.';
+  const deviceAlert = /^Novo dispositivo conectado/i.test(subject);
+  const securityNotice = 'Esta é uma mensagem automática e segura do Projeto Aprendiz. Se você não reconhece esta solicitação, ignore este e-mail.';
   const logoUrl = escapeHtml(env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL);
   const departmentLogoUrl = escapeHtml(env.EMAIL_DEPARTMENT_LOGO_URL || DEFAULT_DEPARTMENT_LOGO_URL);
   const year = new Date().getFullYear();
@@ -101,13 +120,13 @@ function renderEmailHtml(subject, body, env = process.env) {
           </table>
         </td></tr>
         <tr><td class="email-content" style="padding:34px 36px 30px;">
-          <div style="margin:0 0 12px;color:${BRAND_COLOR};font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">Comunicação oficial</div>
-          <h1 class="email-title" style="margin:0 0 22px;color:#202228;font-size:26px;line-height:1.3;letter-spacing:-.3px;">${escapeHtml(subject)}</h1>
-          <div style="font-size:16px;line-height:1.7;color:#4a4d55;">${bodyHtml(body)}</div>
-          ${callToAction(subject, body)}
-          <div style="margin-top:8px;padding:14px 16px;background:#f8f8f9;border-left:3px solid ${BRAND_COLOR};border-radius:0 8px 8px 0;color:#656870;font-size:12px;line-height:1.55;">
+          <div style="margin:0 0 12px;color:${BRAND_COLOR};font-size:12px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;">${deviceAlert ? 'Segurança da conta' : 'Comunicação oficial'}</div>
+          <h1 class="email-title" style="margin:0 0 22px;color:#202228;font-size:26px;line-height:1.3;letter-spacing:-.3px;">${escapeHtml(deviceAlert ? 'Novo acesso à sua conta' : subject)}</h1>
+          <div style="font-size:16px;line-height:1.7;color:#4a4d55;">${deviceAlert ? deviceAlertHtml(body) : bodyHtml(body)}</div>
+          ${deviceAlert ? '' : callToAction(subject, body)}
+          ${deviceAlert ? '' : `<div style="margin-top:8px;padding:14px 16px;background:#f8f8f9;border-left:3px solid ${BRAND_COLOR};border-radius:0 8px 8px 0;color:#656870;font-size:12px;line-height:1.55;">
             ${escapeHtml(securityNotice)}
-          </div>
+          </div>`}
         </td></tr>
         <tr><td class="email-footer" align="center" style="padding:22px 32px;background:#fafafa;border-top:1px solid #eceef1;color:#747780;font-size:12px;line-height:1.6;">
           <strong style="color:#44474e;">Projeto Aprendiz</strong> &middot; Igreja Cristã Maranata<br>
