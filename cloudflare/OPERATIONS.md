@@ -22,7 +22,7 @@ O repositório canônico é `AlexCode-Br/projeto-aprendiz-icm`. A mudança de no
 O workflow `Deploy production` é manual (`workflow_dispatch`), aceita somente `main` e depende de uma etapa de validação. Não há publicação automática em push. Antes da primeira execução:
 
 1. Integrar o código validado em `main` por revisão. Uma alteração só existir localmente não a torna disponível na CI.
-2. Criar o environment `production` no GitHub e configurar os secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` e `DATABASE_URL`. Usar token restrito à conta e às permissões necessárias para o Worker; nunca enviar valores por chat ou commit.
+2. Criar o environment `production` no GitHub e configurar os secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DATABASE_URL` e `SUPABASE_CA_CERT`. O último contém apenas o PEM da CA pública oficial obtida em Database Settings no Supabase. Usar token restrito à conta e às permissões necessárias para o Worker; nunca enviar valores por chat ou commit.
 3. Usar conexão direta ou session pooler Supabase para migrações, conforme acesso de rede do runner; não usar transaction pooler para esse processo. O deploy configura `DATABASE_SSL=true`.
 4. Configurar proteção de `main` com revisão e o check `validate`. Adicionar aprovação no environment se o plano GitHub oferecer essa opção para este repositório privado.
 5. Conferir a versão anterior saudável do Worker e o backup do banco antes de autorizar uma publicação.
@@ -40,6 +40,8 @@ pnpm cloudflare:deploy
 `pnpm cloudflare:deploy` executa as migrações antes de publicar e exige `DATABASE_URL` apontando para produção. Se a migração falhar, o Worker não é publicado. Não contorne esta etapa executando `wrangler deploy` diretamente.
 
 Conexões de manutenção devem validar TLS. Se o Session Pooler exigir a CA oficial do Supabase, configure `NODE_EXTRA_CA_CERTS` com o caminho do certificado antes de iniciar o processo Node. Não use `DATABASE_SSL_REJECT_UNAUTHORIZED=false`. A orientação oficial está em [SSL enforcement](https://supabase.com/docs/guides/platform/ssl-enforcement).
+
+O workflow grava `SUPABASE_CA_CERT` em um arquivo temporário do runner, valida o formato X.509 e exporta `NODE_EXTRA_CA_CERTS` antes de executar o migrador. A confiança na CA é explícita; a validação TLS e do hostname permanece ativa. A CA pública não é a senha PostgreSQL nem uma chave de API.
 
 `wrangler.jsonc` é a fonte de verdade. O deploy preserva os segredos remotos. Nunca coloque chaves privadas no arquivo ou no frontend.
 
