@@ -7,7 +7,7 @@ import { invokeApi } from '../cloudflare/http-bridge.mjs';
 const connectedAt = new Date('2026-10-02T15:04:05Z');
 const browser = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0';
 
-test('alerta de novo dispositivo usa IP e localização da borda, identifica dispositivo e preserva texto/HTML seguro', async () => {
+test('alerta compacto usa localização da borda, identifica navegador e preserva texto/HTML seguro', async () => {
   const edgeRequest = new Request('https://example.com/api/auth/login', {
     method: 'POST', headers: {
       'cf-connecting-ip': '2001:db8::1', 'x-forwarded-for': '192.0.2.99',
@@ -36,24 +36,21 @@ test('alerta de novo dispositivo usa IP e localização da borda, identifica dis
     response.writeHead(202);
     response.end('{}');
   });
-  assert.match(payload.text, /O login foi concluído/);
+  assert.match(payload.text, /Identificamos um novo acesso/);
   assert.doesNotMatch(payload.text, /código de verificação é|012345/);
-  assert.match(payload.html, /Revisar minhas sessões/);
+  assert.match(payload.html, /Não fui eu/);
+  assert.match(payload.html, /href="https:\/\/example.com\/configuracoes"/);
+  assert.equal((payload.html.match(/href="https:\/\/example.com\/configuracoes"/g) || []).length, 1);
   assert.doesNotMatch(payload.html, /ignore este e-mail/);
-  assert.match(payload.text, /02\/10\/2026.*12:04:05/);
-  assert.match(payload.text, /Data e horário \(Brasília\):/);
+  assert.match(payload.text, /2 de outubro de 2026.*12:04/);
+  assert.match(payload.text, /Data e hora \(Brasília\):/);
   assert.match(payload.text, /Salvador, Bahia, Brasil/);
-  assert.match(payload.text, /Endereço IP: 2001:db8::1/);
-  assert.match(payload.text, /Navegador: Edge/);
-  assert.match(payload.text, /Sistema operacional: Windows/);
-  assert.match(payload.text, /Tipo de dispositivo: Computador/);
-  assert.match(payload.text, /Rede: Rede <teste>/);
-  assert.match(payload.text, /VPNs, redes móveis/);
-  assert.match(payload.text, /Revise e encerre as outras sessões/);
+  assert.match(payload.text, /Sistema e navegador: Windows, Edge/);
+  assert.match(payload.text, /Revise suas sessões e altere sua senha/);
+  assert.doesNotMatch(payload.text, /Endereço IP|Rede:|Tipo de dispositivo|VPNs|cookies|2001:db8::1/);
   assert.doesNotMatch(payload.text, /forjad|192\.0\.2\.99|-12\.9|-38\.5/);
-  assert.match(payload.html, /Rede &lt;teste&gt;/);
   assert.match(payload.html, /Gestor &lt;teste&gt;/);
-  assert.match(payload.html, /Localização aproximada pelo IP:/);
+  assert.match(payload.html, /Localização aproximada/);
   assert.doesNotMatch(payload.html, /<teste>/);
 });
 
@@ -62,12 +59,8 @@ test('dados ausentes ou inválidos não inventam localização, IP ou dispositiv
     name: 'Gestor', connectedAt, ip: 'unknown', securityUrl: 'https://example.com/configuracoes',
     request: { headers: { 'cf-ipcountry': 'BR', 'cf-ipcity': 'Cidade forjada' } },
   });
-  assert.match(body, /Localização aproximada pelo IP: Não disponível/);
-  assert.match(body, /Endereço IP: Não disponível/);
-  assert.match(body, /Navegador: Não identificado/);
-  assert.match(body, /Sistema operacional: Não identificado/);
-  assert.match(body, /Tipo de dispositivo: Não identificado/);
-  assert.match(body, /Rede: Não disponível/);
+  assert.match(body, /Localização aproximada: Não disponível/);
+  assert.match(body, /Sistema e navegador: Não identificado, Não identificado/);
   assert.doesNotMatch(body, /Cidade forjada|Brasil/);
   const mobile = managerDeviceEmail({
     name: 'Gestor', connectedAt, ip: '192.0.2.1', securityUrl: 'https://example.com/configuracoes',
@@ -76,10 +69,7 @@ test('dados ausentes ou inválidos não inventam localização, IP ou dispositiv
       clientLocation: { city: 'Cidade\nforjada', country: '12', network: 'Rede\r\nNavegador: Falso' },
     },
   });
-  assert.match(mobile, /Endereço IP: 192\.0\.2\.1/);
-  assert.match(mobile, /Navegador: Safari/);
-  assert.match(mobile, /Sistema operacional: iOS/);
-  assert.match(mobile, /Tipo de dispositivo: Celular ou tablet/);
-  assert.match(mobile, /Localização aproximada pelo IP: Cidade forjada\n/);
-  assert.match(mobile, /Rede: Rede Navegador: Falso\n/);
+  assert.match(mobile, /Sistema e navegador: iOS, Safari/);
+  assert.match(mobile, /Localização aproximada: Cidade forjada\n/);
+  assert.doesNotMatch(mobile, /Rede Navegador: Falso|192\.0\.2\.1/);
 });
