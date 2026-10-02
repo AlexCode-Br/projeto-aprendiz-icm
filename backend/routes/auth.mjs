@@ -114,8 +114,8 @@ export function createAuthRoutes(context) {
           if (!challenge) return json(response, 503, { message: 'Não foi possível enviar o código de verificação. Tente novamente.' });
           return json(response, 202, { mfaRequired: true, ...challenge });
         }
-        const { token, csrfToken, maxAge } = await createAppSession(user, ip, remember, { userAgent: request.headers['user-agent'] });
-        return json(response, 200, { user: publicUser(user), csrfToken }, { 'Set-Cookie': cookie('pa_session', token, maxAge) });
+        const { token, csrfToken, maxAge, deviceCookie } = await createAppSession(user, ip, remember, { userAgent: request.headers['user-agent'], request });
+        return json(response, 200, { user: publicUser(user), csrfToken }, { 'Set-Cookie': [cookie('pa_session', token, maxAge), ...(deviceCookie ? [deviceCookie] : [])] });
       }
 
       if (request.method === 'POST' && url.pathname === '/api/auth/mfa/verify') {
@@ -139,9 +139,9 @@ export function createAuthRoutes(context) {
         const claimed = await db.prepare('UPDATE manager_login_challenges SET consumed_at=CURRENT_TIMESTAMP WHERE id=? AND consumed_at IS NULL AND attempts<5').run(challenge.id);
         if (!claimed.changes || challenge.role !== 'gestor' || challenge.active !== 1) return json(response, 400, { message: 'Este código não está mais disponível.' });
         const user = { id: challenge.user_id, name: challenge.name, email: challenge.email, role: challenge.role };
-        const { token, csrfToken, maxAge } = await createAppSession(user, ip, Boolean(challenge.remember), { mfaVerified: true, userAgent: request.headers['user-agent'] });
+        const { token, csrfToken, maxAge, deviceCookie } = await createAppSession(user, ip, Boolean(challenge.remember), { mfaVerified: true, userAgent: request.headers['user-agent'], request });
         await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(user.id, 'manager_mfa_verified', ip);
-        return json(response, 200, { user: publicUser(user), csrfToken }, { 'Set-Cookie': cookie('pa_session', token, maxAge) });
+        return json(response, 200, { user: publicUser(user), csrfToken }, { 'Set-Cookie': [cookie('pa_session', token, maxAge), ...(deviceCookie ? [deviceCookie] : [])] });
       }
 
       if (request.method === 'POST' && url.pathname === '/api/auth/exchange') {

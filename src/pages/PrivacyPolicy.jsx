@@ -3,7 +3,7 @@ import { ArrowLeft, ExternalLink, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Logo from '../assets/projeto-aprendiz-logo.png';
 
-const UPDATED_AT = '29 de setembro de 2026';
+const UPDATED_AT = '2 de outubro de 2026';
 const PRIVACY_EMAIL = 'icmprojetoaprendizsalvador@gmail.com';
 
 const sections = [
@@ -27,7 +27,7 @@ const dataGroups = [
   ['Responsável legal', 'Nome, telefone e registro de autorização quando o aluno estiver cadastrado na classe Adolescente.'],
   ['Comunicações', 'Publicações e anexos do Mural, comentários, curtidas, confirmações de leitura, informativos e mensagens de suporte.'],
   ['Notificações', 'Preferências do usuário e dados técnicos da assinatura do navegador, apenas quando as notificações forem ativadas.'],
-  ['Operação e segurança', 'Endereço IP, datas e horários, identificadores de sessão, navegador, sistema operacional, tentativas de acesso e registros de auditoria.'],
+  ['Operação e segurança', 'Endereço IP, localização aproximada da rede, datas e horários, identificadores de sessão e de navegador reconhecido, navegador, sistema operacional, tentativas de acesso e registros de auditoria.'],
 ];
 
 const purposeGroups = [
@@ -81,7 +81,7 @@ const PrivacyPolicy = () => (
         </p>
         <div className="mt-6 flex flex-wrap gap-x-8 gap-y-2 border-t border-slate-200 pt-5 text-sm text-slate-600">
           <p><span className="font-semibold text-slate-950">Última atualização:</span> {UPDATED_AT}</p>
-          <p><span className="font-semibold text-slate-950">Versão:</span> 1.0</p>
+          <p><span className="font-semibold text-slate-950">Versão:</span> 1.1</p>
         </div>
       </div>
 
@@ -161,6 +161,7 @@ const PrivacyPolicy = () => (
           </Section>
 
           <Section id="cookies" number="07" title="Cookies e armazenamento local">
+            <p>Para gestores, um cookie protegido reconhece o navegador por até um ano desde o último login. Ele permite enviar um alerta por e-mail quando um novo dispositivo entra na conta, sem dispensar a senha ou o código de verificação. A localização exibida no alerta é uma estimativa pelo IP; não coletamos a posição por GPS. Limpar cookies ou usar outro navegador pode gerar um novo aviso no mesmo aparelho.</p>
             <p>A plataforma utiliza um cookie estritamente necessário para autenticação. Ele é protegido, restrito ao domínio e não pode ser lido por scripts da página. Sem a opção “Permanecer conectado”, o cookie é encerrado quando o navegador é fechado; o registro correspondente possui limite técnico de até oito horas no servidor. Com a opção ativada, a sessão pode permanecer válida por até 30 dias.</p>
             <p>O armazenamento local do navegador registra apenas preferências essenciais, como a escolha de manter a sessão. O Service Worker armazena o conteúdo público necessário à instalação do aplicativo, sem guardar respostas privadas da API.</p>
             <p>Após tentativas repetidas de login, o Cloudflare Turnstile poderá tratar informações técnicas para verificar se a solicitação foi feita por uma pessoa. Não são instalados cookies de publicidade comportamental.</p>

@@ -37,11 +37,12 @@ function bodyHtml(body) {
 }
 
 function callToAction(subject, body) {
-  if (!/(convite|recupera|senha|acesso)/i.test(subject)) return '';
+  const deviceAlert = /^Novo dispositivo conectado/i.test(subject);
+  if (!deviceAlert && !/(convite|recupera|senha|acesso)/i.test(subject)) return '';
   const url = normalizedBody(body).match(/https?:\/\/[^\s<]+/)?.[0];
   if (!url) return '';
   const safeUrl = escapeHtml(url);
-  const label = /recupera|senha/i.test(subject) ? 'Redefinir minha senha' : 'Acessar o Projeto Aprendiz';
+  const label = deviceAlert ? 'Revisar minhas sessões' : /recupera|senha/i.test(subject) ? 'Redefinir minha senha' : 'Acessar o Projeto Aprendiz';
   return `
     <table role="presentation" cellspacing="0" cellpadding="0" style="margin:8px 0 24px;">
       <tr><td bgcolor="${BRAND_COLOR}" style="border-radius:8px;">
@@ -55,6 +56,9 @@ function preheaderText(body) {
 }
 
 function renderEmailHtml(subject, body, env = process.env) {
+  const securityNotice = /^Novo dispositivo conectado/i.test(subject)
+    ? 'Se você não reconhece este acesso, revise suas sessões e altere sua senha no Projeto Aprendiz.'
+    : 'Esta é uma mensagem automática e segura do Projeto Aprendiz. Se você não reconhece esta solicitação, ignore este e-mail.';
   const logoUrl = escapeHtml(env.EMAIL_LOGO_URL || DEFAULT_LOGO_URL);
   const departmentLogoUrl = escapeHtml(env.EMAIL_DEPARTMENT_LOGO_URL || DEFAULT_DEPARTMENT_LOGO_URL);
   const year = new Date().getFullYear();
@@ -102,7 +106,7 @@ function renderEmailHtml(subject, body, env = process.env) {
           <div style="font-size:16px;line-height:1.7;color:#4a4d55;">${bodyHtml(body)}</div>
           ${callToAction(subject, body)}
           <div style="margin-top:8px;padding:14px 16px;background:#f8f8f9;border-left:3px solid ${BRAND_COLOR};border-radius:0 8px 8px 0;color:#656870;font-size:12px;line-height:1.55;">
-            Esta é uma mensagem automática e segura do Projeto Aprendiz. Se você não reconhece esta solicitação, ignore este e-mail.
+            ${escapeHtml(securityNotice)}
           </div>
         </td></tr>
         <tr><td class="email-footer" align="center" style="padding:22px 32px;background:#fafafa;border-top:1px solid #eceef1;color:#747780;font-size:12px;line-height:1.6;">

@@ -12,6 +12,7 @@ test('MFA do gestor e consumo atômico do reset impedem repetição', {timeout:2
     const first=await request('/api/auth/login',{email:'gestor@projetoaprendiz.local',password:'Gestor@2026!',remember:true});
     assert.equal(first.status,202,JSON.stringify(first.data));assert.equal(first.data.mfaRequired,true);assert.equal(first.cookie,null);
     const mail=db.prepare("SELECT body FROM dev_emails WHERE subject LIKE 'Código de verificação%' ORDER BY id DESC LIMIT 1").get();
+    assert.doesNotMatch(mail.body,/Detalhes do acesso|Endereço IP|novo dispositivo/i);
     const code=mail.body.match(/\b\d{6}\b/)[0];
     assert.equal((await request('/api/auth/mfa/verify',{challengeToken:first.data.challengeToken,code:'000000'})).status,401);
     const verified=await request('/api/auth/mfa/verify',{challengeToken:first.data.challengeToken,code});

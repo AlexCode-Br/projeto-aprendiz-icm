@@ -9,6 +9,13 @@ export async function invokeApi(request, handler) {
     url: `${url.pathname}${url.search}`,
     headers,
     socket: { remoteAddress: ip },
+    // Only edge metadata is trusted for location; never copy client geo headers.
+    clientLocation: {
+      city: request.cf?.city,
+      region: request.cf?.region,
+      country: request.cf?.country,
+      network: request.cf?.asOrganization,
+    },
     async *[Symbol.asyncIterator]() {
       if (!request.body) return;
       const reader = request.body.getReader();

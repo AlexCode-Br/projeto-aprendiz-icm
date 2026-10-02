@@ -1,4 +1,4 @@
-import {normalizeNotificationPreferences} from './notifications.mjs';
+import {normalizeNotificationPreferences, MANAGER_DEVICE_ALERT} from './notifications.mjs';
 
 const MAX_ATTEMPTS=5;
 const BATCH_SIZE=50;
@@ -18,7 +18,7 @@ async function mapConcurrent(items,limit,worker){
 export function createNotificationOutbox({db,notificationService,logger=console,scheduleDrain}={}){
   if(!db||!notificationService)throw new TypeError('Banco e serviço de notificações são obrigatórios.');
 
-  async function enqueueMany(items){
+  async function enqueueMany(items,{schedule=true}={}){
     if(!items.length)return{queued:0};
     const availableAt=iso(Date.now());
     const values=items.map(()=>"(?,?,?,?,?,?,?,?,?,'pending',?)").join(',');
@@ -30,7 +30,7 @@ export function createNotificationOutbox({db,notificationService,logger=console,
       (user_id,preference,subject,body,destination,idempotency_key,notification_tag,email_enabled,push_enabled,status,available_at)
       VALUES ${values} ON CONFLICT(idempotency_key) DO NOTHING`).run(...params);
     const queued=Number(result.changes||0);
-    if(queued&&scheduleDrain)try{scheduleDrain();}catch(error){logger.error('notification_outbox_schedule_failed',error,{queued});}
+    if(queued&&schedule&&scheduleDrain)try{scheduleDrain();}catch(error){logger.error('notification_outbox_schedule_failed',error,{queued});}
     return {queued};
   }
 
@@ -60,7 +60,9 @@ export function createNotificationOutbox({db,notificationService,logger=console,
 
   async function deliver(row){
     try{
-      const result=await notificationService.notifyUser(row.user_id,row.preference,row.subject,row.body,row.idempotency_key,{
+      const result=row.preference===MANAGER_DEVICE_ALERT
+        ? await notificationService.notifySecurityAlert(row.user_id,row.subject,row.body,row.idempotency_key)
+        : await notificationService.notifyUser(row.user_id,row.preference,row.subject,row.body,row.idempotency_key,{
         destination:row.destination,
         tag:row.notification_tag,
         channels:{email:Boolean(row.email_enabled),push:Boolean(row.push_enabled)},
@@ -91,7 +93,7 @@ export function createNotificationOutbox({db,notificationService,logger=console,
     const subscribed=new Set(subscriptions.map(item=>Number(item.user_id)));
     const skipped=[],deliverable=[];
     for(const row of rows){
-      const userId=Number(row.user_id),enabled=(preferences.get(userId)||normalizeNotificationPreferences({}))[row.preference]!==false;
+      const userId=Number(row.user_id),enabled=row.preference===MANAGER_DEVICE_ALERT||(preferences.get(userId)||normalizeNotificationPreferences({}))[row.preference]!==false;
       if(!active.has(userId)||!enabled||(!row.email_enabled&&row.push_enabled&&!subscribed.has(userId)))skipped.push(row);
       else deliverable.push(row);
     }
