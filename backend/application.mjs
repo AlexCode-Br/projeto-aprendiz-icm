@@ -12,6 +12,7 @@ import {
 } from './security.mjs';
 import { createApiHandler } from './routes/index.mjs';
 import { createEmailService } from './email.mjs';
+import { registerManagerDevice, MANAGER_DEVICE_MAX_AGE } from './manager-devices.mjs';
 import { createStructuredLogger } from './logger.mjs';
 import {
   ANNOUNCEMENT_ATTACHMENT_TOTAL_BYTES,
@@ -334,7 +335,7 @@ export function createApplication({
     return session;
   }
 
-  async function createAppSession(user, ip, remember = false, { mfaVerified = false, userAgent = '' } = {}) {
+  async function createAppSession(user, ip, remember = false, { mfaVerified = false, userAgent = '', request } = {}) {
     const token = randomBytes(32).toString('base64url');
     const csrfToken = randomBytes(24).toString('base64url');
     // A non-remembered login must disappear when the browser/PWA closes.
@@ -342,10 +343,18 @@ export function createApplication({
     const maxAge = remember ? (user.role === 'gestor' ? 7 : 30) * 86400 : null;
     const expires = new Date(Date.now() + (remember ? maxAge * 1000 : 8 * 3600 * 1000)).toISOString();
     const now = new Date().toISOString();
-    await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at,last_seen_at,mfa_verified_at,user_agent) VALUES (?,?,?,?,?,?,?)')
-      .run(user.id, sha256(token), csrfToken, expires, now, mfaVerified ? now : null, cleanText(userAgent, 500));
-    await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(user.id, 'login', ip);
-    return { token, csrfToken, maxAge };
+    const device = await db.transaction(async () => {
+      await db.prepare('INSERT INTO sessions (user_id,token_hash,csrf_token,expires_at,last_seen_at,mfa_verified_at,user_agent) VALUES (?,?,?,?,?,?,?)')
+        .run(user.id, sha256(token), csrfToken, expires, now, mfaVerified ? now : null, cleanText(userAgent, 500));
+      await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(user.id, 'login', ip);
+      if (user.role === 'gestor') return registerManagerDevice({ db, notificationOutbox, user, request, ip, cookies, baseUrl, now });
+      return null;
+    });
+    if (device?.queued && scheduleNotificationDrain) {
+      try { scheduleNotificationDrain(); }
+      catch (error) { logger.error('manager_device_alert_schedule_failed', error, { userId: user.id }); }
+    }
+    return { token, csrfToken, maxAge, deviceCookie: device ? cookie('pa_device', device.token, MANAGER_DEVICE_MAX_AGE) : null };
   }
 
   async function authorize(request, response, roles = []) {
@@ -933,6 +942,7 @@ export function createApplication({
     deleted.sessions=Number((await db.prepare('DELETE FROM sessions WHERE expires_at<?').run(now)).changes||0);
     deleted.passwordResets=Number((await db.prepare('DELETE FROM password_resets WHERE expires_at<? OR (used_at IS NOT NULL AND used_at<?)').run(now,new Date(Date.now()-30*86400_000).toISOString())).changes||0);
     deleted.managerChallenges=Number((await db.prepare('DELETE FROM manager_login_challenges WHERE expires_at<? OR consumed_at IS NOT NULL').run(now)).changes||0);
+    deleted.managerDevices=Number((await db.prepare('DELETE FROM manager_login_devices WHERE expires_at<?').run(now)).changes||0);
     deleted.audit=Number((await db.prepare('DELETE FROM audit_log WHERE created_at<?').run(auditBefore)).changes||0);
     deleted.outbox=await notificationOutbox.cleanup();
     return deleted;
