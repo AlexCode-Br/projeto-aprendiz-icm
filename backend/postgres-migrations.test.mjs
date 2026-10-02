@@ -34,11 +34,13 @@ test('all PostgreSQL migrations build a fresh private schema with MFA and sessio
     assert.deepEqual(new Set(tables.rows.map(row => row.relname)), applicationTables);
     assert.equal(tables.rows.every(row => row.relrowsecurity), true, 'todas as tabelas privadas precisam de RLS');
     for (const role of ['anon', 'authenticated']) {
-      const permissions = await client.query("SELECT has_schema_privilege($1,$2,'USAGE') AS schema_access, has_table_privilege($1,$3,'SELECT') AS challenges_access", [role, schema, `${schema}.manager_login_challenges`]);
-      assert.deepEqual(permissions.rows[0], { schema_access: false, challenges_access: false });
+      const permissions = await client.query("SELECT has_schema_privilege($1,$2,'USAGE') AS schema_access, has_table_privilege($1,$3,'SELECT') AS challenges_access, has_table_privilege($1,$4,'SELECT') AS devices_access", [role, schema, `${schema}.manager_login_challenges`, `${schema}.manager_login_devices`]);
+      assert.deepEqual(permissions.rows[0], { schema_access: false, challenges_access: false, devices_access: false });
     }
     const sessionFields = await client.query("SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='sessions'", [schema]);
     for (const field of ['last_seen_at', 'mfa_verified_at', 'user_agent']) assert.ok(sessionFields.rows.some(row => row.column_name === field));
+    const deviceFields = await client.query("SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='manager_login_devices'", [schema]);
+    for (const field of ['user_id', 'token_hash', 'last_seen_at', 'expires_at']) assert.ok(deviceFields.rows.some(row => row.column_name === field));
     const roleConstraint = await client.query("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=$1::regclass AND conname='users_role_check'", [`${schema}.users`]);
     assert.match(roleConstraint.rows[0].definition, /aluno/);
   } finally {
