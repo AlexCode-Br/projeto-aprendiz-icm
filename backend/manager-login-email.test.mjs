@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { managerLoginEmail } from './manager-login-email.mjs';
+import { managerDeviceEmail } from './manager-login-email.mjs';
 import { createEmailService } from './email.mjs';
 import { invokeApi } from '../cloudflare/http-bridge.mjs';
 
-const requestedAt = new Date('2026-10-02T15:04:05Z');
+const connectedAt = new Date('2026-10-02T15:04:05Z');
 const browser = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0';
 
-test('e-mail MFA usa IP e localização da borda, identifica dispositivo e preserva texto/HTML seguro', async () => {
+test('alerta de novo dispositivo usa IP e localização da borda, identifica dispositivo e preserva texto/HTML seguro', async () => {
   const edgeRequest = new Request('https://example.com/api/auth/login', {
     method: 'POST', headers: {
       'cf-connecting-ip': '2001:db8::1', 'x-forwarded-for': '192.0.2.99',
@@ -28,15 +28,18 @@ test('e-mail MFA usa IP e localização da borda, identifica dispositivo e prese
   });
   await invokeApi(edgeRequest, async (request, response) => {
     assert.equal(request.clientLocation.latitude, undefined);
-    const body = managerLoginEmail({
-      name: 'Gestor <teste>', code: '012345', requestedAt,
-      ip: request.socket.remoteAddress, request,
+    const body = managerDeviceEmail({
+      name: 'Gestor <teste>', connectedAt,
+      ip: request.socket.remoteAddress, request, securityUrl: 'https://example.com/configuracoes',
     });
-    await sendEmail('gestor@example.com', 'Código de verificação — Projeto Aprendiz', body);
+    await sendEmail('gestor@example.com', 'Novo dispositivo conectado — Projeto Aprendiz', body);
     response.writeHead(202);
     response.end('{}');
   });
-  assert.match(payload.text, /código de verificação é: 012345/);
+  assert.match(payload.text, /O login foi concluído/);
+  assert.doesNotMatch(payload.text, /código de verificação é|012345/);
+  assert.match(payload.html, /Revisar minhas sessões/);
+  assert.doesNotMatch(payload.html, /ignore este e-mail/);
   assert.match(payload.text, /02\/10\/2026.*12:04:05/);
   assert.match(payload.text, /Data e horário \(Brasília\):/);
   assert.match(payload.text, /Salvador, Bahia, Brasil/);
@@ -46,7 +49,7 @@ test('e-mail MFA usa IP e localização da borda, identifica dispositivo e prese
   assert.match(payload.text, /Tipo de dispositivo: Computador/);
   assert.match(payload.text, /Rede: Rede <teste>/);
   assert.match(payload.text, /VPNs, redes móveis/);
-  assert.match(payload.text, /não use nem compartilhe/);
+  assert.match(payload.text, /Revise e encerre as outras sessões/);
   assert.doesNotMatch(payload.text, /forjad|192\.0\.2\.99|-12\.9|-38\.5/);
   assert.match(payload.html, /Rede &lt;teste&gt;/);
   assert.match(payload.html, /Gestor &lt;teste&gt;/);
@@ -55,8 +58,8 @@ test('e-mail MFA usa IP e localização da borda, identifica dispositivo e prese
 });
 
 test('dados ausentes ou inválidos não inventam localização, IP ou dispositivo', () => {
-  const body = managerLoginEmail({
-    name: 'Gestor', code: '123456', requestedAt, ip: 'unknown',
+  const body = managerDeviceEmail({
+    name: 'Gestor', connectedAt, ip: 'unknown', securityUrl: 'https://example.com/configuracoes',
     request: { headers: { 'cf-ipcountry': 'BR', 'cf-ipcity': 'Cidade forjada' } },
   });
   assert.match(body, /Localização aproximada pelo IP: Não disponível/);
@@ -66,8 +69,8 @@ test('dados ausentes ou inválidos não inventam localização, IP ou dispositiv
   assert.match(body, /Tipo de dispositivo: Não identificado/);
   assert.match(body, /Rede: Não disponível/);
   assert.doesNotMatch(body, /Cidade forjada|Brasil/);
-  const mobile = managerLoginEmail({
-    name: 'Gestor', code: '123456', requestedAt, ip: '192.0.2.1',
+  const mobile = managerDeviceEmail({
+    name: 'Gestor', connectedAt, ip: '192.0.2.1', securityUrl: 'https://example.com/configuracoes',
     request: {
       headers: { 'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1' },
       clientLocation: { city: 'Cidade\nforjada', country: '12', network: 'Rede\r\nNavegador: Falso' },
