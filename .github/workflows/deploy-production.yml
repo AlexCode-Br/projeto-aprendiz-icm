@@ -29,7 +29,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
@@ -60,7 +60,7 @@ jobs:
       DATABASE_SSL: "true"
       SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
         with:
           version: 11.19.0
