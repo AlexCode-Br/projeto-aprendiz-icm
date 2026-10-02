@@ -94,6 +94,8 @@ O conjunto cifrado local inclui o arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e
 
 ## Pendências operacionais
 
+- Código preparado em 02/10/2026 para incluir no e-mail MFA do gestor os detalhes da solicitação: horário de Brasília, IP, localização aproximada, rede, navegador, sistema e tipo de dispositivo. Metadados de localização são recebidos da borda Cloudflare; dados ausentes têm indicação explícita. A mudança ainda não foi publicada e não altera a versão de produção registrada acima.
+
 - Validar os fluxos autenticados da versão publicada: código por e-mail do gestor, áreas de professor e aluno, mural, frequência, anexos e notificações em dispositivo autorizado.
 - Renovar o token Cloudflare do pipeline antes de 31/12/2026. Os quatro secrets de publicação estão cadastrados em `production` e foram validados pela primeira execução. Resolver a limitação de aplicação das proteções de `main`; a autorização explícita desta publicação não modifica o plano GitHub nem torna o ambiente uma proteção contra push ou merge. Não enviar valores por chat ou commit.
 - Autenticar o Git no computador e obter um clone com histórico antes de retomar alterações de código; preservar o conjunto de backup fora da raiz desse clone.
