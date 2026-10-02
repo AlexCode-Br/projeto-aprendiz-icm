@@ -58,6 +58,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       DATABASE_SSL: "true"
+      SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -70,12 +71,20 @@ jobs:
       - name: Check deployment credentials
         shell: bash
         run: |
-          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL; do
+          for key in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID DATABASE_URL SUPABASE_CA_CERT; do
             if [ -z "${!key}" ]; then
               echo "Missing production secret: $key"
               exit 1
             fi
           done
+      - name: Configure trusted Supabase CA
+        shell: bash
+        run: |
+          umask 077
+          certificate_path="$RUNNER_TEMP/supabase-ca.crt"
+          printf '%s\n' "$SUPABASE_CA_CERT" > "$certificate_path"
+          openssl x509 -in "$certificate_path" -noout
+          echo "NODE_EXTRA_CA_CERTS=$certificate_path" >> "$GITHUB_ENV"
       - run: pnpm install --frozen-lockfile
       - name: Migrate and publish
         run: pnpm cloudflare:deploy

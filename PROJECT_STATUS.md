@@ -1,14 +1,17 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 30/09/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
+Atualizado em 02/10/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
 
 ## Produção
 
 - URL: `https://aprendizicm.com.br`.
 - Worker existente: `aprendiz-staging`, usado em produção com os bindings de `wrangler.jsonc`.
-- Última versão publicada e confirmada: `da92a629-b993-41a7-9079-dc7f2e9f33a3`, hotfix do mapeamento SQL do MFA. Login real do gestor validado pelo responsável.
+- Última versão publicada e confirmada: `b3265c0c-336c-4519-9d63-2d837586d231`, reorganização integrada em `main`. Smoke público, consulta de sessão sintética pelo Worker/Hyperdrive e hashes dos assets aprovados. MFA do gestor por e-mail preservado; o último login real informado pelo responsável foi no hotfix anterior.
 - PostgreSQL, Auth e Storage privados no Supabase, conectados pelo Hyperdrive.
 - Migração `027_security_audit_remediation.sql` aplicada. MFA do gestor continua por e-mail.
+- Senha PostgreSQL redefinida pelo responsável em 01/10/2026 e atualizada no Hyperdrive existente. Identidade, destino e cache desabilitado foram preservados. Smoke público aprovado após a troca.
+- Histórico reconciliado em 01/10/2026 após backup cifrado e restauração verificada. Nove scripts tinham seus efeitos confirmados; `018` precisava apenas do índice `enrollments_recent_active_idx`. Dez entradas foram registradas, mantendo `009_lifecycle_and_history.sql` e os campos legados. Checksums dos dados da aplicação foram preservados na transação. Não há scripts locais pendentes.
+- `pnpm cloudflare:deploy` concluído pelo fluxo padrão, com migrações antes da publicação. [Registro da operação](docs/releases/DEPLOY_2026-10-01.md).
 
 ## Repositório e preservação
 
@@ -16,7 +19,7 @@ Atualizado em 30/09/2026. Este arquivo reúne apenas o estado vigente; o [histó
 - Cópia local: `projeto-aprendiz/`, mantida para preservar o vínculo do workspace.
 - Branch de trabalho: `codex/melhorias-projeto-aprendiz`.
 - Commit de preservação: `02bb47e`, com o estado da aplicação validado antes da reorganização. O snapshot inclui alterações locais existentes; não é uma extração do bundle remoto.
-- Reorganização local concluída e validada, sem nova publicação em produção. Os commits de trabalho ainda precisam ser enviados e integrados por revisão.
+- Reorganização enviada, revisada e integrada em `main` pela [PR #34](https://github.com/AlexCode-Br/projeto-aprendiz-icm/pull/34), merge `0dd45ad`. A árvore do código do commit local `b95d54c` corresponde à integrada e foi publicada em 01/10/2026.
 
 ## Reorganização de 30/09/2026
 
@@ -33,7 +36,11 @@ Atualizado em 30/09/2026. Este arquivo reúne apenas o estado vigente; o [histó
 - Instalação com lockfile congelado, ESLint e build React aprovados. Suíte padrão: 99 testes, 97 aprovados, zero falhas e duas regressões PostgreSQL dependentes de banco externo.
 - Build do Worker aprovado em `--dry-run`, sem publicação.
 - `pnpm audit`: nenhuma vulnerabilidade conhecida reportada.
-- Migrações completas e reparo legado aprovados em PostgreSQL embarcado (PGlite) com dados fictícios. A validação em PostgreSQL 16 nativo está preparada na CI e ainda depende de sua execução no GitHub; não houve teste contra produção.
+- Migrações completas e reparo legado aprovados em PostgreSQL embarcado (PGlite), em PostgreSQL 16 nativo na CI da PR #34 e em PostgreSQL 17.11 local isolado. O ensaio da reconciliação e o migrador padrão preservaram os dados restaurados. Nenhuma suíte destrutiva foi executada em produção.
+- `pnpm check` com PostgreSQL isolado em 01/10/2026: lint, build e 99 testes aprovados, zero falhas e zero testes pulados. Build seco do Worker aprovado.
+- Conexão de manutenção pelo Session Pooler validada com o certificado CA oficial do Supabase e verificação TLS ativa. Segredos permanecem fora do Git.
+- Backup local cifrado do schema privado, com restauração e checksums das 46 tabelas verificados. Arquivos binários do Storage e schemas gerenciados não estão nessa cópia. A senha usada na exportação deve ser preservada no gerenciador de senhas para recuperar este arquivo, mesmo após futuras rotações.
+- Em 01/10/2026, SHA-256 e tamanho do arquivo cifrado conferiram com o manifesto; autenticação da cifra e leitura por `pg_restore --list` foram repetidas sem conexão com banco algum. Banco de teste excluído, servidor local parado e ausência de `restore-data` confirmada após remoção manual pelo responsável.
 
 ## Contratos permanentes
 
@@ -47,9 +54,48 @@ Atualizado em 30/09/2026. Este arquivo reúne apenas o estado vigente; o [histó
 
 Leia [Arquitetura](docs/ARCHITECTURE.md), [Contribuição](CONTRIBUTING.md) e, antes de publicar, [Operação](cloudflare/OPERATIONS.md). Execute `pnpm check`, `pnpm cloudflare:build` e `git diff --check` antes da entrega. Deploy depende de solicitação explícita do responsável.
 
+## Desenvolvimento no Windows
+
+O responsável voltou ao Windows. Use Git autenticado, Node.js conforme `.node-version` e pnpm conforme `packageManager` em `package.json`: neste registro, Node.js 24.19.0 e pnpm 11.19.0. A documentação operacional está na branch `codex/melhorias-projeto-aprendiz`, em revisão na PR #43; o código da aplicação já está integrado em `main`.
+
+Clone em uma pasta nova, separada do conjunto de backup e da cópia recuperada por ZIP:
+
+```powershell
+git clone --branch codex/melhorias-projeto-aprendiz https://github.com/AlexCode-Br/projeto-aprendiz-icm.git projeto-aprendiz-icm
+cd projeto-aprendiz-icm
+pnpm install --frozen-lockfile
+pnpm check
+```
+
+O repositório é privado e exige autenticação GitHub própria do Git, sem credenciais embutidas na URL. A validação PostgreSQL completa depende de um banco de teste local isolado; sem ele, as duas regressões correspondentes são puladas, não aprovadas.
+
+Abra a pasta clonada e retome a partir deste documento, `AGENTS.md`, `docs/ARCHITECTURE.md` e `cloudflare/OPERATIONS.md`. Confira o Git e trate a retomada como preparação local, sem novo deploy ou alteração de produção até autorização explícita.
+
+O conjunto cifrado local inclui o arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e ferramenta de recuperação. Preserve também uma cópia externa cifrada e a senha original da exportação em um gerenciador de senhas. A cópia do projeto no Drive, informada pelo responsável, não comprova a preservação do backup separado nem dos arquivos locais ignorados. Segredos locais devem permanecer cifrados e fora do Git.
+
+## Retomada operacional de 02/10/2026
+
+- Os quatro documentos de manutenção foram lidos e o Git remoto foi conferido pelo navegador. Na conferência inicial, `main` estava em `0dd45ad`; o registro de 01/10 estava em `ebd4680`, na branch de trabalho, um commit à frente e um atrás de `main`. A [PR #43](https://github.com/AlexCode-Br/projeto-aprendiz-icm/pull/43) foi aberta em rascunho para integrar a documentação por revisão, sem novo deploy.
+- CI da `main` (#95) e do registro `ebd4680` (#104) aprovadas. A CI da PR deve aprovar seu resultado final antes da integração; nenhum teste local completo foi repetido nesta retomada.
+- Ambiente GitHub `production` criado, com regra de publicação limitada à branch `main` e nenhuma tag permitida. Na conferência inicial, não havia secrets no ambiente nem no repositório. A interface não oferece aprovação por revisores neste ambiente; a autorização do responsável continua sendo uma etapa operacional explícita antes de acionar o workflow manual.
+- Proteções clássicas de branch não estão configuradas. O GitHub informa que essas regras não serão aplicadas neste repositório privado no plano atual; a restrição do environment não substitui proteção contra push ou merge em `main`.
+- Smoke público de leitura aprovado: `/login` 200, `/api/health` 200 e estado `ok`, `/api/auth/me` sem sessão 401 e redirecionamento `www` 308 para a raiz. Não houve login, alteração de dados, migração ou publicação.
+- A pasta local aberta neste computador Windows contém o conjunto de backup cifrado, cujo tamanho e SHA-256 conferem com o manifesto. O código foi recuperado por ZIP da branch de trabalho em uma subpasta separada, sem histórico `.git`. O Git fornecido pelo runtime está disponível, mas o acesso HTTPS ao repositório privado pelo terminal exige autenticação; a sessão GitHub do navegador não autentica automaticamente o clone.
+- Autenticação da cifra, restauração, cópia externa do backup e retenção da senha original não foram revalidadas nesta sessão. O ensaio de 01/10 permanece registrado separadamente.
+
+## Preparação da publicação autorizada em 02/10/2026
+
+- O responsável autorizou copiar as credenciais necessárias para o pipeline e executar o deploy, e confirmou a criação do token Cloudflare `projeto-aprendiz-github-production`. O token tem Workers Editor na conta de produção, Zone Read e Workers Routes Write apenas em `aprendizicm.com.br`, com expiração em 31/12/2026.
+- `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` e a CA pública oficial em `SUPABASE_CA_CERT` foram cadastrados no ambiente GitHub `production`. A senha PostgreSQL não é recuperável pelo painel; `DATABASE_URL` depende do preenchimento direto pelo responsável com a senha atual, sem redefinir a credencial nem alterar o Hyperdrive.
+- Um handshake PostgreSQL sem autenticação confirmou `SELF_SIGNED_CERT_IN_CHAIN` com as CAs padrão do Node e TLS 1.3 com hostname e cadeia validados ao carregar a CA oficial do Supabase. O workflow passou a configurar `NODE_EXTRA_CA_CERTS` antes do migrador, mantendo a verificação TLS ativa. A CA foi obtida pelo download de Database Settings; SHA-256 do PEM baixado: `700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7`.
+- A versão anterior do Worker continua sendo `b3265c0c-336c-4519-9d63-2d837586d231`. Nenhum deploy foi executado nesta preparação; a publicação deve aguardar credenciais completas e CI aprovada do resultado final.
+
 ## Pendências operacionais
 
-- Configurar o ambiente GitHub `production`, proteção de `main` e credenciais de CI antes de usar o workflow de publicação.
+- Validar os fluxos autenticados da versão publicada: código por e-mail do gestor, áreas de professor e aluno, mural, frequência, anexos e notificações em dispositivo autorizado.
+- Completar `DATABASE_URL` diretamente nos secrets do ambiente GitHub `production` e validar a primeira execução do workflow autorizado. Os secrets Cloudflare e a CA oficial já foram cadastrados; renovar o token antes de 31/12/2026. Resolver a limitação de aplicação das proteções de `main`; a autorização explícita desta publicação não modifica o plano GitHub nem torna o ambiente uma proteção contra push ou merge. Não enviar valores por chat ou commit.
+- Integrar a documentação da PR #43 após revisão e CI aprovada. Autenticar o Git no computador e obter um clone com histórico antes de retomar alterações de código; preservar o conjunto de backup fora da raiz desse clone.
 - Staging precisa de Worker, Hyperdrive, banco, Auth e Storage separados; nenhum ambiente de teste deve reutilizar o banco de produção.
-- Confirmar a política de backup do Supabase e realizar ensaio de restauração conforme `docs/DISASTER_RECOVERY.md`.
-- Integrar a branch de trabalho em `main` após revisão e validação; a branch padrão ainda contém uma versão antiga.
+- Confirmar a política de backup contínuo do Supabase, incluir Auth/Storage na recuperação e manter cópia cifrada externa. Ensaio do schema privado realizado em 01/10/2026; repetir mensalmente conforme `docs/DISASTER_RECOVERY.md`.
+- Avaliar a atualização PostgreSQL disponível no Supabase, conferindo versão vigente, extensões e as [mudanças de compatibilidade de 17.11](https://supabase.com/changelog/postgres-15-19-17-11-breaking-changes) antes de definir uma janela de manutenção. Não foi executada atualização do banco gerenciado nesta operação.
+- Confirmar a cópia externa da pasta separada de backup e a recuperação da senha original; a cópia do projeto no Drive foi informada pelo responsável, mas não inspecionada.
