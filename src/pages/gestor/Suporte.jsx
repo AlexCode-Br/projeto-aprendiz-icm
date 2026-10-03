@@ -1,6 +1,6 @@
 import FormSelect from '../../components/FormSelect';
 import SearchInput from '../../components/SearchInput';
-import { Trash2 } from 'lucide-react';
+import { Trash2, RefreshCw, ArrowUpRight } from 'lucide-react';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthContext } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -12,7 +12,7 @@ import api from '../../services/api';
 import { SUPPORT_STATUSES } from '../../../shared/validation.mjs';
 
 const filters = ['Todos','Abertos','Em atendimento','Resolvidos','Não lidos'];
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 12;
 const isSameTicket = (left,right) => left != null && right != null && String(left) === String(right);
 
 const Suporte = () => {
@@ -148,11 +148,6 @@ const Suporte = () => {
     finally{setDeleting(false);}
   };
 
-  const counts=useMemo(()=>({
-    total:tickets.length,
-    unread:tickets.filter(ticket=>ticket.nao_lidas>0).length,
-    waiting:tickets.filter(ticket=>ticket.aguardando==='Gestor'&&ticket.status!=='Resolvido').length,
-  }),[tickets]);
   const totalPages=Math.max(1,Math.ceil(tickets.length/ITEMS_PER_PAGE));
   const paginatedTickets=useMemo(()=>{
     const start=(currentPage-1)*ITEMS_PER_PAGE;
@@ -162,37 +157,32 @@ const Suporte = () => {
 
   const actions=detail?.ticket?<>
     <label className="sr-only" htmlFor="support-status">Status do chamado</label>
-    <FormSelect id="support-status" className="min-w-44" value={detail.ticket.status} isDisabled={updating} isClearable={false} isSearchable={false} onChange={event => updateTicket(detail.ticket.id,event.target.value)} options={SUPPORT_STATUSES} />
-    <button type="button" onClick={()=>{setDeleteTargetId(detail.ticket.id);setDeleteOpen(true);}} className="btn btn-secondary min-h-9 border-danger/40 px-3 py-1.5 text-xs text-danger hover:bg-danger/10" aria-label="Apagar chamado"><Trash2 aria-hidden="true" />Apagar chamado</button>
+    <FormSelect id="support-status" className="w-44" value={detail.ticket.status} isDisabled={updating} isClearable={false} isSearchable={false} onChange={event => updateTicket(detail.ticket.id,event.target.value)} options={SUPPORT_STATUSES} />
+    <button type="button" disabled={updating} onClick={()=>{setDeleteTargetId(detail.ticket.id);setDeleteOpen(true);}} className="icon-button hover:!bg-danger/10 hover:!text-danger" aria-label="Apagar chamado" title="Apagar chamado"><Trash2 aria-hidden="true" className="!h-4 !w-4" /></button>
   </>:null;
 
-  return <>
-    <div className="page-header">
-      <div><h1 className="page-title">Central de Suporte</h1><p className="page-description">Atenda solicitações dos professores com histórico completo e acompanhamento de leitura.</p></div>
-      <div className="grid grid-cols-3 gap-2 text-center">
-        {[['Na lista',counts.total],['Não lidos',counts.unread],['Aguardando',counts.waiting]].map(([label,value])=><div key={label} className="rounded-xl border border-border bg-surface px-3 py-2"><strong className="block text-lg text-text-default">{value}</strong><span className="text-[0.68rem] uppercase tracking-wide text-text-muted">{label}</span></div>)}
-      </div>
+  return <div className="flex h-full min-h-[30rem] flex-col gap-4">
+    <div className={`${selectedId?'hidden lg:flex':'flex'} shrink-0 items-center justify-between gap-3`}>
+      <div className="min-w-0"><h1 className="page-title">Central de Suporte</h1><p className="mt-1 text-sm text-text-muted">Uma caixa de entrada para atender os professores.</p></div>
+      <button type="button" onClick={()=>fetchTickets()} disabled={loading} className="btn btn-secondary px-3" aria-label="Atualizar chamados"><RefreshCw aria-hidden="true" className={`!h-4 !w-4 ${loading?'animate-spin':''}`}/><span className="hidden sm:inline">Atualizar</span></button>
     </div>
 
-    <section className="panel mb-4 p-3 sm:p-4" aria-label="Busca e filtros de chamados">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-        <label className="flex-1"><span className="sr-only">Buscar chamados</span><SearchInput value={search} onChange={event=>setSearch(event.target.value)} placeholder="Buscar por professor, assunto, conteúdo ou número..." className="form-control"/></label>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar chamados">
-          {filters.map(value=><button key={value} type="button" aria-pressed={filter===value} onClick={()=>setFilter(value)} className={`min-h-11 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors ${filter===value?'bg-primary text-white':'border border-border bg-surface text-text-muted hover:bg-surface-hover'}`}>{value}</button>)}
+    {error&&<div className="alert-error flex shrink-0 items-center justify-between gap-3" role="alert"><span>{error}</span><button type="button" onClick={()=>fetchTickets()} className="font-semibold underline">Tentar novamente</button></div>}
+
+    <div className="grid min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-surface shadow-sm lg:grid-cols-[minmax(17rem,0.85fr)_minmax(0,1.65fr)] xl:grid-cols-[22rem_minmax(0,1fr)]">
+      <aside className={`${selectedId?'hidden lg:flex':'flex'} min-h-0 min-w-0 flex-col border-border lg:border-r`} aria-label="Chamados">
+        <div className="shrink-0 space-y-3 border-b border-border p-4">
+          <SearchInput value={search} onChange={event=>setSearch(event.target.value)} placeholder="Buscar chamados..." aria-label="Buscar por professor, assunto, conteúdo ou número" />
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="flex shrink-0 items-center gap-2 text-sm font-semibold text-text-default">Chamados<span className="rounded-md bg-surface-muted px-2 py-0.5 text-xs tabular-nums text-text-muted" aria-label={`${tickets.length} resultados`}>{tickets.length}</span></h2>
+            <label className="min-w-0 max-w-40 flex-1"><span className="sr-only">Filtrar chamados</span><select aria-label="Filtrar chamados" value={filter} onChange={event=>setFilter(event.target.value)} className="min-h-11 w-full min-w-0 rounded-lg border border-border bg-surface px-2 text-xs font-medium text-text-default focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">{filters.map(value=><option key={value}>{value}</option>)}</select></label>
+          </div>
         </div>
-      </div>
-    </section>
-
-    {error&&<div className="alert-error mb-4 flex items-center justify-between gap-3" role="alert"><span>{error}</span><button type="button" onClick={()=>fetchTickets()} className="font-semibold underline">Tentar novamente</button></div>}
-
-    <div className="panel grid min-h-[38rem] overflow-hidden lg:grid-cols-[minmax(19rem,0.82fr)_minmax(0,1.7fr)]">
-      <aside className={`${selectedId?'hidden lg:block':'block'} border-r-0 border-border lg:border-r`} aria-label="Chamados">
-        <div className="border-b border-border px-5 py-4"><h2 className="font-bold text-text-default">Chamados</h2><p className="mt-1 text-xs text-text-muted">Ordenados por atenção necessária e atividade recente.</p></div>
-        <div className="max-h-[42rem] overflow-y-auto"><SupportTicketList tickets={paginatedTickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor"/></div>
-        {!loading&&<Pagination currentPage={currentPage} totalItems={tickets.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} compact />}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain"><SupportTicketList tickets={paginatedTickets} selectedId={selectedId} onSelect={openTicket} loading={loading} emptyMessage={filter==='Não lidos'?'Nenhum chamado não lido.':'Nenhum chamado encontrado.'} role="gestor" inbox /></div>
+        {!loading&&<div className="shrink-0 border-t border-border">{totalPages>1?<Pagination currentPage={currentPage} totalItems={tickets.length} itemsPerPage={ITEMS_PER_PAGE} onPageChange={setCurrentPage} className="border-t-0" compact />:<p className="px-4 py-3 text-xs text-text-muted">{tickets.length} {tickets.length===1?'chamado':'chamados'} · Atenção e atividade recente</p>}</div>}
       </aside>
-      <div className={`${selectedId?'block':'hidden lg:block'}`}>
-        <SupportConversation detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedIdRef.current)} onBack={closeTicket} onSend={sendReply} sending={sending} actions={actions}/>
+      <div className={`${selectedId?'flex':'hidden lg:flex'} min-h-0 min-w-0 flex-col`}>
+        <SupportConversation key={selectedId||'empty'} detail={detail} currentUserId={user?.id} currentRole="gestor" loading={detailLoading} error={detailError} onRetry={()=>fetchDetail(selectedIdRef.current)} onBack={closeTicket} onSend={sendReply} sending={sending} actions={actions} inbox emptyAction={paginatedTickets[0]&&!loading?<button type="button" onClick={()=>openTicket(paginatedTickets[0].id)} className="btn btn-secondary">Abrir próximo chamado<ArrowUpRight aria-hidden="true" className="!h-4 !w-4"/></button>:null}/>
       </div>
     </div>
     <Modal isOpen={deleteOpen} onClose={()=>{if(!deleting){setDeleteOpen(false);setDeleteTargetId(null);}}} title="Apagar chamado?" maxWidth="max-w-md">
@@ -201,7 +191,7 @@ const Suporte = () => {
         <div className="flex border-t border-border pt-5 sm:justify-end"><button type="button" className="btn btn-danger" disabled={deleting} onClick={deleteTicket}>{deleting?'Apagando...':'Apagar definitivamente'}</button></div>
       </div>
     </Modal>
-  </>;
+  </div>;
 };
 
 export default Suporte;
