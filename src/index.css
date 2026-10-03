@@ -1,8 +1,25 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@config "../tailwind.config.js";
+@source "./";
+
+/* Preserve the existing visual scale while replacing the v3 build scanner. */
+@theme inline {
+    --radius-sm: 0.125rem;
+    --radius-md: 0.375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.75rem;
+    --radius-2xl: 1rem;
+    --radius-3xl: 1.5rem;
+    --default-ring-width: 3px;
+    --default-ring-color: #3b82f6;
+}
+@layer base {
+    *, ::before, ::after, ::backdrop, ::file-selector-button { border-color: #e5e7eb; }
+    input::placeholder, textarea::placeholder { color: #9ca3af; }
+    button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+}
 
 @font-face {
     font-family: 'Allura';

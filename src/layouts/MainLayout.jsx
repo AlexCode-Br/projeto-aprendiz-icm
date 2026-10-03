@@ -11,6 +11,7 @@ const MainLayout = ({ children }) => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const mainRef = useRef(null);
     const location = useLocation();
+    const isManagerSupport = ['/gestor/suporte','/professor/suporte'].includes(location.pathname);
     useLayoutEffect(() => {
         const root = document.documentElement;
         const body = document.body;
@@ -51,7 +52,7 @@ const MainLayout = ({ children }) => {
                 <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
                 <main ref={mainRef} id="main-content" tabIndex="-1" className="app-main-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-3 outline-none sm:p-6 lg:p-8">
-                    <div className="page-shell">{user?.role==='professor'&&<TeacherClassSetup key={user.id}/>}<React.Suspense fallback={<PageSkeleton />}>{children}</React.Suspense></div>
+                    <div className={`page-shell ${isManagerSupport ? 'flex h-full min-h-0 flex-col' : ''}`}>{user?.role==='professor'&&<TeacherClassSetup key={user.id}/>}<React.Suspense fallback={<PageSkeleton />}>{children}</React.Suspense></div>
                 </main>
             </div>
         </div>

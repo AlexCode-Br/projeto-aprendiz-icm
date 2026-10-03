@@ -280,6 +280,20 @@ export async function initializeNodeApplication({ db, env = process.env }) {
       client_message_id TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    CREATE TABLE IF NOT EXISTS support_attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id INTEGER NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK(size_bytes>0 AND size_bytes<=20971520),
+      voice_message INTEGER NOT NULL DEFAULT 0 CHECK(voice_message IN (0,1)),
+      data_url TEXT,
+      storage_path TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK((data_url IS NULL)<>(storage_path IS NULL))
+    );
+    CREATE INDEX IF NOT EXISTS support_attachments_message_idx ON support_attachments(message_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS support_attachments_storage_idx ON support_attachments(storage_path) WHERE storage_path IS NOT NULL;
     CREATE TABLE IF NOT EXISTS support_ticket_reads (
       ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

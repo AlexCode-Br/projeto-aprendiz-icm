@@ -29,6 +29,11 @@ const withQuery = (url, config) => {
 };
 
 const api = {
+  async getMedia(url, { signal } = {}) {
+    const response = await fetch(url, { credentials: 'same-origin', signal });
+    if (!response.ok) throw new Error('Não foi possível carregar o áudio.');
+    return response.blob();
+  },
   setCsrfToken(value) { csrfToken = value || ''; },
   get(url, config) { return request('GET', withQuery(url, config)); },
   post(url, body, config) { return request('POST', url, normalizeBody(body), config); },
