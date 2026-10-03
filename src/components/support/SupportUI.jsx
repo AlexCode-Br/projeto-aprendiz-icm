@@ -9,7 +9,7 @@ const statusClasses = {
 };
 
 function SupportStatusBadge({ status }) {
-  return <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses[status] || statusClasses.Aberto}`}>{status}</span>;
+  return <span className={`inline-flex shrink-0 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses[status] || statusClasses.Aberto}`}>{status}</span>;
 }
 
 function formatSupportDate(value, includeDate = false) {
@@ -41,8 +41,8 @@ export function SupportTicketList({ tickets, selectedId, onSelect, loading, empt
         <p className={`mt-2 line-clamp-2 text-sm leading-5 text-text-default [overflow-wrap:anywhere] ${ticket.nao_lidas>0?'font-bold':'font-semibold'}`}>{ticket.assunto}</p>
         <p className="mt-1 truncate text-xs leading-5 text-text-muted">{ticket.ultima_mensagem || 'Chamado sem mensagem.'}</p>
         <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2"><SupportStatusBadge status={ticket.status}/><span className="truncate text-[11px] text-text-muted">#{ticket.id}</span></div>
-          {ticket.nao_lidas>0 ? <span className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-white" aria-label={`${ticket.nao_lidas} mensagem(ns) não lida(s)`}>{ticket.nao_lidas}</span> : ticket.aguardando && <span className="truncate text-[11px] text-text-muted">Aguardando {ticket.aguardando}</span>}
+          <div className="flex shrink-0 items-center gap-2"><SupportStatusBadge status={ticket.status}/><span className="text-[11px] text-text-muted">#{ticket.id}</span></div>
+          {ticket.nao_lidas>0 ? <span className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-[11px] font-bold text-white" aria-label={`${ticket.nao_lidas} mensagem(ns) não lida(s)`}>{ticket.nao_lidas}</span> : ticket.aguardando && <span className="min-w-0 truncate text-right text-[11px] text-text-muted" title={`Aguardando ${ticket.aguardando}`}>Aguardando {ticket.aguardando}</span>}
         </div>
       </button></div>;
       return <div key={ticket.id} role="listitem"><button type="button" onClick={()=>onSelect(ticket.id)} aria-current={isSelected?'true':undefined} className={`relative w-full px-4 py-4 text-left transition-colors sm:px-5 ${isSelected?'bg-primary/10':'hover:bg-surface-hover'}`}>
