@@ -16,7 +16,7 @@ import StatCard from '../../components/StatCard';
 import { AuthContext } from '../../contexts/AuthContext';
 
 const emptySummary = {
-    stats: { totalAlunos: 0, turmasAtivas: 0, informativos: 0, ticketsAbertos: 0, conflitosHorario: 0 },
+    stats: { totalAlunos: 0, turmasAtivas: 0, informativos: 0, conversasNaoLidas: 0, conflitosHorario: 0 },
     proximasAulas: [],
     frequenciaPorTurma: [],
     conflitosHorario: [],
@@ -77,7 +77,7 @@ const ProfessorDashboard = () => {
             <StatCard icon={<Users/>} title="Meus alunos" value={summary.stats.totalAlunos} colorClass="primary" to="/professor/alunos"/>
             <StatCard icon={<GraduationCap/>} title="Minhas turmas" value={summary.stats.turmasAtivas} detail={summary.stats.conflitosHorario?`${summary.stats.conflitosHorario} conflito(s) para revisar`:'Horários organizados'} colorClass={summary.stats.conflitosHorario?'warning':'primary'} to="/professor/turmas"/>
             <StatCard icon={<Megaphone/>} title="Avisos e informativos" value={summary.stats.informativos} colorClass="neutral" to="/professor/informativos"/>
-            <StatCard icon={<LifeBuoy/>} title="Chamados em aberto" value={summary.stats.ticketsAbertos} colorClass="neutral" to="/professor/suporte"/>
+            <StatCard icon={<LifeBuoy/>} title="Conversas não lidas" value={summary.stats.conversasNaoLidas ?? 0} colorClass="neutral" to="/professor/suporte"/>
         </div>
 
         {summary.conflitosHorario.length>0&&<div className="alert-warning mb-6" role="alert">

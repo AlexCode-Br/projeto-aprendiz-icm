@@ -164,7 +164,7 @@ export function createDashboardRoutes(context) {
         )`).get(session.user_id,session.user_id,period.id)).total;
         const ticketsAbertos=(await db.prepare("SELECT COUNT(*) AS total FROM support_tickets WHERE requester_user_id=? AND status<>'Resolvido'").get(session.user_id)).total;
         return json(response,200,{
-          stats:{totalAlunos:Number(totalAlunos||0),turmasAtivas:classes.length,informativos:Number(informativos||0),ticketsAbertos:Number(ticketsAbertos||0),frequenciaMedia,conflitosHorario:conflitosHorario.length},
+          stats:{totalAlunos:Number(totalAlunos||0),turmasAtivas:classes.length,informativos:Number(informativos||0),ticketsAbertos:Number(ticketsAbertos||0),conversasNaoLidas:await supportChatUnread(db,session),frequenciaMedia,conflitosHorario:conflitosHorario.length},
           proximaAula:proxima,proximasAulas,frequenciaPorTurma,conflitosHorario,
           periodo:schoolYearView(period),agendaData:validDate||null,
         });

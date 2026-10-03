@@ -57,7 +57,9 @@ test('chat preserva histórico, isola professores, deduplica envios e respeita o
     assert.equal(outgoing.status,201);
     assert.equal((await server.call(manager,'GET','/api/suporte/conversas')).data.find(row=>row.id===a).nao_lidas,1);
     assert.equal((await detail(manager,a)).data.messages.at(-1).read,false);
+    assert.equal((await server.call(teacher,'GET','/api/dashboard/professor')).data.stats.conversasNaoLidas,1);
     await read(teacher,a,outgoing.data.id);
+    assert.equal((await server.call(teacher,'GET','/api/dashboard/professor')).data.stats.conversasNaoLidas,0);
     assert.equal((await detail(manager,a)).data.messages.at(-1).read,true);
 
     const key='chat-concurrent-send-0001';

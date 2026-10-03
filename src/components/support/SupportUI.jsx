@@ -74,7 +74,7 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
           <article className={`mb-2 flex ${outgoing?'justify-end':'justify-start'}`} aria-label={`Mensagem de ${message.own?'você':message.author_name}`}>
             <div className={`min-w-24 max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-sm sm:max-w-[78%] ${outgoing?'rounded-tr-sm bg-primary/10':'rounded-tl-sm border border-border/60 bg-surface'}`}>
               {message.author_role==='gestor'&&!message.own&&<p className="mb-1 text-[11px] font-semibold text-primary">{message.author_name}</p>}
-              <ChatMedia attachments={message.anexos} onReady={()=>{if(atBottom.current)scrollDown();}}/>
+              <ChatMedia attachments={message.anexos} author={message.author_name} onReady={()=>{if(atBottom.current)scrollDown();}}/>
               <p className="whitespace-pre-wrap text-sm leading-6 text-text-default [overflow-wrap:anywhere]">{message.body}</p>
               <div data-read-cut={message.id} className="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-text-muted"><time dateTime={message.created_at} title={dateOf(message.created_at).toLocaleString('pt-BR')}>{timeOf(message.created_at)}</time>{outgoing&&<span title={message.read?'Lida':'Enviada'} aria-label={message.read?'Mensagem lida':'Mensagem enviada'}>{message.read?<CheckCheck aria-hidden="true" className="!h-3.5 !w-3.5 text-sky-600 dark:text-sky-400"/>:<Check aria-hidden="true" className="!h-3.5 !w-3.5"/>}</span>}</div>
             </div>
