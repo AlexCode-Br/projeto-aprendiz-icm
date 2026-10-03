@@ -144,9 +144,10 @@ export function SupportConversation({ detail, currentUserId, currentRole, loadin
       {timeline.map(item=>{
         if(item.kind==='event')return <div key={`event-${item.id}`} className="flex justify-center"><p className="rounded-full border border-border bg-surface px-3 py-1.5 text-center text-xs text-text-muted">{item.actor_name||'Equipe'} alterou o status de {item.from_status||'—'} para {item.to_status} · {formatSupportDate(item.created_at)}</p></div>;
         const own=Number(item.author_user_id)===Number(currentUserId);
+        const outgoing=inbox?item.author_role===currentRole:own;
         const author=own?'Você':item.author_role==='gestor'?'Gestor':`Professor ${item.author_name}`;
-        return <article key={`message-${item.id}`} className={`flex ${own?'justify-end':'justify-start'}`}>
-          <div className={`max-w-[88%] rounded-2xl border px-4 py-3 shadow-sm sm:max-w-[76%] ${own?'border-primary/20 bg-primary/10':'border-border bg-surface'}`}>
+        return <article key={`message-${item.id}`} className={`flex ${outgoing?'justify-end':'justify-start'}`}>
+          <div className={`max-w-[88%] rounded-2xl border px-4 py-3 shadow-sm sm:max-w-[76%] ${outgoing?'border-primary/20 bg-primary/10':'border-border bg-surface'}`}>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1"><p className="text-xs font-bold text-text-default">{author}</p><time className="text-xs text-text-muted" dateTime={item.created_at}>{formatSupportDate(item.created_at)}</time></div>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-text-default [overflow-wrap:anywhere]">{item.body}</p>
           </div>
