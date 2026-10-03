@@ -27,7 +27,7 @@ O workflow `Deploy production` é manual (`workflow_dispatch`), aceita somente `
 4. Configurar proteção de `main` com revisão e o check `validate`. Adicionar aprovação no environment se o plano GitHub oferecer essa opção para este repositório privado.
 5. Conferir a versão anterior saudável do Worker e o backup do banco antes de autorizar uma publicação.
 
-A segunda publicação de 02/10/2026 ativou o alerta separado de novo dispositivo para gestores, com a migração privada `028_manager_login_devices.sql`; consulte o [registro da versão vigente](../docs/releases/DEPLOY_2026-10-02_ALERTA_GESTOR.md). O e-mail de código MFA continua separado do aviso de acesso.
+A segunda publicação de 02/10/2026 ativou o alerta separado de novo dispositivo para gestores, com a migração privada `028_manager_login_devices.sql`; consulte o [registro do alerta](../docs/releases/DEPLOY_2026-10-02_ALERTA_GESTOR.md). O e-mail de código MFA continua separado do aviso de acesso.
 
 Os secrets do GitHub são credenciais do processo de publicação, não substitutos dos secrets de runtime já cadastrados no Worker. O pipeline executa migrações, publica e roda `scripts/smoke-production.mjs`; uma falha no smoke exige investigação, não um rollback automático de banco.
 
@@ -60,13 +60,13 @@ Gestores usam verificação em duas etapas por código enviado ao e-mail depois 
 
 Gere o par VAPID uma única vez com `pnpm vapid:generate` e cadastre os dois valores com `wrangler secret put`. Trocar esse par invalida as assinaturas existentes e exige nova ativação nos dispositivos.
 
-## Chat de suporte preparado em 03/10/2026
+## Chat de suporte publicado em 03/10/2026
 
-O chat da PR #48 ainda não foi publicado. Antes de um deploy autorizado, aplique `029_support_chat_attachments.sql` pelo migrador habitual; ela mantém o histórico e acrescenta os metadados dos anexos, com RLS e privilégios públicos revogados. Não execute DDL em requisições.
+O chat da PR #48 foi publicado pelo workflow manual autorizado em 03/10/2026, commit `87cb3b7`, versão `12649394-bea1-44dc-be85-df57af2329b9`, com 100% do tráfego. `029_support_chat_attachments.sql` foi aplicada pelo migrador antes do upload; mantém o histórico e acrescenta os metadados dos anexos, com RLS e privilégios públicos revogados. Não execute DDL em requisições. Consulte o [registro vigente](../docs/releases/DEPLOY_2026-10-03_CHAT.md).
 
 O backend cria o bucket `support-attachments` no primeiro envio com arquivos, usando a credencial Supabase administrativa existente. Ele exige bucket privado, limite de 20 MB e os MIME types definidos em `shared/support-media.mjs`; recusa bucket público e não altera sua visibilidade automaticamente. Não são necessários novos secrets. O limite global do Storage deve comportar 20 MB; cada mensagem aceita até cinco anexos, somando no máximo 20 MB. Imagens têm limite de 5 MB e documentos/áudios de 10 MB. Não reutilize esse bucket de produção em testes locais.
 
-Após publicar, confira envio e download como gestor e professor, confirmação de leitura, chegada automática sem recarregar, foto, documento, reprodução/avanço de áudio e vídeo e gravação de voz em dispositivo autorizado. Verifique 401 sem sessão e 404 para arquivo de outro professor. Inclua o novo bucket privado na política de recuperação do Storage; o backup SQL do schema privado contém os metadados, não os binários remotos. A prévia local usa arquivos fictícios e banco isolado; não comprova entrega pelo Storage de produção nem captura de microfone de um dispositivo real.
+Smoke, hashes dos assets e leitura autenticada do histórico foram aprovados. Ainda confira envio e download como gestor e professor, confirmação de leitura, chegada automática sem recarregar, foto, documento, reprodução/avanço de áudio e vídeo e gravação de voz em dispositivo autorizado. Verifique 401 sem sessão e 404 para arquivo de outro professor. Inclua o novo bucket privado na política de recuperação do Storage; o backup SQL do schema privado contém os metadados, não os binários remotos. A prévia local usa arquivos fictícios e banco isolado; não comprova entrega pelo Storage de produção nem captura de microfone de um dispositivo real.
 
 ## Verificação pós-deploy
 
