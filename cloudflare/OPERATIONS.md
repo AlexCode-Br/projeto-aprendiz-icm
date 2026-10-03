@@ -60,6 +60,14 @@ Gestores usam verificação em duas etapas por código enviado ao e-mail depois 
 
 Gere o par VAPID uma única vez com `pnpm vapid:generate` e cadastre os dois valores com `wrangler secret put`. Trocar esse par invalida as assinaturas existentes e exige nova ativação nos dispositivos.
 
+## Chat de suporte preparado em 03/10/2026
+
+O chat da PR #48 ainda não foi publicado. Antes de um deploy autorizado, aplique `029_support_chat_attachments.sql` pelo migrador habitual; ela mantém o histórico e acrescenta os metadados dos anexos, com RLS e privilégios públicos revogados. Não execute DDL em requisições.
+
+O backend cria o bucket `support-attachments` no primeiro envio com arquivos, usando a credencial Supabase administrativa existente. Ele exige bucket privado, limite de 20 MB e os MIME types definidos em `shared/support-media.mjs`; recusa bucket público e não altera sua visibilidade automaticamente. Não são necessários novos secrets. O limite global do Storage deve comportar 20 MB; cada mensagem aceita até cinco anexos, somando no máximo 20 MB. Imagens têm limite de 5 MB e documentos/áudios de 10 MB. Não reutilize esse bucket de produção em testes locais.
+
+Após publicar, confira envio e download como gestor e professor, confirmação de leitura, chegada automática sem recarregar, foto, documento, reprodução/avanço de áudio e vídeo e gravação de voz em dispositivo autorizado. Verifique 401 sem sessão e 404 para arquivo de outro professor. Inclua o novo bucket privado na política de recuperação do Storage; o backup SQL do schema privado contém os metadados, não os binários remotos. A prévia local usa arquivos fictícios e banco isolado; não comprova entrega pelo Storage de produção nem captura de microfone de um dispositivo real.
+
 ## Verificação pós-deploy
 
 `node scripts/smoke-production.mjs` executa as verificações públicas de leitura abaixo, sem login, alteração de dados ou publicação. Os testes funcionais autenticados continuam separados.

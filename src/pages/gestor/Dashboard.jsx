@@ -80,7 +80,7 @@ const Dashboard = () => {
                 <StatCard to="/gestor/alunos" title="Total de Alunos" value={dashboard.stats.totalAlunos ?? 0} loading={loading} icon={<AlunosIcon />} colorClass="primary" delay="100" />
                 <StatCard to="/gestor/cursos" title="Turmas Ativas" value={dashboard.stats.cursosAtivos ?? 0} loading={loading} icon={<TurmasIcon />} colorClass="neutral" delay="200" />
                 <StatCard to="/gestor/professores" title="Professores" value={dashboard.stats.professores ?? 0} loading={loading} icon={<ProfessoresIcon />} colorClass="primary" delay="300" />
-                <StatCard to="/gestor/suporte" title="Chamados pendentes" value={dashboard.stats.ticketsPendentes ?? 0} loading={loading} icon={<SuporteIcon />} colorClass="warning" delay="400" />
+                <StatCard to="/gestor/suporte" title="Conversas não lidas" value={dashboard.stats.conversasNaoLidas ?? 0} loading={loading} icon={<SuporteIcon />} colorClass="warning" delay="400" />
             </div>
 
             <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">

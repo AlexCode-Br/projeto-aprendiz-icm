@@ -1,4 +1,5 @@
 import { attachClassSchedules } from '../class-schedules.mjs';
+import { supportChatUnread } from './support-chat.mjs';
 import { classScheduleConflicts, classesOnDate, nextClassSchedule, nextClassSchedules } from '../../shared/class-schedules.mjs';
 
 export function createDashboardRoutes(context) {
@@ -75,7 +76,7 @@ export function createDashboardRoutes(context) {
         return json(response,200,{inscricoes:result.rows.map(recentEnrollmentView),periodo:enrollmentPeriod,paginacao:{pagina:result.page,temAnterior:result.hasPrevious,temProxima:result.hasNext},fusoHorario:appTimeZone});
       }
       if(request.method==='GET'&&url.pathname==='/api/dashboard/gestor'){
-        if(!await authorize(request,response,['gestor']))return;
+        const session=await authorize(request,response,['gestor']);if(!session)return;
         const period=await selectedSchoolYear(request,response);if(!period)return;
         const [totalAlunos,cursosAtivos,professores,ticketsPendentes,alunosPorTurma,ultimasInscricoes]=await Promise.all([
           db.prepare("SELECT COUNT(DISTINCT students.id) AS total FROM students JOIN enrollments ON enrollments.student_id=students.id AND enrollments.status='ativa' JOIN classes ON classes.id=enrollments.class_id AND classes.active=1 WHERE students.active=1 AND classes.school_year_id=?").get(period.id),
@@ -97,7 +98,7 @@ export function createDashboardRoutes(context) {
           recentEnrollmentPage(period.id),
         ]);
         return json(response,200,{
-          stats:{totalAlunos:Number(totalAlunos.total||0),cursosAtivos:Number(cursosAtivos.total||0),professores:Number(professores.total||0),ticketsPendentes:Number(ticketsPendentes.total||0)},
+          stats:{totalAlunos:Number(totalAlunos.total||0),cursosAtivos:Number(cursosAtivos.total||0),professores:Number(professores.total||0),ticketsPendentes:Number(ticketsPendentes.total||0),conversasNaoLidas:await supportChatUnread(db,session)},
           alunosPorTurma:alunosPorTurma.map(row=>({...row,id:Number(row.id),total:Number(row.total||0)})),
           ultimasInscricoes:ultimasInscricoes.rows.map(recentEnrollmentView),
           ultimasInscricoesPaginacao:{pagina:ultimasInscricoes.page,temAnterior:ultimasInscricoes.hasPrevious,temProxima:ultimasInscricoes.hasNext},

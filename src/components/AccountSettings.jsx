@@ -209,14 +209,14 @@ export default function AccountSettings() {
 
     const options = user?.role === 'gestor' ? [
         ['newStudent', 'Novas inscrições', 'Avisar quando um aluno for cadastrado.'],
-        ['newTicket', 'Novos chamados', 'Avisar sobre solicitações de suporte.'],
+        ['newTicket', 'Mensagens do suporte', 'Avisar quando um professor enviar uma mensagem.'],
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
     ] : user?.role === 'aluno' ? [
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da própria conta.'],
         ['systemNews', 'Informativos da gestão', 'Receber informativos destinados às suas turmas.'],
     ] : [
         ['newStudent', 'Novos alunos', 'Avisar quando um aluno entrar em uma de suas turmas.'],
-        ['newTicket', 'Respostas do suporte', 'Avisar quando houver uma resposta em seus chamados.'],
+        ['newTicket', 'Mensagens do suporte', 'Avisar quando a equipe gestora enviar uma mensagem.'],
         ['courseUpdates', 'Alterações nas turmas', 'Receber mudanças de curso, local ou horário.'],
         ['systemAlerts', 'Alertas de segurança', 'Receber alertas importantes da conta.'],
         ['systemNews', 'Comunicados do sistema', 'Receber novidades e atualizações do projeto.'],

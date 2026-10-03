@@ -21,7 +21,7 @@ export const tablesWithId = new Set([
   'users', 'sessions', 'password_resets', 'dev_emails', 'audit_log', 'locations',
   'professor_profiles', 'professor_invites', 'students', 'courses', 'classes',
   'school_years', 'churches', 'enrollments', 'attendance_sessions', 'attendance_records',
-  'announcements', 'announcement_attachments', 'support_tickets', 'support_messages',
+  'announcements', 'announcement_attachments', 'support_tickets', 'support_messages', 'support_attachments',
   'support_ticket_events', 'dropout_events', 'student_contacts', 'scheduled_notifications', 'profile_photos', 'push_subscriptions', 'notification_outbox',
   'manager_login_challenges', 'manager_login_devices',
 ]);

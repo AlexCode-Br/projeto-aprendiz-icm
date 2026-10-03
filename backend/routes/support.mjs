@@ -1,4 +1,9 @@
+import { createSupportChatRoutes } from './support-chat.mjs';
+import { createSupportStorage } from '../support-media.mjs';
+
 export function createSupportRoutes(context) {
+  const supportStorage=createSupportStorage(context);
+  const chatRoutes=createSupportChatRoutes({...context,supportStorage});
   const {
     db,
     json,
@@ -25,6 +30,7 @@ export function createSupportRoutes(context) {
   } = context;
 
   return async function supportRoutes(request, response, url, ip) {
+      if(url.pathname==='/api/suporte/conversas'||url.pathname.startsWith('/api/suporte/conversas/'))return chatRoutes(request,response,url,ip);
       if(request.method==='GET'&&url.pathname==='/api/suporte'){
         const session=await authorize(request,response,['gestor','professor']);if(!session)return;
         return json(response,200,await listSupportTickets(session,url));
@@ -110,10 +116,13 @@ export function createSupportRoutes(context) {
         const ticketId=Number(ticketDetailMatch[1]);
         const ticket=await supportTicketForSession(ticketId,session);
         if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
+        const attachments=await db.prepare(`SELECT a.storage_path FROM support_attachments a
+          JOIN support_messages m ON m.id=a.message_id WHERE m.ticket_id=?`).all(ticketId);
         await db.transaction(async()=>{
           await db.prepare('DELETE FROM support_tickets WHERE id=?').run(ticketId);
           await db.prepare('INSERT INTO audit_log (user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`ticket_deleted:${ticketId}`,ip);
         });
+        await supportStorage.cleanup(attachments.map(item=>item.storage_path));
         return json(response,200,{success:true});
       }
       const ticketReadMatch=url.pathname.match(/^\/api\/suporte\/(\d+)\/lido$/);

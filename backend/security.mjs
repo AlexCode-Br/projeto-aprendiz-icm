@@ -78,8 +78,8 @@ export function createHttpSecurity({ isProduction, appOrigin, env = process.env 
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
       'Referrer-Policy': 'no-referrer',
-      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-      'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' https://challenges.cloudflare.com; connect-src ${connectSources.join(' ')}; frame-src https://challenges.cloudflare.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
+      'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()',
+      'Content-Security-Policy': `default-src 'self'; img-src 'self' data: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' https://challenges.cloudflare.com; connect-src ${connectSources.join(' ')}; frame-src https://challenges.cloudflare.com; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'`,
       'Cache-Control': 'no-store',
     };
     if (isProduction) headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains';

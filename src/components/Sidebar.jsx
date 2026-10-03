@@ -41,7 +41,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
 
     const refreshSupportUnread=useCallback(async()=>{
         if(userRole==='aluno'){setSupportUnread(0);return;}
-        try { const response=await api.get('/api/suporte/nao-lidos');setSupportUnread(Number(response.data.total||0)); }
+        try { const response=await api.get('/api/suporte/conversas/nao-lidas');setSupportUnread(Number(response.data.total||0)); }
         catch { setSupportUnread(0); }
     },[userRole]);
 
