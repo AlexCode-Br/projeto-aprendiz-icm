@@ -113,6 +113,10 @@ Os caminhos abaixo são regeneráveis e não pertencem ao código-fonte:
 - `.env` e `.dev.vars`
 - relatórios, bancos e capturas produzidos em testes locais
 
+## Estilos e build
+
+O frontend usa Tailwind CSS 4.3.3 pelo plugin oficial `@tailwindcss/postcss`. `src/index.css` declara o escopo de fontes e carrega `tailwind.config.js`, preservando o tema existente. Variáveis de compatibilidade mantêm os raios, bordas e foco da interface anterior. O pipeline continua auditando todas as dependências, sem exclusões de avisos.
+
 ## Qualidade
 
 `pnpm check` verifica higiene do repositório e links de documentação, executa ESLint, valida a sintaxe dos pontos de entrada, roda os testes e compila o frontend. `pnpm lint` cobre frontend, backend, regras compartilhadas e scripts. Mudanças de banco devem incluir migração e regressão; mudanças responsivas devem ser conferidas no mobile e no desktop.
