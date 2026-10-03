@@ -1,6 +1,6 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 02/10/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
+Atualizado em 03/10/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
 
 ## Produção
 
@@ -97,6 +97,14 @@ O conjunto cifrado local inclui o arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e
 - PR #45 integrou o reconhecimento de novo navegador e a entrega obrigatória por e-mail via outbox, com hash privado e cookie protegido renovável por um ano, sem dispensar MFA. PR #46 simplificou o modelo conforme referência do responsável: data/hora em Brasília, sistema/navegador, localização aproximada e botão “Não fui eu” para Configurações. O código de verificação permanece em outro e-mail; IP permanece na auditoria.
 - [Deploy production #2](https://github.com/AlexCode-Br/projeto-aprendiz-icm/actions/runs/36997932593), autorizado pelo responsável, publicou `592e607` após check, auditoria, PostgreSQL isolado e build seco aprovados. O migrador concluiu antes do upload. Versão anterior saudável preservada: `24fa9a92-bb96-471d-8283-3d3397efdbdf`.
 - Smoke independente e comparação SHA-256 dos assets publicados com o build local aprovados. Prévia conferida com dados fictícios; nenhum login ou envio manual de e-mail real foi feito nesta publicação. [Detalhes](docs/releases/DEPLOY_2026-10-02_ALERTA_GESTOR.md).
+
+## Central de Suporte do gestor — preparada em 03/10/2026
+
+- Tela organizada como caixa de entrada: busca, filtro e lista à esquerda; conversa e resposta à direita. A altura acompanha a área útil da aplicação, com rolagem independente na lista e no histórico. Em telas menores, lista e conversa se alternam com retorno explícito aos chamados, inclusive durante carregamento ou erro.
+- Hierarquia e estados visuais simplificados, indicadores de leitura preservados, filtros acessíveis e paginação de 12 chamados. Detalhes ficam recolhidos; status e exclusão com confirmação permanecem disponíveis. Mensagens longas quebram sem alargar a tela e o envio preserva o texto quando falha.
+- Componentes de suporte existentes reutilizados por uma variante `inbox` para o gestor. Contratos HTTP, autorização e notificações não foram alterados. Prévia usa servidor e SQLite isolados com dados fictícios, sem credenciais ou integrações de produção.
+- `pnpm check` aprovado: 104 testes, 102 aprovados, zero falhas e duas regressões PostgreSQL puladas por ausência de banco de teste. Build seco do Worker aprovado. Navegação, busca, filtros, paginação, resposta, reabertura e modal de exclusão conferidos na prévia; layouts de celular, tablet e desktop sem rolagem horizontal.
+- Preparação para revisão; esta mudança de UI ainda não foi publicada. A versão de produção continua sendo a registrada acima e um novo deploy depende de autorização explícita.
 
 ## Pendências operacionais
 
