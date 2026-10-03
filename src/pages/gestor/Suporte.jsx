@@ -157,7 +157,7 @@ const Suporte = () => {
 
   const actions=detail?.ticket?<>
     <label className="sr-only" htmlFor="support-status">Status do chamado</label>
-    <FormSelect id="support-status" className="w-44" value={detail.ticket.status} isDisabled={updating} isClearable={false} isSearchable={false} onChange={event => updateTicket(detail.ticket.id,event.target.value)} options={SUPPORT_STATUSES} />
+    <FormSelect id="support-status" className="w-52" value={detail.ticket.status} isDisabled={updating} isClearable={false} isSearchable={false} onChange={event => updateTicket(detail.ticket.id,event.target.value)} options={SUPPORT_STATUSES} />
     <button type="button" disabled={updating} onClick={()=>{setDeleteTargetId(detail.ticket.id);setDeleteOpen(true);}} className="icon-button hover:!bg-danger/10 hover:!text-danger" aria-label="Apagar chamado" title="Apagar chamado"><Trash2 aria-hidden="true" className="!h-4 !w-4" /></button>
   </>:null;
 
