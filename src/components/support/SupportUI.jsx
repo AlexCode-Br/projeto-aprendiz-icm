@@ -38,6 +38,19 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
   const [feedback,setFeedback]=useState('');
   const menu=useRef(null);
   const trigger=useRef(null);
+  const hold=useRef(null);
+  const cancelHold=()=>{if(hold.current)clearTimeout(hold.current.timer);hold.current=null;};
+  const startHold=(message,event)=>{
+    if(event.pointerType==='mouse'||!event.target.closest('.chat-message-bubble')||event.target.closest('a,button,video,audio,input,[role="slider"]'))return;
+    cancelHold();
+    const article=event.currentTarget;
+    hold.current={x:event.clientX,y:event.clientY,timer:setTimeout(()=>{
+      cancelHold();
+      window.getSelection()?.removeAllRanges();
+      openAction(message,{currentTarget:article});
+    },500)};
+  };
+  useEffect(()=>()=>cancelHold(),[]);
   const closeMenu=()=>{setAction(null);trigger.current?.focus({preventScroll:true});};
   const openAction=(message,event)=>{
     const button=event.currentTarget.matches('button')?event.currentTarget:event.currentTarget.querySelector('.chat-message-trigger');
@@ -69,17 +82,22 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
     else if(nextId>lastMessageId.current)setHasNew(true);
     lastMessageId.current=nextId;
   },[messages]);
-  const menuOpen=!!action?.menu;
+  const menuId=action?.menu?action.message.id:null;
   useEffect(()=>{
-    if(!menuOpen)return undefined;
+    if(menuId===null)return undefined;
     menu.current?.querySelector('[role="menuitem"]')?.focus({preventScroll:true});
+    const origin=trigger.current?.getBoundingClientRect();
     const outside=event=>{if(!menu.current?.contains(event.target)&&!trigger.current?.contains(event.target))setAction(null);};
-    const dismiss=event=>{if(!menu.current?.contains(event.target))setAction(null);};
+    const dismiss=event=>{
+      if(menu.current?.contains(event.target))return;
+      const rect=trigger.current?.getBoundingClientRect();
+      if(event.type==='resize'||!rect||!origin||Math.abs(rect.top-origin.top)>1||Math.abs(rect.right-origin.right)>1)setAction(null);
+    };
     document.addEventListener('pointerdown',outside);
     window.addEventListener('resize',dismiss);
     window.addEventListener('scroll',dismiss,true);
     return()=>{document.removeEventListener('pointerdown',outside);window.removeEventListener('resize',dismiss);window.removeEventListener('scroll',dismiss,true);};
-  },[menuOpen]);
+  },[menuId]);
   useEffect(()=>{
     const element=log.current;if(!element||!detail)return undefined;
     const observer=new IntersectionObserver(entries=>{
@@ -107,7 +125,7 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
         const day=dayOf(message.created_at);
         return <React.Fragment key={message.id}>
           {(!index||dayOf(messages[index-1].created_at)!==day)&&<div className="mb-5 mt-2 flex justify-center"><span className="rounded-lg border border-border/50 bg-surface px-3 py-1.5 text-[11px] font-medium text-text-muted shadow-sm">{day}</span></div>}
-          <article className={`mb-2 flex ${outgoing?'justify-end':'justify-start'}`} aria-label={`Mensagem de ${message.own?'você':message.author_name}`} onContextMenu={event=>{if(event.target.closest('a,button,video,audio,input'))return;event.preventDefault();openAction(message,event);}}>
+          <article className={`mb-2 flex ${outgoing?'justify-end':'justify-start'}`} aria-label={`Mensagem de ${message.own?'você':message.author_name}`} onPointerDown={event=>startHold(message,event)} onPointerMove={event=>{if(hold.current&&Math.hypot(event.clientX-hold.current.x,event.clientY-hold.current.y)>8)cancelHold();}} onPointerUp={cancelHold} onPointerCancel={cancelHold} onPointerLeave={cancelHold} onContextMenu={event=>{if(event.target.closest('a,button,video,audio,input,[role="slider"]'))return;event.preventDefault();cancelHold();if(!action?.menu)openAction(message,event);}}>
             <div className={`chat-message-bubble relative min-w-24 max-w-[88%] rounded-2xl px-3.5 py-2.5 pr-10 shadow-sm sm:max-w-[78%] ${outgoing?'rounded-tr-sm bg-primary/10':'rounded-tl-sm border border-border/60 bg-surface'}`}>
               <button type="button" aria-haspopup="menu" aria-expanded={action?.menu&&action.message.id===message.id||false} aria-controls={action?.menu&&action.message.id===message.id?'chat-message-menu':undefined} aria-label={`Opções da mensagem ${message.id}`} onClick={event=>{if(action?.menu&&action.message.id===message.id)closeMenu();else openAction(message,event);}} className="chat-message-trigger absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full text-text-muted hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><ChevronDown aria-hidden="true" className="!h-4 !w-4"/></button>
               {message.author_role==='gestor'&&!message.own&&<p className="mb-1 text-[11px] font-semibold text-primary">{message.author_name}</p>}
