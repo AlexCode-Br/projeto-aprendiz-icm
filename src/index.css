@@ -465,6 +465,13 @@
 }
 
 .modal { transition: opacity 0.3s ease; }
+.chat-message-trigger { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+    .chat-message-trigger { opacity: 0; pointer-events: none; }
+    .chat-message-bubble:hover .chat-message-trigger,
+    .chat-message-bubble:focus-within .chat-message-trigger,
+    .chat-message-trigger[aria-expanded="true"] { opacity: 1; pointer-events: auto; }
+}
 .modal .modal-content { transition: transform 0.3s ease; }
 
 .sidebar-open { transform: translateX(0) !important; }

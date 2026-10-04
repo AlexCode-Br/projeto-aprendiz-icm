@@ -1,9 +1,12 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, CheckCheck, MessageCircle, MoreVertical, Copy, Trash2, Ban } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, Check, CheckCheck, MessageCircle, MoreVertical, ChevronDown, Copy, Trash2, Ban } from 'lucide-react';
 
 import Modal from '../Modal';
 import ChatComposer from './ChatComposer';
 import ChatMedia from './ChatMedia';
+
+const emptyMessages=[];
 
 const dateOf = value => new Date(typeof value==='string'&&/^\d{4}-\d\d-\d\d /.test(value)?`${value.replace(' ','T')}Z`:value);
 const timeOf = value => dateOf(value).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
@@ -33,8 +36,18 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
   const [busy,setBusy]=useState(false);
   const [actionError,setActionError]=useState('');
   const [feedback,setFeedback]=useState('');
-  const openAction=message=>{setActionError('');setFeedback('');setAction({message});};
-  const copy=async()=>{try{await navigator.clipboard.writeText(action.message.body);setFeedback('Mensagem copiada.');setAction(null);}catch{setActionError('Não foi possível copiar. Selecione o texto e copie pelo navegador.');}};
+  const menu=useRef(null);
+  const trigger=useRef(null);
+  const closeMenu=()=>{setAction(null);trigger.current?.focus({preventScroll:true});};
+  const openAction=(message,event)=>{
+    const button=event.currentTarget.matches('button')?event.currentTarget:event.currentTarget.querySelector('.chat-message-trigger');
+    trigger.current=button;
+    const rect=button.getBoundingClientRect();
+    const height=14+44*(1+Number(!!message.body&&!message.deleted)+Number(message.own&&!message.deleted));
+    setActionError('');setFeedback('');
+    setAction({message,menu:true,left:Math.max(8,Math.min(rect.right-224,window.innerWidth-232)),top:Math.max(8,rect.bottom+height+12<=window.innerHeight?rect.bottom+4:rect.top-height-4)});
+  };
+  const copy=async()=>{try{await navigator.clipboard.writeText(action.message.body);setFeedback('Mensagem copiada.');closeMenu();}catch{setActionError('Não foi possível copiar. Selecione o texto e copie pelo navegador.');}};
   const remove=async()=>{if(busy)return;setBusy(true);setActionError('');try{if(action.conversation)await onDeleteConversation(id,detail.last_message_id);else await onDeleteMessage(id,action.message.id,action.scope);setAction(null);}catch(error){setActionError(error.message||'Não foi possível apagar. Tente novamente.');}finally{setBusy(false);}};
   const [hasNew,setHasNew]=useState(false);
   const log=useRef(null);
@@ -42,7 +55,7 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
   const lastMessageId=useRef(0);
   const scrollIntent=useRef(0);
   const markScrollIntent=()=>{scrollIntent.current=Date.now()+1500;};
-  const messages=detail?.messages||[];
+  const messages=detail?.messages||emptyMessages;
   const name=role==='professor'?'Equipe gestora':contact?.nome;
   const scrollDown=()=>{if(log.current){log.current.scrollTop=log.current.scrollHeight;atBottom.current=true;scrollIntent.current=0;setHasNew(false);}};
   useEffect(()=>{
@@ -55,7 +68,18 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
     if(atBottom.current)scrollDown();
     else if(nextId>lastMessageId.current)setHasNew(true);
     lastMessageId.current=nextId;
-  },[messages.length]);
+  },[messages]);
+  const menuOpen=!!action?.menu;
+  useEffect(()=>{
+    if(!menuOpen)return undefined;
+    menu.current?.querySelector('[role="menuitem"]')?.focus({preventScroll:true});
+    const outside=event=>{if(!menu.current?.contains(event.target)&&!trigger.current?.contains(event.target))setAction(null);};
+    const dismiss=event=>{if(!menu.current?.contains(event.target))setAction(null);};
+    document.addEventListener('pointerdown',outside);
+    window.addEventListener('resize',dismiss);
+    window.addEventListener('scroll',dismiss,true);
+    return()=>{document.removeEventListener('pointerdown',outside);window.removeEventListener('resize',dismiss);window.removeEventListener('scroll',dismiss,true);};
+  },[menuOpen]);
   useEffect(()=>{
     const element=log.current;if(!element||!detail)return undefined;
     const observer=new IntersectionObserver(entries=>{
@@ -83,22 +107,36 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
         const day=dayOf(message.created_at);
         return <React.Fragment key={message.id}>
           {(!index||dayOf(messages[index-1].created_at)!==day)&&<div className="mb-5 mt-2 flex justify-center"><span className="rounded-lg border border-border/50 bg-surface px-3 py-1.5 text-[11px] font-medium text-text-muted shadow-sm">{day}</span></div>}
-          <article className={`mb-2 flex ${outgoing?'justify-end':'justify-start'}`} aria-label={`Mensagem de ${message.own?'você':message.author_name}`} onContextMenu={event=>{if(event.target.closest('a,button,video,audio,input'))return;event.preventDefault();openAction(message);}}>
-            <div className={`min-w-24 max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-sm sm:max-w-[78%] ${outgoing?'rounded-tr-sm bg-primary/10':'rounded-tl-sm border border-border/60 bg-surface'}`}>
+          <article className={`mb-2 flex ${outgoing?'justify-end':'justify-start'}`} aria-label={`Mensagem de ${message.own?'você':message.author_name}`} onContextMenu={event=>{if(event.target.closest('a,button,video,audio,input'))return;event.preventDefault();openAction(message,event);}}>
+            <div className={`chat-message-bubble relative min-w-24 max-w-[88%] rounded-2xl px-3.5 py-2.5 pr-10 shadow-sm sm:max-w-[78%] ${outgoing?'rounded-tr-sm bg-primary/10':'rounded-tl-sm border border-border/60 bg-surface'}`}>
+              <button type="button" aria-haspopup="menu" aria-expanded={action?.menu&&action.message.id===message.id||false} aria-controls={action?.menu&&action.message.id===message.id?'chat-message-menu':undefined} aria-label={`Opções da mensagem ${message.id}`} onClick={event=>{if(action?.menu&&action.message.id===message.id)closeMenu();else openAction(message,event);}} className="chat-message-trigger absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-full text-text-muted hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"><ChevronDown aria-hidden="true" className="!h-4 !w-4"/></button>
               {message.author_role==='gestor'&&!message.own&&<p className="mb-1 text-[11px] font-semibold text-primary">{message.author_name}</p>}
               {!message.deleted&&<ChatMedia attachments={message.anexos} author={message.author_name} onReady={()=>{if(atBottom.current)scrollDown();}}/>}
               {message.deleted?<p className="flex items-center gap-1.5 text-sm italic leading-6 text-text-muted"><Ban aria-hidden="true" className="!h-4 !w-4"/>Mensagem apagada</p>:<p className="whitespace-pre-wrap text-sm leading-6 text-text-default [overflow-wrap:anywhere]">{message.body}</p>}
-              <div data-read-cut={message.id} className="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-text-muted"><button type="button" aria-haspopup="dialog" aria-label={`Opções da mensagem ${message.id}`} onClick={()=>openAction(message)} className="mr-auto flex h-8 w-8 items-center justify-center rounded-full text-text-muted hover:bg-surface-hover"><MoreVertical aria-hidden="true" className="!h-3.5 !w-3.5"/></button><time dateTime={message.created_at} title={dateOf(message.created_at).toLocaleString('pt-BR')}>{timeOf(message.created_at)}</time>{outgoing&&<span title={message.read?'Lida':'Enviada'} aria-label={message.read?'Mensagem lida':'Mensagem enviada'}>{message.read?<CheckCheck aria-hidden="true" className="!h-3.5 !w-3.5 text-sky-600 dark:text-sky-400"/>:<Check aria-hidden="true" className="!h-3.5 !w-3.5"/>}</span>}</div>
+              <div data-read-cut={message.id} className="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-text-muted"><time dateTime={message.created_at} title={dateOf(message.created_at).toLocaleString('pt-BR')}>{timeOf(message.created_at)}</time>{outgoing&&<span title={message.read?'Lida':'Enviada'} aria-label={message.read?'Mensagem lida':'Mensagem enviada'}>{message.read?<CheckCheck aria-hidden="true" className="!h-3.5 !w-3.5 text-sky-600 dark:text-sky-400"/>:<Check aria-hidden="true" className="!h-3.5 !w-3.5"/>}</span>}</div>
             </div>
           </article>
         </React.Fragment>;
       })}
     </div>
     {feedback&&<p role="status" className="shrink-0 bg-surface px-4 py-2 text-xs text-primary">{feedback}</p>}
-    <Modal isOpen={!!action} onClose={()=>{if(!busy)setAction(null);}} title={action?.conversation?'Apagar conversa':action?.scope?'Apagar mensagem':'Mensagem'} maxWidth="max-w-sm">
+    {action?.menu&&createPortal(<div id="chat-message-menu" ref={menu} role="menu" aria-label="Opções da mensagem" style={{left:action.left,top:action.top}} className="fixed z-50 w-56 rounded-xl border border-border bg-surface p-1.5 text-text-default shadow-xl" onKeyDown={event=>{
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeMenu();return;}
+      if(event.key==='Tab'){setAction(null);return;}
+      if(!['ArrowDown','ArrowUp','Home','End'].includes(event.key))return;
+      event.preventDefault();
+      const items=[...menu.current.querySelectorAll('[role="menuitem"]')],current=items.indexOf(document.activeElement);
+      items[event.key==='Home'?0:event.key==='End'?items.length-1:(current+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();
+    }}>
+      {action.message.body&&!action.message.deleted&&<button type="button" role="menuitem" onClick={copy} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm hover:bg-surface-hover focus-visible:bg-surface-hover"><Copy aria-hidden="true" className="!h-4 !w-4"/>Copiar</button>}
+      <button type="button" role="menuitem" onClick={()=>setAction({...action,menu:false,scope:'me'})} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm hover:bg-surface-hover focus-visible:bg-surface-hover"><Trash2 aria-hidden="true" className="!h-4 !w-4"/>Apagar para mim</button>
+      {action.message.own&&!action.message.deleted&&<button type="button" role="menuitem" onClick={()=>setAction({...action,menu:false,scope:'everyone'})} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm text-danger hover:bg-surface-hover focus-visible:bg-surface-hover"><Trash2 aria-hidden="true" className="!h-4 !w-4"/>Apagar para todos</button>}
+      {actionError&&<p role="alert" className="px-3 py-2 text-xs text-danger">{actionError}</p>}
+    </div>,document.body)}
+    <Modal isOpen={!!(action?.conversation||action?.scope)} onClose={()=>{if(!busy)setAction(null);}} title={action?.conversation?'Apagar conversa':'Apagar mensagem'} maxWidth="max-w-sm">
       {action?.conversation?<><p className="text-sm leading-6 text-text-muted">As mensagens desta conversa serão apagadas só para você. O histórico dos outros participantes será mantido. Novas mensagens farão a conversa reaparecer.</p><button type="button" disabled={busy} onClick={remove} className="btn btn-danger mt-5 w-full">{busy?'Apagando…':'Apagar conversa para mim'}</button></>
         :action?.scope?<><p className="text-sm leading-6 text-text-muted">{action.scope==='everyone'?'O texto e os anexos desta mensagem serão removidos para todos. No lugar aparecerá “Mensagem apagada”.':'Esta mensagem será apagada apenas para você. Os outros participantes continuarão vendo o conteúdo.'}</p><button type="button" disabled={busy} onClick={remove} className="btn btn-danger mt-5 w-full">{busy?'Apagando…':action.scope==='everyone'?'Apagar para todos':'Apagar para mim'}</button></>
-        :<div className="space-y-1">{action?.message?.body&&!action.message.deleted&&<button type="button" onClick={copy} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm hover:bg-surface-hover"><Copy aria-hidden="true" className="!h-4 !w-4"/>Copiar mensagem</button>}<button type="button" onClick={()=>setAction({...action,scope:'me'})} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm hover:bg-surface-hover"><Trash2 aria-hidden="true" className="!h-4 !w-4"/>Apagar para mim</button>{action?.message?.own&&!action.message.deleted&&<button type="button" onClick={()=>setAction({...action,scope:'everyone'})} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-danger hover:bg-surface-hover"><Trash2 aria-hidden="true" className="!h-4 !w-4"/>Apagar para todos</button>}</div>}
+        :null}
       {actionError&&<p role="alert" className="mt-4 text-sm text-danger">{actionError}</p>}
     </Modal>
     {hasNew&&<button type="button" onClick={scrollDown} className="absolute bottom-36 left-1/2 -translate-x-1/2 rounded-full border border-border bg-surface px-4 py-2 text-xs font-semibold text-primary shadow-md">Novas mensagens ↓</button>}
