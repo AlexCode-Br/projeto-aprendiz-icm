@@ -78,7 +78,21 @@ export default function SupportChatPage({ role }) {
     if(selectedRef.current===id)revisionRef.current=null;
     await refresh();
   };
-  const filtered=contacts.filter(item=>(!unreadOnly||item.nao_lidas>0)&&item.nome.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
+  const deleteMessage=async(id,messageId,scope)=>{
+    requestRef.current+=1;
+    await api.post(`/api/suporte/conversas/${id}/mensagens/${messageId}/apagar`,{scope});
+    if(selectedRef.current===id)revisionRef.current=null;
+    await refresh();
+  };
+  const deleteConversation=async(id,cut)=>{
+    requestRef.current+=1;
+    await api.post(`/api/suporte/conversas/${id}/apagar`,{last_message_id:cut});
+    drafts.current.delete(id);
+    select(null);
+    await refresh();
+    window.dispatchEvent(new Event('support:updated'));
+  };
+  const filtered=contacts.filter(item=>(!item.apagada||!!search.trim()||item.id===selected)&&(!unreadOnly||item.nao_lidas>0)&&item.nome.toLocaleLowerCase('pt-BR').includes(search.toLocaleLowerCase('pt-BR')));
   const currentContact=contacts.find(item=>item.id===selected);
   return <div className="flex h-full min-h-0 flex-col gap-3">
     <div className="flex shrink-0 items-center justify-between gap-3 px-1">
@@ -95,7 +109,7 @@ export default function SupportChatPage({ role }) {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain"><ChatContacts contacts={filtered} selectedId={selected} onSelect={select} loading={loading}/></div>
       </aside>}
       <div className={`${role==='gestor'&&!selected?'hidden lg:flex':'flex'} min-h-0 min-w-0 flex-1`}>
-        <ChatConversation key={selected||'empty'} drafts={drafts} contact={currentContact} detail={detail} role={role} loading={loading||!!selected&&!detail&&connected} connected={connected} onBack={()=>select(null)} onSend={send} onVisible={markVisible}/>
+        <ChatConversation key={selected||'empty'} drafts={drafts} contact={currentContact} detail={detail} role={role} loading={loading||!!selected&&!detail&&connected} connected={connected} onBack={()=>select(null)} onSend={send} onVisible={markVisible} onDeleteMessage={deleteMessage} onDeleteConversation={deleteConversation}/>
       </div>
     </div>
   </div>;

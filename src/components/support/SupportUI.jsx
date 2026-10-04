@@ -1,6 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, Check, CheckCheck, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Check, CheckCheck, MessageCircle, MoreVertical, Copy, Trash2, Ban } from 'lucide-react';
 
+import Modal from '../Modal';
 import ChatComposer from './ChatComposer';
 import ChatMedia from './ChatMedia';
 
@@ -26,11 +27,19 @@ export function ChatContacts({ contacts,selectedId,onSelect,loading }) {
   </button></li>)}</ul>;
 }
 
-export function ChatConversation({ contact,detail,role,loading,connected,onBack,onSend,onVisible,drafts }) {
+export function ChatConversation({ contact,detail,role,loading,connected,onBack,onSend,onVisible,drafts,onDeleteMessage,onDeleteConversation }) {
   const id=contact?.id;
+  const [action,setAction]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const [actionError,setActionError]=useState('');
+  const [feedback,setFeedback]=useState('');
+  const openAction=message=>{setActionError('');setFeedback('');setAction({message});};
+  const copy=async()=>{try{await navigator.clipboard.writeText(action.message.body);setFeedback('Mensagem copiada.');setAction(null);}catch{setActionError('Não foi possível copiar. Selecione o texto e copie pelo navegador.');}};
+  const remove=async()=>{if(busy)return;setBusy(true);setActionError('');try{if(action.conversation)await onDeleteConversation(id,detail.last_message_id);else await onDeleteMessage(id,action.message.id,action.scope);setAction(null);}catch(error){setActionError(error.message||'Não foi possível apagar. Tente novamente.');}finally{setBusy(false);}};
   const [hasNew,setHasNew]=useState(false);
   const log=useRef(null);
   const atBottom=useRef(true);
+  const lastMessageId=useRef(0);
   const scrollIntent=useRef(0);
   const markScrollIntent=()=>{scrollIntent.current=Date.now()+1500;};
   const messages=detail?.messages||[];
@@ -42,8 +51,10 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
     return()=>resize.disconnect();
   },[id,loading]);
   useLayoutEffect(()=>{
+    const nextId=messages.reduce((cut,message)=>Math.max(cut,message.id),0);
     if(atBottom.current)scrollDown();
-    else if(messages.length)setHasNew(true);
+    else if(nextId>lastMessageId.current)setHasNew(true);
+    lastMessageId.current=nextId;
   },[messages.length]);
   useEffect(()=>{
     const element=log.current;if(!element||!detail)return undefined;
@@ -63,7 +74,8 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
   return <section className="relative flex min-h-0 min-w-0 flex-1 flex-col" aria-label={`Conversa com ${name}`}>
     <header className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-3 py-3 sm:px-5">
       {role==='gestor'&&<button type="button" onClick={onBack} aria-label="Voltar às conversas" className="rounded-full p-2 text-text-muted hover:bg-surface-hover lg:hidden"><ArrowLeft className="!h-5 !w-5"/></button>}
-      <Avatar name={name}/><div className="min-w-0"><h2 className="truncate text-sm font-semibold text-text-default">{name}</h2><p className="mt-0.5 text-xs text-text-muted">{contact.active?role==='professor'?'Suporte do Projeto Aprendiz':'Professor':'Professor inativo'}</p></div>
+      <Avatar name={name}/><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold text-text-default">{name}</h2><p className="mt-0.5 text-xs text-text-muted">{contact.active?role==='professor'?'Suporte do Projeto Aprendiz':'Professor':'Professor inativo'}</p></div>
+      <button type="button" disabled={!detail} aria-haspopup="dialog" aria-label="Opções da conversa" onClick={()=>{setActionError('');setAction({conversation:true});}} className="rounded-full p-2 text-text-muted hover:bg-surface-hover"><MoreVertical className="!h-5 !w-5"/></button>
     </header>
     <div ref={log} onWheel={markScrollIntent} onTouchMove={markScrollIntent} onKeyDown={event=>{if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key))markScrollIntent();}} onPointerDown={event=>{if(event.target===event.currentTarget)markScrollIntent();}} onPointerMove={event=>{if(event.buttons===1)markScrollIntent();}} onScroll={event=>{if(Date.now()>scrollIntent.current)return;const el=event.currentTarget;atBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<60;if(atBottom.current)setHasNew(false);}} className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-surface-muted px-3 py-5 sm:px-6" role="log" aria-live="polite" aria-label="Mensagens">
       {loading&&!detail?<div role="status" className="space-y-4" aria-label="Carregando mensagens"><div className="skeleton h-16 w-2/3 rounded-xl"/><div className="skeleton ml-auto h-20 w-2/3 rounded-xl"/></div>:!detail?<p role="status" className="py-10 text-center text-sm text-text-muted">{connected?'Abrindo conversa…':'Aguardando conexão para carregar as mensagens…'}</p>:!messages.length?<div className="flex h-full flex-col items-center justify-center text-center"><MessageCircle aria-hidden="true" className="!h-8 !w-8 text-text-muted"/><p className="mt-3 text-sm font-semibold text-text-default">Comece por um olá</p><p className="mt-1 max-w-xs text-xs leading-5 text-text-muted">Envie sua primeira mensagem. A conversa ficará salva aqui.</p></div>:messages.map((message,index)=>{
@@ -71,17 +83,24 @@ export function ChatConversation({ contact,detail,role,loading,connected,onBack,
         const day=dayOf(message.created_at);
         return <React.Fragment key={message.id}>
           {(!index||dayOf(messages[index-1].created_at)!==day)&&<div className="mb-5 mt-2 flex justify-center"><span className="rounded-lg border border-border/50 bg-surface px-3 py-1.5 text-[11px] font-medium text-text-muted shadow-sm">{day}</span></div>}
-          <article className={`mb-2 flex ${outgoing?'justify-end':'justify-start'}`} aria-label={`Mensagem de ${message.own?'você':message.author_name}`}>
+          <article className={`mb-2 flex ${outgoing?'justify-end':'justify-start'}`} aria-label={`Mensagem de ${message.own?'você':message.author_name}`} onContextMenu={event=>{if(event.target.closest('a,button,video,audio,input'))return;event.preventDefault();openAction(message);}}>
             <div className={`min-w-24 max-w-[88%] rounded-2xl px-3.5 py-2.5 shadow-sm sm:max-w-[78%] ${outgoing?'rounded-tr-sm bg-primary/10':'rounded-tl-sm border border-border/60 bg-surface'}`}>
               {message.author_role==='gestor'&&!message.own&&<p className="mb-1 text-[11px] font-semibold text-primary">{message.author_name}</p>}
-              <ChatMedia attachments={message.anexos} author={message.author_name} onReady={()=>{if(atBottom.current)scrollDown();}}/>
-              <p className="whitespace-pre-wrap text-sm leading-6 text-text-default [overflow-wrap:anywhere]">{message.body}</p>
-              <div data-read-cut={message.id} className="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-text-muted"><time dateTime={message.created_at} title={dateOf(message.created_at).toLocaleString('pt-BR')}>{timeOf(message.created_at)}</time>{outgoing&&<span title={message.read?'Lida':'Enviada'} aria-label={message.read?'Mensagem lida':'Mensagem enviada'}>{message.read?<CheckCheck aria-hidden="true" className="!h-3.5 !w-3.5 text-sky-600 dark:text-sky-400"/>:<Check aria-hidden="true" className="!h-3.5 !w-3.5"/>}</span>}</div>
+              {!message.deleted&&<ChatMedia attachments={message.anexos} author={message.author_name} onReady={()=>{if(atBottom.current)scrollDown();}}/>}
+              {message.deleted?<p className="flex items-center gap-1.5 text-sm italic leading-6 text-text-muted"><Ban aria-hidden="true" className="!h-4 !w-4"/>Mensagem apagada</p>:<p className="whitespace-pre-wrap text-sm leading-6 text-text-default [overflow-wrap:anywhere]">{message.body}</p>}
+              <div data-read-cut={message.id} className="mt-1 flex items-center justify-end gap-1.5 text-[10px] text-text-muted"><button type="button" aria-haspopup="dialog" aria-label={`Opções da mensagem ${message.id}`} onClick={()=>openAction(message)} className="mr-auto flex h-8 w-8 items-center justify-center rounded-full text-text-muted hover:bg-surface-hover"><MoreVertical aria-hidden="true" className="!h-3.5 !w-3.5"/></button><time dateTime={message.created_at} title={dateOf(message.created_at).toLocaleString('pt-BR')}>{timeOf(message.created_at)}</time>{outgoing&&<span title={message.read?'Lida':'Enviada'} aria-label={message.read?'Mensagem lida':'Mensagem enviada'}>{message.read?<CheckCheck aria-hidden="true" className="!h-3.5 !w-3.5 text-sky-600 dark:text-sky-400"/>:<Check aria-hidden="true" className="!h-3.5 !w-3.5"/>}</span>}</div>
             </div>
           </article>
         </React.Fragment>;
       })}
     </div>
+    {feedback&&<p role="status" className="shrink-0 bg-surface px-4 py-2 text-xs text-primary">{feedback}</p>}
+    <Modal isOpen={!!action} onClose={()=>{if(!busy)setAction(null);}} title={action?.conversation?'Apagar conversa':action?.scope?'Apagar mensagem':'Mensagem'} maxWidth="max-w-sm">
+      {action?.conversation?<><p className="text-sm leading-6 text-text-muted">As mensagens desta conversa serão apagadas só para você. O histórico dos outros participantes será mantido. Novas mensagens farão a conversa reaparecer.</p><button type="button" disabled={busy} onClick={remove} className="btn btn-danger mt-5 w-full">{busy?'Apagando…':'Apagar conversa para mim'}</button></>
+        :action?.scope?<><p className="text-sm leading-6 text-text-muted">{action.scope==='everyone'?'O texto e os anexos desta mensagem serão removidos para todos. No lugar aparecerá “Mensagem apagada”.':'Esta mensagem será apagada apenas para você. Os outros participantes continuarão vendo o conteúdo.'}</p><button type="button" disabled={busy} onClick={remove} className="btn btn-danger mt-5 w-full">{busy?'Apagando…':action.scope==='everyone'?'Apagar para todos':'Apagar para mim'}</button></>
+        :<div className="space-y-1">{action?.message?.body&&!action.message.deleted&&<button type="button" onClick={copy} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm hover:bg-surface-hover"><Copy aria-hidden="true" className="!h-4 !w-4"/>Copiar mensagem</button>}<button type="button" onClick={()=>setAction({...action,scope:'me'})} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm hover:bg-surface-hover"><Trash2 aria-hidden="true" className="!h-4 !w-4"/>Apagar para mim</button>{action?.message?.own&&!action.message.deleted&&<button type="button" onClick={()=>setAction({...action,scope:'everyone'})} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-danger hover:bg-surface-hover"><Trash2 aria-hidden="true" className="!h-4 !w-4"/>Apagar para todos</button>}</div>}
+      {actionError&&<p role="alert" className="mt-4 text-sm text-danger">{actionError}</p>}
+    </Modal>
     {hasNew&&<button type="button" onClick={scrollDown} className="absolute bottom-36 left-1/2 -translate-x-1/2 rounded-full border border-border bg-surface px-4 py-2 text-xs font-semibold text-primary shadow-md">Novas mensagens ↓</button>}
     {contact.active?<ChatComposer id={id} drafts={drafts} disabled={!detail} onSend={onSend} onSent={scrollDown}/>:<p className="shrink-0 border-t border-border bg-surface p-4 text-sm text-text-muted">O histórico permanece disponível. Este professor está inativo.</p>}
   </section>;

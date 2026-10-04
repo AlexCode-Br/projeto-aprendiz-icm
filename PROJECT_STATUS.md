@@ -1,6 +1,6 @@
 # Estado do Projeto Aprendiz
 
-Atualizado em 03/10/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
+Atualizado em 04/10/2026. Este arquivo reúne apenas o estado vigente; o [histórico anterior](docs/releases/HISTORY_THROUGH_2026-09-30.md) registra entregas e versões passadas.
 
 ## Produção
 
@@ -110,6 +110,15 @@ O conjunto cifrado local inclui o arquivo `.dump.enc`, manifesto, `LEIA-ME.md` e
 - Simulação local com seis mensagens fictícias em 30/09 e 01/10/2026 confirmou separadores por dia, horários de Brasília e leitura atualizada sem recarregar. A experiência segue a referência visual, mas não oferece equivalência completa ao WhatsApp: consulta periódica, ausência de estado separado de entrega, digitação/presença e criptografia ponta a ponta. Dashboard do professor foi alinhado a conversas não lidas, preservando o contador legado apenas na API. Dados da demonstração, áudio do ensaio e capturas permanecem fora do Git.
 - Áudio adaptado ao vídeo fornecido pelo responsável: onda, duração, Pausar/Continuar, revisão com play, descarte e envio vermelho. Balão enviado usa avatar por iniciais, play/pausa, progresso acessível e velocidades 1×/1,5×/2×, sem opção de baixar o áudio. Sem visualização única. Pausar libera o microfone; trechos retomados viram um único áudio válido, sem concatenar contêineres WebM/MP4. Sete regressões cobrem onda/silêncio, WAV, limite acumulado, descarte, permissões pendentes e recuperação de falha. Gravação em dois trechos, revisão, envio e reprodução a 1,5× conferidos no navegador com sinal sintético local, sem microfone do ambiente; o adaptador temporário do ensaio foi removido do código final.
 - Publicação autorizada pelo responsável em 03/10/2026. PR #48 integrada após CI aprovada; [Deploy production #3](https://github.com/AlexCode-Br/projeto-aprendiz-icm/actions/runs/37140040529) concluiu migração, publicação e smoke. Worker confirmado com 100% do tráfego na versão acima. Histórico autenticado, data, leitura e botão vermelho conferidos na sessão existente do gestor; nenhum envio de teste ou captura de microfone feito em produção. Envios e Storage autenticados continuam pendentes de conferência nos dispositivos dos dois perfis.
+
+## Ações do chat — preparadas em 04/10/2026
+
+- Menu por mensagem para copiar o texto, apagar só para a conta atual ou apagar para todos. Exclusão global exige autoria individual; outro gestor não apaga uma mensagem alheia por esse recurso. Texto e anexos saem da API, com marcador “Mensagem apagada”, preservando ID, horário e autoria para continuidade e auditoria. Não há prazo limite para o autor apagar.
+- Apagar conversa é individual, com corte monotônico do último histórico carregado. Mensagens novas, inclusive durante a confirmação, permanecem visíveis; o contato reaparece ao receber/enviar. Gestores podem reencontrar um contato apagado buscando pelo nome. Preferências persistem no banco, entre sessões/dispositivos, sem afetar outros gestores ou o professor.
+- Migração `030_support_chat_deletion.sql` preparada: marcadores de exclusão e tabelas privadas `support_message_hides`/`support_conversation_hides`, com RLS e privilégios públicos revogados. Anexos apagados ou ocultos são bloqueados na API para a conta correspondente; exclusão global solicita também limpeza no Storage. O endpoint administrativo legado de exclusão de chamado conserva seu contrato anterior.
+- Check: 117 testes, 115 aprovados, zero falhas, duas regressões PostgreSQL externas puladas. Novas regressões cobrem autoria, isolamento entre professores/gestores, anonimato, idempotência, anexos, prévia, não lidas, corte concorrente e persistência. Migrações e consultas também ensaiadas em PostgreSQL embarcado; CI deve validar PostgreSQL 16 nativo.
+- Prévia local conferida em desktop/celular: menu de mensagem própria/recebida, retorno da ação de copiar e confirmações. O clipboard virtual da ferramenta não permite conferir a colagem do clipboard nativo do navegador. Histórico e gravações da demonstração preservados; nenhuma exclusão foi executada na sessão de produção.
+- Código em revisão; sem merge, migração remota ou deploy destas ações. Produção permanece na versão de 03/10 registrada acima.
 
 ## Pendências operacionais
 

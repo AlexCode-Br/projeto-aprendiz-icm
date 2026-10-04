@@ -32,7 +32,7 @@ export const applicationTables = new Set([
   'student_email_changes', 'notification_outbox',
   'student_course_announcements',
   ...tablesWithId, 'user_settings', 'announcement_reads', 'announcement_recipients',
-  'support_ticket_reads', 'class_schedules', 'class_schedule_dates', 'enrollment_repair_archive', 'schema_migrations',
+  'support_ticket_reads', 'support_message_hides', 'support_conversation_hides', 'class_schedules', 'class_schedule_dates', 'enrollment_repair_archive', 'schema_migrations',
 ]);
 
 export function returningId(sql) {
