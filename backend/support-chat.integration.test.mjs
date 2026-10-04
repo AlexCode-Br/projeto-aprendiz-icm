@@ -121,3 +121,93 @@ test('anexos e áudios ficam privados, permitem range e não se duplicam no reen
     assert.equal(await download.text(),'Informações fictícias para teste');
   }finally{db?.close();await server.close();}
 });
+
+test('apagar mensagens isola contas, impede apagar autoria alheia e revoga anexos para todos',async()=>{
+  const server=await startTestServer();let db;
+  try{
+    db=new DatabaseSync(server.databasePath);db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; DELETE FROM support_ticket_events; DELETE FROM support_ticket_reads; DELETE FROM support_messages; DELETE FROM support_tickets;');
+    const managerLogin=await server.login('gestor@projetoaprendiz.local','Gestor@2026!'),manager=managerLogin.session;
+    const teacherLogin=await server.login('professor@projetoaprendiz.local','Professor@2026!'),teacher=teacherLogin.session,id=teacherLogin.response.data.user.id;
+    const salt=randomBytes(16),hash=`scrypt$${salt.toString('hex')}$${scryptSync('Gestor@2026!',salt,64).toString('hex')}`;
+    db.prepare("INSERT INTO users(name,email,password_hash,role) VALUES (?,?,?,'gestor')").run('Outra gestora','manager.chat.test@example.com',hash);
+    const second=(await server.login('manager.chat.test@example.com','Gestor@2026!')).session;
+    db.prepare("INSERT INTO users(name,email,password_hash,role) VALUES (?,?,?,'professor')").run('Outro professor','isolated.chat.test@example.com',hash);
+    const outsider=(await server.login('isolated.chat.test@example.com','Gestor@2026!')).session;
+    const route=`/api/suporte/conversas/${id}`;
+    const file={nome:'orientacao.txt',tipo:'text/plain',dataUrl:`data:text/plain;base64,${Buffer.from('Arquivo de teste').toString('base64')}`};
+    const sent=await server.call(teacher,'POST',route+'/mensagens',{mensagem:'Mensagem privada de teste',client_message_id:'deletion-message-test-001',anexos:[file]});
+    assert.equal(sent.status,201);const mid=sent.data.id;
+    const remove=(session,scope)=>server.call(session,'POST',`${route}/mensagens/${mid}/apagar`,{scope});
+    const detail=session=>server.call(session,'GET',route);
+    const original=(await detail(manager)).data.messages[0],url=original.anexos[0].url;
+    assert.equal((await remove(null,'me')).status,401);
+    assert.equal((await remove(outsider,'me')).status,404);
+    assert.equal((await remove(manager,'everyone')).status,403);
+    assert.equal((await remove(second,'everyone')).status,403);
+    assert.equal((await remove(teacher,'invalid')).status,400);
+    assert.equal((await remove(manager,'me')).status,200);
+    assert.equal((await remove(manager,'me')).status,200);
+    assert.deepEqual((await detail(manager)).data.messages,[]);
+    assert.equal((await detail(teacher)).data.messages[0].body,'Mensagem privada de teste');
+    assert.equal((await detail(second)).data.messages[0].body,'Mensagem privada de teste');
+    assert.equal((await server.call(manager,'GET',url)).status,404);
+    assert.equal((await fetch(server.baseUrl+url,{headers:{Cookie:teacher.cookie}})).status,200);
+    assert.equal((await server.call(manager,'GET','/api/suporte/conversas/nao-lidas')).data.total,0);
+    const ticket=db.prepare('SELECT ticket_id FROM support_messages WHERE id=?').get(mid).ticket_id;
+    assert.deepEqual((await server.call(manager,'GET',`/api/suporte/${ticket}`)).data.messages,[]);
+    const revision=(await server.call(second,'GET','/api/suporte/conversas')).data.find(row=>row.id===id).revision;
+    assert.equal((await remove(teacher,'everyone')).status,200);
+    assert.equal((await remove(teacher,'everyone')).status,200);
+    const deleted=(await detail(second)).data.messages[0];
+    assert.equal(deleted.deleted,true);assert.equal(deleted.body,'');assert.deepEqual(deleted.anexos,[]);
+    assert.equal((await server.call(second,'GET',url)).status,404);
+    assert.equal((await server.call(teacher,'GET',url)).status,404);
+    const list=(await server.call(second,'GET','/api/suporte/conversas')).data.find(row=>row.id===id);
+    assert.notEqual(list.revision,revision);assert.equal(list.ultima_mensagem,'Mensagem apagada');assert.equal(list.nao_lidas,0);
+    assert.equal((await server.call(second,'GET','/api/suporte/conversas/nao-lidas')).data.total,0);
+    assert.equal((await server.call(teacher,'GET',`/api/suporte/${ticket}`)).data.messages[0].body,'Mensagem apagada');
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM support_attachments WHERE message_id=?').get(mid).n,0);
+    assert.equal(db.prepare('SELECT body,deleted_by_user_id FROM support_messages WHERE id=?').get(mid).deleted_by_user_id,id);
+    const own=await server.call(manager,'POST',route+'/mensagens',{mensagem:'Mensagem da primeira gestão',client_message_id:'manager-delete-own-0001'});
+    assert.equal((await server.call(second,'POST',`${route}/mensagens/${own.data.id}/apagar`,{scope:'everyone'})).status,403);
+    assert.equal((await server.call(manager,'POST',`${route}/mensagens/${own.data.id}/apagar`,{scope:'everyone'})).status,200);
+  }finally{db?.close();await server.close();}
+});
+
+test('apagar conversa usa corte pessoal monotônico e preserva mensagens novas e histórico alheio',async()=>{
+  const server=await startTestServer();let db;
+  try{
+    db=new DatabaseSync(server.databasePath);db.exec('PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON; DELETE FROM support_ticket_events; DELETE FROM support_ticket_reads; DELETE FROM support_messages; DELETE FROM support_tickets;');
+    const manager=(await server.login('gestor@projetoaprendiz.local','Gestor@2026!')).session;
+    const login=await server.login('professor@projetoaprendiz.local','Professor@2026!'),teacher=login.session,id=login.response.data.user.id;
+    const route=`/api/suporte/conversas/${id}`;
+    const send=async(text,key)=>server.call(teacher,'POST',route+'/mensagens',{mensagem:text,client_message_id:key});
+    const first=await send('Primeiro dia','conversation-first-001');
+    db.prepare("UPDATE support_messages SET created_at='2026-10-02 13:00:00' WHERE id=?").run(first.data.id);
+    const prior=(await server.call(manager,'GET',route)).data;
+    const newest=await send('Mensagem chegou durante a confirmação','conversation-second-001');
+    const hide=cut=>server.call(manager,'POST',route+'/apagar',{last_message_id:cut});
+    assert.equal((await hide(999999)).status,400);
+    assert.equal((await hide(prior.last_message_id)).status,200);
+    let visible=(await server.call(manager,'GET',route)).data;
+    assert.deepEqual(visible.messages.map(row=>row.id),[newest.data.id]);
+    assert.equal((await server.call(teacher,'GET',route)).data.messages.length,2);
+    assert.equal((await hide(newest.data.id)).status,200);
+    assert.equal((await hide(first.data.id)).status,200);
+    assert.equal((await server.call(manager,'GET',route)).data.messages.length,0);
+    assert.equal((await server.call(manager,'GET','/api/suporte/conversas/nao-lidas')).data.total,0);
+    let contact=(await server.call(manager,'GET','/api/suporte/conversas')).data.find(row=>row.id===id);
+    assert.equal(contact.apagada,true);assert.equal(contact.ultima_mensagem,null);
+    const fresh=await send('Nova conversa','conversation-third-001');
+    visible=(await server.call(manager,'GET',route)).data;
+    assert.deepEqual(visible.messages.map(row=>row.id),[fresh.data.id]);
+    contact=(await server.call(manager,'GET','/api/suporte/conversas')).data.find(row=>row.id===id);
+    assert.equal(contact.apagada,false);assert.equal(contact.nao_lidas,1);
+    assert.equal((await server.call(teacher,'GET',route)).data.messages.length,3);
+    assert.equal(db.prepare('SELECT COUNT(*) AS n FROM support_messages').get().n,3);
+    assert.equal((await server.call(teacher,'POST',route+'/apagar',{last_message_id:fresh.data.id})).status,200);
+    assert.equal((await server.call(teacher,'GET',route)).data.messages.length,0);
+    assert.equal((await server.call(manager,'GET',route)).data.messages.length,1);
+  }finally{db?.close();await server.close();}
+});
+

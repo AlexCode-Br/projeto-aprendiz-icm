@@ -1,14 +1,15 @@
+import { supportViewerCte, supportVisible } from '../support-visibility.mjs';
 import { normalizeSupportAttachments } from '../support-media.mjs';
 
 // A conversa reúne o histórico dos chamados, sem reescrever os dados legados.
 export async function supportChatUnread(db, session) {
-  const row = await db.prepare(`SELECT COUNT(DISTINCT t.requester_user_id) AS total
+  const row = await db.prepare(`${supportViewerCte} SELECT COUNT(DISTINCT t.requester_user_id) AS total
     FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
     JOIN users a ON a.id=m.author_user_id
     LEFT JOIN support_ticket_reads r ON r.ticket_id=t.id AND r.user_id=?
-    WHERE a.role<>? AND m.id>COALESCE(r.last_read_message_id,0)
+    WHERE m.deleted_at IS NULL AND ${supportVisible()} AND a.role<>? AND m.id>COALESCE(r.last_read_message_id,0)
     ${session.role==='professor'?'AND t.requester_user_id=?':''}`)
-    .get(session.user_id,session.role,...(session.role==='professor'?[session.user_id]:[]));
+    .get(session.user_id,session.user_id,session.role,...(session.role==='professor'?[session.user_id]:[]));
   return Number(row.total||0);
 }
 
@@ -27,22 +28,22 @@ export function createSupportChatRoutes(context) {
     WHERE id=? AND role='professor' ${session.role==='professor'?'AND id=?':''}`)
     .get(id,...(session.role==='professor'?[session.user_id]:[]));
   const messages = async (id,session) => {
-    const attachments=await db.prepare(`SELECT a.id,a.message_id,a.filename,a.mime_type,a.size_bytes,a.voice_message
+    const attachments=await db.prepare(`${supportViewerCte} SELECT a.id,a.message_id,a.filename,a.mime_type,a.size_bytes,a.voice_message
       FROM support_attachments a JOIN support_messages m ON m.id=a.message_id
-      JOIN support_tickets t ON t.id=m.ticket_id WHERE t.requester_user_id=? ORDER BY a.id`).all(id);
+      JOIN support_tickets t ON t.id=m.ticket_id WHERE t.requester_user_id=? AND m.deleted_at IS NULL AND ${supportVisible()} ORDER BY a.id`).all(session.user_id,id);
     const byMessage=new Map();
     for(const item of attachments){const items=byMessage.get(Number(item.message_id))||[];
       items.push({id:Number(item.id),nome:item.filename,tipo:item.mime_type,tamanho:Number(item.size_bytes),
         audio_gravado:!!Number(item.voice_message),url:`/api/suporte/conversas/${id}/anexos/${item.id}`});byMessage.set(Number(item.message_id),items);}
-    return db.prepare(`SELECT m.id,m.author_user_id,m.body,m.created_at,
+    return db.prepare(`${supportViewerCte} SELECT m.id,m.author_user_id,m.body,m.created_at,m.deleted_at,
     a.name AS author_name,a.role AS author_role,
     CASE WHEN EXISTS(SELECT 1 FROM support_ticket_reads r JOIN users reader ON reader.id=r.user_id
       WHERE r.ticket_id=m.ticket_id AND reader.role<>a.role AND r.last_read_message_id>=m.id)
       THEN 1 ELSE 0 END AS was_read
     FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id JOIN users a ON a.id=m.author_user_id
-    WHERE t.requester_user_id=? ORDER BY m.created_at,m.id`).all(id).then(rows=>rows.map(row=>({
+    WHERE t.requester_user_id=? AND ${supportVisible()} ORDER BY m.created_at,m.id`).all(session.user_id,id).then(rows=>rows.map(row=>({
       ...row,id:Number(row.id),author_user_id:Number(row.author_user_id),read:!!Number(row.was_read),
-      own:Number(row.author_user_id)===Number(session.user_id),
+      own:Number(row.author_user_id)===Number(session.user_id),deleted:!!row.deleted_at,
       anexos:byMessage.get(Number(row.id))||[],
     })));
   };
@@ -63,37 +64,41 @@ export function createSupportChatRoutes(context) {
     if(url.pathname==='/api/suporte/conversas/nao-lidas'&&request.method==='GET')
       return json(response,200,{total:await supportChatUnread(db,session)});
     if(url.pathname==='/api/suporte/conversas'&&request.method==='GET'){
-      const rows=await db.prepare(`SELECT * FROM (SELECT u.id,u.name AS nome,u.active,
-        (SELECT COALESCE(NULLIF(m.body,''),'📎 Arquivo') FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
-          WHERE t.requester_user_id=u.id ORDER BY m.created_at DESC,m.id DESC LIMIT 1) AS ultima_mensagem,
+      const rows=await db.prepare(`${supportViewerCte} SELECT * FROM (SELECT u.id,u.name AS nome,u.active,
+        (SELECT CASE WHEN m.deleted_at IS NOT NULL THEN 'Mensagem apagada' ELSE COALESCE(NULLIF(m.body,''),'📎 Arquivo') END FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
+          WHERE t.requester_user_id=u.id AND ${supportVisible()} ORDER BY m.created_at DESC,m.id DESC LIMIT 1) AS ultima_mensagem,
         (SELECT MAX(m.created_at) FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
-          WHERE t.requester_user_id=u.id) AS ultima_mensagem_em,
+          WHERE t.requester_user_id=u.id AND ${supportVisible()}) AS ultima_mensagem_em,
         (SELECT COUNT(*) FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
           JOIN users a ON a.id=m.author_user_id LEFT JOIN support_ticket_reads r ON r.ticket_id=t.id AND r.user_id=?
-          WHERE t.requester_user_id=u.id AND a.role<>? AND m.id>COALESCE(r.last_read_message_id,0)) AS nao_lidas,
+          WHERE t.requester_user_id=u.id AND m.deleted_at IS NULL AND ${supportVisible()} AND a.role<>? AND m.id>COALESCE(r.last_read_message_id,0)) AS nao_lidas,
         (SELECT COUNT(*) FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
-          WHERE t.requester_user_id=u.id) AS message_count,
+          WHERE t.requester_user_id=u.id AND ${supportVisible()}) AS message_count,
         (SELECT COALESCE(MAX(m.id),0) FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
-          WHERE t.requester_user_id=u.id) AS last_id,
+          WHERE t.requester_user_id=u.id AND ${supportVisible()}) AS last_id,
         (SELECT COALESCE(SUM(r.last_read_message_id),0) FROM support_ticket_reads r
           JOIN support_tickets t ON t.id=r.ticket_id JOIN users reader ON reader.id=r.user_id
-          WHERE t.requester_user_id=u.id AND reader.role<>?) AS read_id
+          WHERE t.requester_user_id=u.id AND reader.role<>?) AS read_id,
+        (SELECT COUNT(*) FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id
+          WHERE t.requester_user_id=u.id AND m.deleted_at IS NOT NULL AND ${supportVisible()}) AS deletion_count,
+        (SELECT COUNT(*) FROM support_conversation_hides h WHERE h.professor_user_id=u.id
+          AND h.user_id=(SELECT user_id FROM viewer)) AS hidden_conversation
         FROM users u WHERE u.role='professor'
         ${session.role==='professor'?'AND u.id=?':"AND (u.active=1 OR EXISTS(SELECT 1 FROM support_tickets t WHERE t.requester_user_id=u.id))"}
         ) conversations ORDER BY CASE WHEN ultima_mensagem_em IS NULL THEN 1 ELSE 0 END,
-        ultima_mensagem_em DESC,nome,id`).all(session.user_id,session.role,session.role,
+        ultima_mensagem_em DESC,nome,id`).all(session.user_id,session.user_id,session.role,session.role,
           ...(session.role==='professor'?[session.user_id]:[]));
       return json(response,200,rows.map(row=>({id:Number(row.id),nome:row.nome,active:!!Number(row.active),
-        ultima_mensagem:row.ultima_mensagem,ultima_mensagem_em:row.ultima_mensagem_em,nao_lidas:Number(row.nao_lidas),
-        revision:`${row.message_count}/${row.last_id}/${row.read_id}`})));
+        ultima_mensagem:row.ultima_mensagem,ultima_mensagem_em:row.ultima_mensagem_em,nao_lidas:Number(row.nao_lidas),apagada:!!Number(row.hidden_conversation)&&Number(row.message_count)===0,
+        revision:`${row.message_count}/${row.last_id}/${row.read_id}/${row.deletion_count}/${row.hidden_conversation}`})));
     }
     const attachmentMatch=url.pathname.match(/^\/api\/suporte\/conversas\/([1-9]\d*)\/anexos\/([1-9]\d*)$/);
     if(attachmentMatch&&request.method==='GET'){
       const personId=Number(attachmentMatch[1]);
       if(!Number.isSafeInteger(personId)||!Number.isSafeInteger(Number(attachmentMatch[2]))||!await contact(personId,session))return json(response,404,{message:'Anexo não encontrado.'});
-      const attachment=await db.prepare(`SELECT a.* FROM support_attachments a
+      const attachment=await db.prepare(`${supportViewerCte} SELECT a.* FROM support_attachments a
         JOIN support_messages m ON m.id=a.message_id JOIN support_tickets t ON t.id=m.ticket_id
-        WHERE a.id=? AND t.requester_user_id=?`).get(Number(attachmentMatch[2]),personId);
+        WHERE a.id=? AND t.requester_user_id=? AND m.deleted_at IS NULL AND ${supportVisible()}`).get(session.user_id,Number(attachmentMatch[2]),personId);
       if(!attachment)return json(response,404,{message:'Anexo não encontrado.'});
       let buffer;
       try{buffer=await supportStorage.download(attachment);}catch{return json(response,502,{message:'Não foi possível carregar o arquivo.'});}
@@ -117,14 +122,60 @@ export function createSupportChatRoutes(context) {
       headers['Content-Length']=String(end-start+1);response.writeHead(status,headers);
       return response.end(buffer.subarray(start,end+1));
     }
+    const deletionMatch=url.pathname.match(/^\/api\/suporte\/conversas\/([1-9]\d*)(?:\/mensagens\/([1-9]\d*))?\/apagar$/);
+    if(deletionMatch&&request.method==='POST'){
+      const id=Number(deletionMatch[1]),messageId=deletionMatch[2]?Number(deletionMatch[2]):null;
+      if(!Number.isSafeInteger(id)||messageId!==null&&!Number.isSafeInteger(messageId)||!await contact(id,session))
+        return json(response,404,{message:'Conversa não encontrada.'});
+      const body=await readJson(request),scope=body.scope;
+      if(messageId!==null&&!['me','everyone'].includes(scope))return json(response,400,{message:'Escolha como apagar a mensagem.'});
+      const cut=Number(body.last_message_id);
+      if(messageId===null&&(!Number.isSafeInteger(cut)||cut<0))return json(response,400,{message:'Corte da conversa inválido.'});
+      const limit=await consumeActionRateLimit({route:'support_reply',userId:session.user_id,ip,limit:30,windowMs:15*60_000});
+      if(limit.blocked)return rateLimitResponse(response,limit);
+      const result=await transaction(async()=>{
+        if(db.dialect==='postgres')await db.prepare('SELECT id FROM users WHERE id IN (?,?) ORDER BY id FOR UPDATE').all(id,session.user_id);
+        if(messageId===null){
+          if(cut>0&&!await db.prepare('SELECT m.id FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id WHERE m.id=? AND t.requester_user_id=?').get(cut,id))
+            return {status:400,message:'Corte da conversa inválido.'};
+          await db.prepare(`INSERT INTO support_conversation_hides(user_id,professor_user_id,cut_message_id)
+            VALUES (?,?,?) ON CONFLICT(user_id,professor_user_id) DO UPDATE SET cut_message_id=
+            CASE WHEN support_conversation_hides.cut_message_id<excluded.cut_message_id THEN excluded.cut_message_id
+              ELSE support_conversation_hides.cut_message_id END,updated_at=CURRENT_TIMESTAMP`).run(session.user_id,id,cut);
+          if(cut>0)await markRead(id,session.user_id,cut);
+          await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`support_chat_hidden:${id}:${cut}`,ip);
+          return {};
+        }
+        const target=await db.prepare('SELECT m.* FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id WHERE m.id=? AND t.requester_user_id=?').get(messageId,id);
+        if(!target)return {status:404,message:'Mensagem não encontrada.'};
+        if(scope==='me'){
+          await db.prepare('INSERT INTO support_message_hides(user_id,message_id) VALUES (?,?) ON CONFLICT(user_id,message_id) DO NOTHING').run(session.user_id,messageId);
+        }else{
+          if(Number(target.author_user_id)!==Number(session.user_id))return {status:403,message:'Você só pode apagar para todos as mensagens que enviou.'};
+          if(target.deleted_at)return {};
+          const paths=await db.prepare('SELECT storage_path FROM support_attachments WHERE message_id=?').all(messageId);
+          await db.prepare("UPDATE support_messages SET body='',deleted_at=CURRENT_TIMESTAMP,deleted_by_user_id=? WHERE id=?").run(session.user_id,messageId);
+          await db.prepare('DELETE FROM support_attachments WHERE message_id=?').run(messageId);
+          await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`support_message_deleted:${messageId}`,ip);
+          return {paths:paths.map(item=>item.storage_path)};
+        }
+        await db.prepare('INSERT INTO audit_log(user_id,action,ip) VALUES (?,?,?)').run(session.user_id,`support_message_hidden:${messageId}`,ip);
+        return {};
+      });
+      if(result.status)return json(response,result.status,{message:result.message});
+      if(result.paths)await supportStorage.cleanup(result.paths);
+      return json(response,200,{success:true});
+    }
     const match=url.pathname.match(/^\/api\/suporte\/conversas\/([1-9]\d*)(?:\/(mensagens|lido))?$/);
     if(!match||!Number.isSafeInteger(Number(match[1])))return json(response,404,{message:'Conversa não encontrada.'});
     const id=Number(match[1]),person=await contact(id,session);
     if(!person)return json(response,404,{message:'Conversa não encontrada.'});
-    if(request.method==='GET'&&!match[2])return json(response,200,{
-      contact:{id,nome:person.name,active:!!Number(person.active)},viewer_user_id:Number(session.user_id),
-      messages:await messages(id,session),
-    });
+    if(request.method==='GET'&&!match[2]){
+      const hidden=await db.prepare('SELECT cut_message_id FROM support_conversation_hides WHERE user_id=? AND professor_user_id=?').get(session.user_id,id);
+      const visible=await messages(id,session);
+      return json(response,200,{contact:{id,nome:person.name,active:!!Number(person.active)},viewer_user_id:Number(session.user_id),
+        messages:visible,last_message_id:Math.max(Number(hidden?.cut_message_id||0),...visible.map(item=>item.id))});
+    }
     if(request.method==='POST'&&match[2]==='lido'){
       const body=await readJson(request),cut=Number(body.last_message_id);
       if(!Number.isSafeInteger(cut)||cut<1||!await db.prepare(`SELECT m.id FROM support_messages m

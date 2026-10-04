@@ -294,6 +294,19 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     );
     CREATE INDEX IF NOT EXISTS support_attachments_message_idx ON support_attachments(message_id);
     CREATE UNIQUE INDEX IF NOT EXISTS support_attachments_storage_idx ON support_attachments(storage_path) WHERE storage_path IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS support_message_hides (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      message_id INTEGER NOT NULL REFERENCES support_messages(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id,message_id)
+    );
+    CREATE TABLE IF NOT EXISTS support_conversation_hides (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      professor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      cut_message_id INTEGER NOT NULL DEFAULT 0 CHECK(cut_message_id>=0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(user_id,professor_user_id)
+    );
     CREATE TABLE IF NOT EXISTS support_ticket_reads (
       ticket_id INTEGER NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -385,6 +398,12 @@ export async function initializeNodeApplication({ db, env = process.env }) {
     const supportMessageColumns = await db.prepare('PRAGMA table_info(support_messages)').all();
     if (!supportMessageColumns.some(column => column.name === 'client_message_id')) {
       await db.exec('ALTER TABLE support_messages ADD COLUMN client_message_id TEXT;');
+    }
+    if (!supportMessageColumns.some(column => column.name === 'deleted_at')) {
+      await db.exec('ALTER TABLE support_messages ADD COLUMN deleted_at TEXT;');
+    }
+    if (!supportMessageColumns.some(column => column.name === 'deleted_by_user_id')) {
+      await db.exec('ALTER TABLE support_messages ADD COLUMN deleted_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;');
     }
     await db.prepare(`INSERT OR IGNORE INTO school_years (label,start_date,end_date,active,dates_confirmed)
       VALUES ('Período atual — datas pendentes','1900-01-01','1900-01-02',1,0)`).run();

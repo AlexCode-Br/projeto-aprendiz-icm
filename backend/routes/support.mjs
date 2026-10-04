@@ -1,3 +1,4 @@
+import { supportViewerCte, supportVisible } from '../support-visibility.mjs';
 import { createSupportChatRoutes } from './support-chat.mjs';
 import { createSupportStorage } from '../support-media.mjs';
 
@@ -90,13 +91,13 @@ export function createSupportRoutes(context) {
         const ticketId=Number(ticketDetailMatch[1]),ticket=await supportTicketForSession(ticketId,session);
         if(!ticket)return json(response,404,{message:'Chamado não encontrado.'});
         const [messages,events]=await Promise.all([
-          db.prepare(`
-            SELECT support_messages.id,support_messages.author_user_id,support_messages.body,support_messages.created_at,
+          db.prepare(`${supportViewerCte}
+            SELECT support_messages.id,support_messages.author_user_id,support_messages.body,support_messages.created_at,support_messages.deleted_at,
               users.name AS author_name,users.role AS author_role
-            FROM support_messages JOIN users ON users.id=support_messages.author_user_id
-            WHERE support_messages.ticket_id=?
+            FROM support_messages JOIN users ON users.id=support_messages.author_user_id JOIN support_tickets ON support_tickets.id=support_messages.ticket_id
+            WHERE support_messages.ticket_id=? AND ${supportVisible('support_messages','support_tickets')}
             ORDER BY support_messages.created_at,support_messages.id
-          `).all(ticketId),
+          `).all(session.user_id,ticketId),
           db.prepare(`
             SELECT support_ticket_events.id,support_ticket_events.event_type,support_ticket_events.from_status,
               support_ticket_events.to_status,support_ticket_events.created_at,users.name AS actor_name
@@ -107,7 +108,7 @@ export function createSupportRoutes(context) {
         ]);
         return json(response,200,{
           ticket:{...supportTicketView({...ticket,last_message_at:ticket.updated_at}),status:supportStatusFromDatabase(ticket.status)},
-          messages:messages.map(item=>({id:Number(item.id),author_user_id:Number(item.author_user_id),author_name:item.author_name,author_role:item.author_role,body:item.body,created_at:item.created_at})),
+          messages:messages.map(item=>({id:Number(item.id),author_user_id:Number(item.author_user_id),author_name:item.author_name,author_role:item.author_role,body:item.deleted_at?'Mensagem apagada':item.body,deleted:!!item.deleted_at,created_at:item.created_at})),
           events:events.map(item=>({...item,id:Number(item.id),from_status:supportStatusFromDatabase(item.from_status),to_status:supportStatusFromDatabase(item.to_status)})),
         });
       }

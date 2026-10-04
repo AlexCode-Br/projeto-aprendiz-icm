@@ -465,6 +465,15 @@
 }
 
 .modal { transition: opacity 0.3s ease; }
+.chat-message-trigger { opacity: 0; pointer-events: none; }
+.chat-message-bubble:focus-within .chat-message-trigger,
+.chat-message-trigger[aria-expanded="true"] { opacity: 1; pointer-events: auto; }
+@media (hover: hover) and (pointer: fine) {
+    .chat-message-bubble:hover .chat-message-trigger { opacity: 1; pointer-events: auto; }
+}
+@media (hover: none), (pointer: coarse) {
+    .chat-message-bubble { user-select: none; -webkit-touch-callout: none; }
+}
 .modal .modal-content { transition: transform 0.3s ease; }
 
 .sidebar-open { transform: translateX(0) !important; }
