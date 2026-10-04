@@ -68,6 +68,12 @@ O backend cria o bucket `support-attachments` no primeiro envio com arquivos, us
 
 Smoke, hashes dos assets e leitura autenticada do histórico foram aprovados. Ainda confira envio e download como gestor e professor, confirmação de leitura, chegada automática sem recarregar, foto, documento, reprodução/avanço de áudio e vídeo e gravação de voz em dispositivo autorizado. Verifique 401 sem sessão e 404 para arquivo de outro professor. Inclua o novo bucket privado na política de recuperação do Storage; o backup SQL do schema privado contém os metadados, não os binários remotos. A prévia local usa arquivos fictícios e banco isolado; não comprova entrega pelo Storage de produção nem captura de microfone de um dispositivo real.
 
+## Ações do chat publicadas em 04/10/2026
+
+A PR #51 foi publicada pelo workflow manual autorizado [Deploy production #4](https://github.com/AlexCode-Br/projeto-aprendiz-icm/actions/runs/37178836512), commit `52bfd91`, versão `874ecb8f-3d0b-4be8-a0e1-66eb730375c0`, com 100% do tráfego confirmado. Migração `030_support_chat_deletion.sql` aplicada antes do upload: colunas de exclusão global e tabelas privadas de ocultação individual, com RLS e privilégios públicos revogados. Preserva o histórico existente, IDs, autoria e horários; não exige novos secrets.
+
+As ações incluem copiar texto, apagar para mim, apagar para todos somente a própria mensagem e apagar a conversa só para a conta atual. No PC, a seta aparece por hover/foco; no celular, tocar e segurar abre as opções, com cancelamento ao mover/soltar antes do prazo. Exclusões pedem confirmação. O toque prolongado físico continua para conferência em celular real. Não execute exclusões em produção como smoke automático. Consulte o [registro](../docs/releases/DEPLOY_2026-10-04_ACOES_CHAT.md).
+
 ## Verificação pós-deploy
 
 `node scripts/smoke-production.mjs` executa as verificações públicas de leitura abaixo, sem login, alteração de dados ou publicação. Os testes funcionais autenticados continuam separados.
