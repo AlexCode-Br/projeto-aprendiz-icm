@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.6.1",
-    "@supabase/supabase-js": "2.112.4",
+    "@supabase/supabase-js": "2.117.2",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.38.0",
